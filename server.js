@@ -51,13 +51,14 @@ footer{max-width:1240px;margin:auto;padding:30px 42px 42px;border-top:1px solid 
 </main>
 <footer><b>VO1D_VPN</b><span>WEBSITE LAYER / RAILWAY READY</span></footer>
 <script>
+setTimeout(()=>{document.getElementById("boot")?.classList.add("done")},3500);
 const c=document.getElementById("bg"),x=c.getContext("2d");let w,h,p=[];
 function rs(){w=innerWidth;h=innerHeight;c.width=w;c.height=h;p=Array.from({length:Math.min(90,Math.floor(w/14))},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.1,vy:(Math.random()-.5)*.1,a:Math.random()}))}
 function dr(){x.clearRect(0,0,w,h);x.fillStyle="#78f3ff";for(const q of p){q.x+=q.vx;q.y+=q.vy;if(q.x<0)q.x=w;if(q.x>w)q.x=0;if(q.y<0)q.y=h;if(q.y>h)q.y=0;x.globalAlpha=.08+q.a*.35;x.fillRect(q.x,q.y,1,1)}x.globalAlpha=1;requestAnimationFrame(dr)}rs();dr();addEventListener("resize",rs);
 const bc=document.getElementById("bootcopy"),boot=document.getElementById("boot"),steps=["initializing encrypted surface","mapping private route","shaping void interface","ready"];let bi=0;const bt=setInterval(()=>{bi++;if(steps[bi])bc.textContent=steps[bi];if(bi===3){clearInterval(bt);setTimeout(()=>boot.classList.add("done"),450)}},480);
 const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add("visible")}),{threshold:.12});document.querySelectorAll(".reveal").forEach(e=>o.observe(e));
 const term=document.getElementById("term"),ls=["> boot route.engine","  surface: minimal","> resolve edge.node","  handshake: encrypted","> session ready","  entry: @VO1D_VPNbot"];let li=0;
-function tl(){if(li>=ls.length){setTimeout(()=>{term.textContent="";li=0;tl()},2200);return}let s=ls[li],i=0,t=setInterval(()=>{term.textContent+=s[i++]||"";if(i>s.length){clearInterval(t);term.textContent+="\n";li++;setTimeout(tl,230)}},18)}setTimeout(tl,1500);
+function tl(){if(li>=ls.length){setTimeout(()=>{term.textContent="";li=0;tl()},2200);return}let s=ls[li],i=0,t=setInterval(()=>{term.textContent+=s[i++]||"";if(i>s.length){clearInterval(t);term.textContent+="\\n";li++;setTimeout(tl,230)}},18)}setTimeout(tl,1500);
 </script>
 </body></html>`;
 
