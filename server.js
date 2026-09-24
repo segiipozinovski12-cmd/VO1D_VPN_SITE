@@ -15,7 +15,7 @@ const files = {
 const server = http.createServer((req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
-    return res.end(JSON.stringify({ ok: true, service: "VO1D_VPN", version: "2.0" }));
+    return res.end(JSON.stringify({ ok: true, service: "VO1D_VPN", version: "5.0" }));
   }
 
   const pathname = (req.url || "/").split("?")[0];
