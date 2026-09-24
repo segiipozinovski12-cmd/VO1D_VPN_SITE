@@ -101,3 +101,51 @@ document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',
 }));
 
 document.addEventListener('visibilitychange',()=>{if(document.hidden)document.body.classList.add('page-paused');else document.body.classList.remove('page-paused')});
+
+
+/* ===== V5 FINAL INTERACTIONS ===== */
+const navAnchors=[...document.querySelectorAll('.navlinks a')];
+function updateActiveNav(){
+  let active='home';
+  ['privacy','technology','features','network'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&el.getBoundingClientRect().top<innerHeight*.42)active=id;
+  });
+  navAnchors.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+active));
+}
+addEventListener('scroll',updateActiveNav,{passive:true});updateActiveNav();
+
+if(matchMedia('(hover:hover) and (pointer:fine)').matches){
+  document.querySelectorAll('.primary,.mega,.tg-btn').forEach(btn=>{
+    btn.addEventListener('pointermove',e=>{
+      const r=btn.getBoundingClientRect();
+      const x=(e.clientX-r.left-r.width/2)*.08;
+      const y=(e.clientY-r.top-r.height/2)*.14;
+      btn.style.transform=`translate3d(${x}px,${y-2}px,0)`;
+    });
+    btn.addEventListener('pointerleave',()=>btn.style.transform='');
+  });
+}
+
+const arch=document.querySelector('.architecture');
+if(arch){
+  const archObs=new IntersectionObserver(entries=>entries.forEach(e=>{
+    if(!e.isIntersecting)return;
+    e.target.classList.add('architecture-live');
+  }),{threshold:.25});
+  archObs.observe(arch);
+}
+
+let lastScrollY=scrollY;
+addEventListener('scroll',()=>{
+  const y=scrollY,delta=y-lastScrollY; lastScrollY=y;
+  const nav=document.querySelector('.nav');
+  if(!nav)return;
+  if(y>innerHeight*.9&&delta>8)nav.style.transform='translate(-50%,-86px)';
+  else if(delta<-4||y<innerHeight*.65)nav.style.transform='translate(-50%,0)';
+},{passive:true});
+
+document.querySelectorAll('.feature,.arch-node,.terminal').forEach(el=>{
+  el.addEventListener('focusin',()=>el.classList.add('focus-visual'));
+  el.addEventListener('focusout',()=>el.classList.remove('focus-visual'));
+});
