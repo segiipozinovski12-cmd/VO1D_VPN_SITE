@@ -1,70 +1,40 @@
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const port = Number(process.env.PORT || 3000);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const files = {
+  "/": ["index.html", "text/html; charset=utf-8"],
+  "/index.html": ["index.html", "text/html; charset=utf-8"],
+  "/style.css": ["style.css", "text/css; charset=utf-8"],
+  "/app.js": ["app.js", "text/javascript; charset=utf-8"],
+};
 
-const html = `<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#030407">
-<title>VO1D_VPN — Enter the void</title>
-<style>
-:root{--bg:#030407;--fg:#eef3f8;--muted:#7f8a9c;--line:rgba(255,255,255,.09);--cyan:#78f3ff;--blue:#697eff}
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 70% 10%,rgba(90,105,255,.13),transparent 28%),#030407;color:var(--fg);font-family:Inter,Arial,sans-serif;overflow-x:hidden}a{color:inherit;text-decoration:none}
-#bg{position:fixed;inset:0;z-index:-3}.noise{position:fixed;inset:0;pointer-events:none;z-index:-2;opacity:.12;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E")}
-.boot{position:fixed;inset:0;background:#020305;z-index:99;display:grid;place-items:center;transition:opacity .8s,visibility .8s}.boot.done{opacity:0;visibility:hidden}.bootbox{width:min(520px,86vw)}.mark{font:800 clamp(54px,11vw,100px) Arial;letter-spacing:-.08em}.bar{height:1px;background:#17212c;margin:22px 0;overflow:hidden}.bar:after{content:"";display:block;width:35%;height:100%;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:load 1.9s ease-in-out infinite}@keyframes load{from{transform:translateX(-120%)}to{transform:translateX(360%)}}.bootcopy{font:11px monospace;color:#778398;letter-spacing:.13em;text-transform:uppercase}
-nav{position:fixed;top:18px;left:50%;transform:translateX(-50%);width:min(1180px,calc(100% - 28px));height:66px;border:1px solid var(--line);background:rgba(6,8,13,.7);backdrop-filter:blur(18px);border-radius:19px;display:flex;align-items:center;justify-content:space-between;padding:0 18px 0 22px;z-index:30}.brand{font:700 12px monospace;letter-spacing:.14em}.navlinks{display:flex;gap:26px;color:#8b96a8;font-size:12px}.navbtn,.btn{border:1px solid rgba(120,243,255,.24);background:linear-gradient(180deg,rgba(120,243,255,.1),rgba(105,126,255,.04));border-radius:13px;padding:12px 16px;font:700 11px monospace;letter-spacing:.04em}
-.term{position:fixed;right:18px;bottom:18px;width:285px;height:180px;border:1px solid var(--line);background:rgba(3,6,10,.76);backdrop-filter:blur(18px);border-radius:16px;z-index:20;padding:14px;font:10px/1.65 monospace;color:#8cecf4}.termhead{color:#6e7a8d;border-bottom:1px solid var(--line);padding-bottom:9px;margin-bottom:10px}
-.section{max-width:1240px;margin:auto;padding:145px 42px}.hero{min-height:100vh;padding-top:165px;position:relative}.kicker,.eyebrow{font:700 10px monospace;letter-spacing:.18em;color:#75a8b7;text-transform:uppercase}.title{font-size:clamp(78px,12vw,165px);line-height:.78;letter-spacing:-.085em;margin:32px 0 28px}.title span{display:block}.outline{color:transparent;-webkit-text-stroke:1px rgba(255,255,255,.37)}.lead{max-width:650px;color:#8b96a7;font-size:16px;line-height:1.8}.actions{display:flex;gap:12px;margin-top:34px}.btn{padding:17px 22px;display:inline-flex;align-items:center;gap:26px}.btn:hover{transform:translateY(-2px);border-color:rgba(120,243,255,.55)}.ghost{background:transparent;border-color:var(--line);color:#a2adbd}
-.orbitwrap{position:absolute;right:4%;top:29%;width:430px;height:430px}.orbit{position:absolute;inset:0;border:1px solid rgba(120,243,255,.12);border-radius:50%;animation:spin 16s linear infinite}.orbit:nth-child(2){inset:13%;border-style:dashed;animation-duration:10s;animation-direction:reverse}.orbit:nth-child(3){inset:28%;border-color:rgba(105,126,255,.2);animation-duration:7s}@keyframes spin{to{transform:rotate(360deg)}}.core{position:absolute;inset:38%;border-radius:50%;border:1px solid rgba(120,243,255,.28);display:grid;place-items:center;font:800 18px monospace;box-shadow:0 0 80px rgba(120,243,255,.08)}
-.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:95px}.meta div,.card,.metric{border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.015);padding:22px}.meta span{font:10px monospace;color:#566275}.meta b{display:block;margin:15px 0 6px;font-size:14px}.meta small{color:#657084}
-.split{display:grid;grid-template-columns:1.15fr .85fr;gap:80px;align-items:start}.h2{font-size:clamp(48px,6.5vw,82px);line-height:.97;letter-spacing:-.06em;margin:18px 0}.copy{color:#8591a3;line-height:1.85}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:58px}.card{min-height:250px;position:relative;overflow:hidden}.card:before{content:"";position:absolute;inset:auto -20% -45% -20%;height:130px;background:radial-gradient(circle,rgba(120,243,255,.12),transparent 70%)}.cardidx{font:10px monospace;color:#5c6778}.card h3{font-size:22px;margin:58px 0 12px}.card p{color:#778395;line-height:1.7}
-.panel{border:1px solid var(--line);border-radius:28px;background:rgba(8,11,17,.5);padding:55px;display:grid;grid-template-columns:1fr .8fr;gap:55px}.rings{min-height:330px;position:relative;display:grid;place-items:center}.ring{position:absolute;width:300px;height:300px;border-radius:50%;border:1px solid rgba(120,243,255,.14);animation:spin 14s linear infinite}.ring.r2{width:220px;height:220px;border-style:dashed;animation-duration:8s;animation-direction:reverse}.zero{font-size:72px;font-weight:800;letter-spacing:-.06em;text-shadow:0 0 55px rgba(120,243,255,.18)}.checks{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:28px}.checks div{font:11px monospace;color:#a6b0bf}.checks i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 15px var(--cyan);margin-right:9px}
-.routebox{height:300px;border:1px solid var(--line);border-radius:26px;margin-top:55px;position:relative;display:flex;align-items:center;justify-content:space-around;overflow:hidden}.line{position:absolute;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,rgba(120,243,255,.45),rgba(105,126,255,.38),transparent)}.node{width:110px;height:110px;border-radius:50%;border:1px solid rgba(255,255,255,.11);background:#06090d;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;font:700 13px monospace}.node small{color:#647084;font-size:8px;margin-top:6px}.packet{position:absolute;width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 18px var(--cyan);top:49%;left:11%;animation:packet 5s linear infinite}.packet.p2{animation-delay:-1.7s}.packet.p3{animation-delay:-3.4s}@keyframes packet{from{left:11%;opacity:0}10%,90%{opacity:1}to{left:88%;opacity:0}}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}.metric span,.metric small{font:9px monospace;color:#657084}.metric b{display:block;margin:15px 0 5px;font:700 15px monospace;color:#d6fbff}
-.cta{text-align:center;padding-top:180px;padding-bottom:180px}.ctatitle{font-size:clamp(60px,9vw,126px);line-height:.9;letter-spacing:-.075em;margin:20px auto 24px}.ctatitle span{color:transparent;-webkit-text-stroke:1px rgba(255,255,255,.35)}.mega{margin:48px auto 0;max-width:920px;min-height:116px;border:1px solid rgba(120,243,255,.28);border-radius:24px;background:linear-gradient(180deg,rgba(120,243,255,.09),rgba(105,126,255,.04));display:flex;align-items:center;justify-content:space-between;padding:0 34px;font:700 clamp(17px,2.3vw,28px) monospace;box-shadow:0 30px 120px rgba(80,100,255,.11);transition:.35s}.mega:hover{transform:translateY(-5px);box-shadow:0 40px 140px rgba(120,243,255,.15)}
-footer{max-width:1240px;margin:auto;padding:30px 42px 42px;border-top:1px solid var(--line);display:flex;justify-content:space-between;color:#687486;font:10px monospace}.reveal{opacity:0;transform:translateY(25px);transition:.8s}.reveal.visible{opacity:1;transform:none}
-@media(max-width:900px){.navlinks,.term{display:none}.section{padding:115px 22px}.hero{padding-top:145px}.orbitwrap{position:relative;right:auto;top:auto;width:min(80vw,420px);height:min(80vw,420px);margin:55px auto 0}.meta,.cards,.metrics,.split,.panel{grid-template-columns:1fr}.panel{padding:30px}.routebox{height:520px;flex-direction:column}.line{top:10%;bottom:10%;left:50%;right:auto;width:1px;height:auto}.packet{left:49.5%;top:11%;animation:pv 5s linear infinite}@keyframes pv{from{top:11%;opacity:0}10%,90%{opacity:1}to{top:87%;opacity:0}}}.checks{grid-template-columns:1fr}.actions{flex-direction:column}.btn{justify-content:space-between}.title{font-size:clamp(72px,21vw,110px)}footer{padding:25px 22px 35px}}
-</style>
-</head>
-<body>
-<canvas id="bg"></canvas><div class="noise"></div>
-<div id="boot" class="boot"><div class="bootbox"><div class="mark">VØ1D</div><div class="bar"></div><div id="bootcopy" class="bootcopy">initializing encrypted surface</div></div></div>
-<nav><a class="brand" href="#top">VO1D_VPN</a><div class="navlinks"><a href="#system">Система</a><a href="#privacy">Приватность</a><a href="#route">Маршрут</a></div><a class="navbtn" href="https://t.me/VO1D_VPNbot" target="_blank">Подключить</a></nav>
-<aside class="term"><div class="termhead">route://void</div><pre id="term"></pre></aside>
-<main id="top">
-<section class="section hero">
-<div class="kicker reveal">PRIVATE NETWORK / ZERO-NOISE EXPERIENCE</div>
-<h1 class="title reveal"><span>ENTER</span><span class="outline">THE VOID</span></h1>
-<p class="lead reveal">VO1D_VPN — приватный сетевой сервис с быстрым входом и минималистичным интерфейсом. Никаких лишних форм на сайте: подключение начинается через официальный Telegram-бот.</p>
-<div class="actions reveal"><a class="btn" href="https://t.me/VO1D_VPNbot" target="_blank">Подключить VO1D_VPN <b>↗</b></a><a class="btn ghost" href="#system">Исследовать систему <b>↓</b></a></div>
-<div class="orbitwrap reveal"><div class="orbit"></div><div class="orbit"></div><div class="orbit"></div><div class="core">VØ1D</div></div>
-<div class="meta reveal"><div><span>01</span><b>Encrypted transit</b><small>шифрованный маршрут</small></div><div><span>02</span><b>Minimal surface</b><small>без веб-регистрации</small></div><div><span>03</span><b>Fast handoff</b><small>переход в Telegram</small></div></div>
-</section>
-<section id="system" class="section">
-<div class="eyebrow reveal">/ SYSTEM</div><div class="split"><h2 class="h2 reveal">Сеть, которая не должна ощущаться как настройка сети.</h2><p class="copy reveal">VO1D_VPN строится вокруг короткого пути: сайт знакомит с системой, Telegram управляет доступом, а пользователь получает понятную точку подключения без перегруженного кабинета.</p></div>
-<div class="cards"><article class="card reveal"><div class="cardidx">01</div><h3>Quiet by design</h3><p>На экране только нужные состояния, маршруты и действия.</p></article><article class="card reveal"><div class="cardidx">02</div><h3>Private surface</h3><p>Сайт не требует регистрации, почты и отдельного профиля.</p></article><article class="card reveal"><div class="cardidx">03</div><h3>One-tap entry</h3><p>Кнопка подключения переводит прямо в @VO1D_VPNbot.</p></article></div>
-</section>
-<section id="privacy" class="section"><div class="panel reveal"><div><div class="eyebrow">/ PRIVACY LAYER</div><h2 class="h2">Минимум лишнего следа.</h2><p class="copy">Публичная часть продукта не собирает данные через формы и не требует отдельной регистрации. Фактическая политика приватности VPN будет зависеть от серверной инфраструктуры, которую мы подключим на следующем этапе.</p><div class="checks"><div><i></i>Без веб-регистрации</div><div><i></i>Без рекламных трекеров</div><div><i></i>Без лишних форм</div><div><i></i>Telegram entry</div></div></div><div class="rings"><div class="ring"></div><div class="ring r2"></div><div class="zero">0</div></div></div></section>
-<section id="route" class="section"><div class="eyebrow reveal">/ ROUTING</div><div class="split"><h2 class="h2 reveal">Маршрут виден. Содержимое — нет.</h2><p class="copy reveal">Интерфейсная модель будущего подключения: устройство → защищённый канал → выходной узел → интернет.</p></div><div class="routebox reveal"><div class="line"></div><div class="node">YOU<small>device</small></div><div class="node">VØ1D<small>tunnel</small></div><div class="node">EDGE<small>relay</small></div><div class="node">NET<small>destination</small></div><div class="packet"></div><div class="packet p2"></div><div class="packet p3"></div></div><div class="metrics"><div class="metric reveal"><span>ENTRY</span><b>TELEGRAM</b><small>@VO1D_VPNbot</small></div><div class="metric reveal"><span>WEB ACCOUNT</span><b>NOT REQUIRED</b><small>minimal surface</small></div><div class="metric reveal"><span>STATUS</span><b>READY</b><small>website layer</small></div></div></section>
-<section class="section cta"><div class="eyebrow reveal">/ READY</div><h2 class="ctatitle reveal">READY TO <span>DISAPPEAR?</span></h2><p class="copy reveal">Следующий шаг — официальный Telegram-бот VO1D_VPN.</p><a class="mega reveal" href="https://t.me/VO1D_VPNbot" target="_blank"><span>ПОДКЛЮЧИТЬ VO1D_VPN</span><span>↗</span></a></section>
-</main>
-<footer><b>VO1D_VPN</b><span>WEBSITE LAYER / RAILWAY READY</span></footer>
-<script>
-setTimeout(()=>{document.getElementById("boot")?.classList.add("done")},3500);
-const c=document.getElementById("bg"),x=c.getContext("2d");let w,h,p=[];
-function rs(){w=innerWidth;h=innerHeight;c.width=w;c.height=h;p=Array.from({length:Math.min(90,Math.floor(w/14))},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.1,vy:(Math.random()-.5)*.1,a:Math.random()}))}
-function dr(){x.clearRect(0,0,w,h);x.fillStyle="#78f3ff";for(const q of p){q.x+=q.vx;q.y+=q.vy;if(q.x<0)q.x=w;if(q.x>w)q.x=0;if(q.y<0)q.y=h;if(q.y>h)q.y=0;x.globalAlpha=.08+q.a*.35;x.fillRect(q.x,q.y,1,1)}x.globalAlpha=1;requestAnimationFrame(dr)}rs();dr();addEventListener("resize",rs);
-const bc=document.getElementById("bootcopy"),boot=document.getElementById("boot"),steps=["initializing encrypted surface","mapping private route","shaping void interface","ready"];let bi=0;const bt=setInterval(()=>{bi++;if(steps[bi])bc.textContent=steps[bi];if(bi===3){clearInterval(bt);setTimeout(()=>boot.classList.add("done"),450)}},480);
-const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add("visible")}),{threshold:.12});document.querySelectorAll(".reveal").forEach(e=>o.observe(e));
-const term=document.getElementById("term"),ls=["> boot route.engine","  surface: minimal","> resolve edge.node","  handshake: encrypted","> session ready","  entry: @VO1D_VPNbot"];let li=0;
-function tl(){if(li>=ls.length){setTimeout(()=>{term.textContent="";li=0;tl()},2200);return}let s=ls[li],i=0,t=setInterval(()=>{term.textContent+=s[i++]||"";if(i>s.length){clearInterval(t);term.textContent+="\\n";li++;setTimeout(tl,230)}},18)}setTimeout(tl,1500);
-</script>
-</body></html>`;
+const server = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    return res.end(JSON.stringify({ ok: true, service: "VO1D_VPN", version: "2.0" }));
+  }
 
-const server=http.createServer((req,res)=>{
-  if(req.url==="/health"){res.writeHead(200,{"content-type":"application/json"});return res.end(JSON.stringify({ok:true,service:"VO1D_VPN"}))}
-  res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-cache","x-content-type-options":"nosniff"});
-  res.end(html);
+  const pathname = (req.url || "/").split("?")[0];
+  const entry = files[pathname] || files["/"];
+  const filePath = path.join(__dirname, entry[0]);
+  try {
+    const data = fs.readFileSync(filePath);
+    res.writeHead(200, {
+      "content-type": entry[1],
+      "cache-control": pathname === "/" ? "no-cache" : "public, max-age=300",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-frame-options": "SAMEORIGIN",
+    });
+    res.end(data);
+  } catch {
+    res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    res.end("VO1D_VPN asset error");
+  }
 });
-server.listen(port,"0.0.0.0",()=>console.log("VO1D_VPN online on "+port));
+
+server.listen(port, "0.0.0.0", () => console.log("VO1D_VPN online on " + port));
