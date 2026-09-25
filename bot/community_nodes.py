@@ -16,6 +16,8 @@ COUNTRY_NAMES={
     "TR":"Turkey","RO":"Romania","FI":"Finland","RU":"Russia"
 }
 ALLOWED_SCHEMES={"vless","vmess","trojan","ss","hy2","hysteria2"}
+# These RU endpoints were confirmed by the client as unusable/N/A, so never publish them again.
+RU_BLOCKED_HOSTS={"91.240.86.70","45.12.75.242","83.222.26.101"}
 
 def _b64decode_text(value):
     raw="".join(str(value or "").split())
@@ -82,9 +84,17 @@ def _candidate_score(uri,cc=""):
             security=(q.get("security") or [""])[0].lower()
             transport=(q.get("type") or [""])[0].lower()
             flow=(q.get("flow") or [""])[0].lower()
-            if security=="reality":score+=35
-            if transport in ("tcp",""):score+=15
-            if "vision" in flow:score+=10
+            if cc=="RU":
+                # On the user's network, the previously chosen RU Reality endpoints returned N/A.
+                # Prefer ordinary TCP-friendly WS VLESS first, then Shadowsocks.
+                if transport=="ws":score+=80
+                if security=="reality":score-=45
+            else:
+                if security=="reality":score+=35
+                if transport in ("tcp",""):score+=15
+                if "vision" in flow:score+=10
+        if cc=="RU" and scheme=="ss":
+            score+=90
         if cc=="RU" and scheme in ("hy2","hysteria2"):
             score-=1000
         return score
@@ -117,6 +127,24 @@ def _prefer_same_endpoint(items):
             hy2[ep]=uri
     out.extend(hy2.values())
     return out
+
+def _normalize_uri(uri):
+    try:
+        scheme=uri.split("://",1)[0].lower()
+        if scheme!="vless":
+            return uri
+        p=urllib.parse.urlsplit(uri)
+        q=urllib.parse.parse_qsl(p.query,keep_blank_values=True)
+        keys={k.lower() for k,_ in q}
+        if "encryption" not in keys:
+            q.append(("encryption","none"))
+        qd={k.lower():v for k,v in q}
+        if qd.get("type","").lower() in ("","tcp") and "headertype" not in keys:
+            q.append(("headerType","none"))
+        query=urllib.parse.urlencode(q,doseq=True,safe="-._~")
+        return urllib.parse.urlunsplit((p.scheme,p.netloc,p.path,query,p.fragment))
+    except Exception:
+        return uri
 
 def _rename(uri,label):
     scheme=uri.split("://",1)[0].lower()
@@ -183,12 +211,16 @@ class CommunityPool:
         seen=set()
         limit=max(self.candidate_limit,60) if cc=="RU" else self.candidate_limit
         for line in decoded.splitlines():
-            uri=line.strip()
+            uri=_normalize_uri(line.strip())
             if "://" not in uri:continue
             scheme=uri.split("://",1)[0].lower()
             if scheme not in ALLOWED_SCHEMES:continue
-            if cc=="RU" and scheme in ("hy2","hysteria2"):
-                continue
+            if cc=="RU":
+                if scheme in ("hy2","hysteria2"):
+                    continue
+                ep=_endpoint(uri)
+                if ep and ep[0] in RU_BLOCKED_HOSTS:
+                    continue
             key=uri.split("#",1)[0]
             if key in seen:continue
             seen.add(key);unique.append(uri)
