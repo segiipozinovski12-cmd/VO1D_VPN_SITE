@@ -377,6 +377,20 @@ def api(method, payload=None, timeout=70):
     if not out.get("ok"): raise RuntimeError(out)
     return out.get("result")
 
+def download_telegram_file(file_id,max_bytes=2_000_000):
+    info=api("getFile",{"file_id":str(file_id)},20)
+    path=str((info or {}).get("file_path") or "")
+    if not path:raise ValueError("Telegram file path is missing")
+    req=urllib.request.Request(
+        f"https://api.telegram.org/file/bot{TOKEN}/{path}",
+        headers={"User-Agent":"VO1D_VPNbot/1.0"})
+    with urllib.request.urlopen(req,timeout=30) as r:
+        length=int(r.headers.get("Content-Length") or 0)
+        if length and length>max_bytes:raise ValueError("JSON file is too large")
+        data=r.read(max_bytes+1)
+    if len(data)>max_bytes:raise ValueError("JSON file is too large")
+    return data
+
 def validate_webapp_init_data(init_data,max_age=86400):
     if not init_data:
         raise ValueError("Telegram initData is missing")
@@ -1196,7 +1210,32 @@ def admin_panel():
       f"Ожидают оплаты: <b>{pend}</b>\nДоход Stars: <b>{stars} ⭐</b>\n"
       f"Подтверждённый manual: <b>{money(usd)}</b>",
       [[button("👥 Последние пользователи","admin_users")],[button("💳 Заявки","admin_payments")],
-       [button("🎟 Промокоды","admin_promos")],[button("◀️ Меню","menu")]])
+       [button("🎟 Промокоды","admin_promos")],[button("🇷🇺 RU pinned","admin_ru")],
+       [button("◀️ Меню","menu")]])
+
+def admin_ru_panel():
+    st=pinned_ru_health()
+    updated=_meta_get("pinned_ru_updated_at","0")
+    try:updated_text=dt(int(updated))
+    except Exception:updated_text="—"
+    if st.get("configured"):
+        state="ONLINE" if st.get("online") else "UNREACHABLE"
+        latency=(f"{st.get('latency_ms')} ms" if st.get("latency_ms") is not None else "—")
+        text=(f"<b>🇷🇺 VO1D RU pinned</b>\n\n"
+              f"Статус endpoint: <b>{state}</b>\n"
+              f"Адрес: <code>{esc(st.get('address'))}:{st.get('port')}</code>\n"
+              f"Транспорт: <b>{esc(st.get('network'))} + {esc(st.get('security'))}</b>\n"
+              f"TCP: <b>{latency}</b>\n"
+              f"Обновлён: <b>{updated_text}</b>\n\n"
+              "Профиль хранится в persistent SQLite и не меняется сам.")
+    else:
+        text=("<b>🇷🇺 VO1D RU pinned</b>\n\nПрофиль ещё не установлен.\n\n"
+              "Нажми «Загрузить JSON», затем отправь рабочий Xray JSON файлом.")
+    send(ADMIN_ID,text,[
+      [button("📤 Загрузить JSON","admin_ru_set")],
+      [button("🗑 Удалить pinned RU","admin_ru_clear")],
+      [button("◀️ Админ","admin")]
+    ])
 
 def admin_users():
     with db() as c: rows=c.execute("SELECT * FROM users ORDER BY joined_at DESC LIMIT 15").fetchall()
@@ -1243,8 +1282,18 @@ def handle_command(uid,text):
     if cmd=="/users" and uid==ADMIN_ID:return admin_users()
     if cmd=="/payments" and uid==ADMIN_ID:return admin_payments()
     if cmd=="/promos" and uid==ADMIN_ID:return admin_promos()
+    if cmd in ("/ru","/rustatus") and uid==ADMIN_ID:return admin_ru_panel()
     if uid!=ADMIN_ID:return
     try:
+        if cmd=="/setru":
+            set_pending(uid,"set_ru_json")
+            return send(uid,
+              "<b>🇷🇺 Установка pinned RU</b>\n\nОтправь рабочий Xray JSON <b>как файл</b>. "
+              "Бот возьмёт только VLESS proxy outbound, сохранит его в persistent DB и добавит в общую Happ-подписку.",
+              [[button("❌ Отмена","admin_ru")]])
+        if cmd=="/clearru":
+            clear_pinned_ru()
+            return send(uid,"Pinned RU удалён.",[[button("🇷🇺 RU","admin_ru")]])
         if cmd=="/promo":
             a=text.strip().split()
             if len(a)<4:return send(uid,"Формат: <code>/promo CODE days 7 100</code> или <code>/promo CODE balance 5.00 50</code>")
@@ -1371,6 +1420,19 @@ def handle_callback(q):
             if method=="stars":return giftcode_star_invoice(uid,days)
         except Exception as e:return send(uid,f"Ошибка подарочного кода: <code>{esc(e)}</code>")
     if data=="admin_promos" and uid==ADMIN_ID:return admin_promos()
+    if data=="admin_ru" and uid==ADMIN_ID:return admin_ru_panel()
+    if data=="admin_ru_set" and uid==ADMIN_ID:
+        set_pending(uid,"set_ru_json")
+        return send(uid,
+          "<b>🇷🇺 Загрузить рабочий RU JSON</b>\n\nОтправь Xray JSON файлом. "
+          "Секреты не попадут в GitHub — будет сохранена только рабочая share-ссылка в persistent SQLite.",
+          [[button("❌ Отмена","admin_ru")]])
+    if data=="admin_ru_clear" and uid==ADMIN_ID:
+        return send(uid,"Удалить закреплённый RU-профиль?",
+                    [[button("✅ Удалить","admin_ru_clear_yes")],[button("❌ Отмена","admin_ru")]])
+    if data=="admin_ru_clear_yes" and uid==ADMIN_ID:
+        clear_pinned_ru()
+        return admin_ru_panel()
     if data=="check_sub":
         if not is_member(uid):
             kb=[]
