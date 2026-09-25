@@ -1042,7 +1042,8 @@ def admin_panel():
       f"Пользователей: <b>{users}</b>\nАктивных: <b>{act}</b>\nБанов: <b>{bans}</b>\n"
       f"Ожидают оплаты: <b>{pend}</b>\nДоход Stars: <b>{stars} ⭐</b>\n"
       f"Подтверждённый manual: <b>{money(usd)}</b>",
-      [[button("👥 Последние пользователи","admin_users")],[button("💳 Заявки","admin_payments")],[button("◀️ Меню","menu")]])
+      [[button("👥 Последние пользователи","admin_users")],[button("💳 Заявки","admin_payments")],
+       [button("🎟 Промокоды","admin_promos")],[button("◀️ Меню","menu")]])
 
 def admin_users():
     with db() as c: rows=c.execute("SELECT * FROM users ORDER BY joined_at DESC LIMIT 15").fetchall()
@@ -1060,9 +1061,27 @@ def admin_payments():
     text+="\nПодтвердить manual: <code>/paid PAYMENT_ID</code>"
     send(ADMIN_ID,text)
 
+def admin_promos():
+    with db() as c:
+        rows=c.execute("SELECT * FROM promo_codes ORDER BY created_at DESC LIMIT 30").fetchall()
+    text="<b>🎟 Промокоды VO1D</b>\n\n"
+    for r in rows:
+        reward=(f"+{r['reward_value']} дн." if r["reward_type"]=="days" else f"+{money(r['reward_value'])}")
+        limit="∞" if not r["max_uses"] else str(r["max_uses"])
+        text+=f"<code>{esc(r['code'])}</code> · {reward} · {r['uses']}/{limit} · {'ON' if r['active'] else 'OFF'}\n"
+    text+=("\nСоздать:\n<code>/promo CODE days 7 100</code>\n"
+           "<code>/promo CODE balance 5.00 50</code>\n"
+           "Последнее число — максимум активаций, 0 = без лимита.\n"
+           "Удалить: <code>/delpromo CODE</code>")
+    send(ADMIN_ID,text,[[button("◀️ Админ","admin")]])
+
 def handle_command(uid,text):
     parts=text.strip().split(maxsplit=2); cmd=parts[0].split("@")[0].lower()
     if cmd=="/start":
+        all_parts=text.strip().split(maxsplit=1)
+        if len(all_parts)>1 and all_parts[1].startswith("ref_"):
+            try:assign_referrer(uid,int(all_parts[1][4:]))
+            except Exception:pass
         r=get_user(uid)
         if r and r["banned"]: return send(uid,"⛔ Доступ к VO1D_VPN заблокирован.",[[button("🛟 Поддержка",url=SUPPORT_URL)]])
         return start_screen(uid,r["first_name"] if r else "")
@@ -1070,10 +1089,34 @@ def handle_command(uid,text):
     if cmd=="/stats" and uid==ADMIN_ID:return admin_panel()
     if cmd=="/users" and uid==ADMIN_ID:return admin_users()
     if cmd=="/payments" and uid==ADMIN_ID:return admin_payments()
+    if cmd=="/promos" and uid==ADMIN_ID:return admin_promos()
     if uid!=ADMIN_ID:return
     try:
+        if cmd=="/promo":
+            a=text.strip().split()
+            if len(a)<4:return send(uid,"Формат: <code>/promo CODE days 7 100</code> или <code>/promo CODE balance 5.00 50</code>")
+            code=normalize_code(a[1]); reward_type=a[2].lower()
+            max_uses=int(a[4]) if len(a)>4 else 0
+            if reward_type=="days":
+                value=int(a[3])
+                if value<1 or value>3650:raise ValueError("days out of range")
+            elif reward_type=="balance":
+                value=parse_topup_amount(a[3])
+                if value is None:raise ValueError("bad balance reward")
+            else:return send(uid,"Награда должна быть <code>days</code> или <code>balance</code>.")
+            with db() as cc:
+                cc.execute("""INSERT INTO promo_codes(code,reward_type,reward_value,max_uses,uses,expires_at,active,created_by,created_at)
+                  VALUES(?,?,?,?,0,0,1,?,?)
+                  ON CONFLICT(code) DO UPDATE SET reward_type=excluded.reward_type,reward_value=excluded.reward_value,
+                  max_uses=excluded.max_uses,active=1,created_by=excluded.created_by""",
+                  (code,reward_type,value,max_uses,uid,now()))
+            return send(uid,f"✅ Промокод <code>{code}</code> сохранён.",[[button("🎟 Список промокодов","admin_promos")]])
+        if cmd=="/delpromo":
+            code=normalize_code(text.strip().split(maxsplit=1)[1])
+            with db() as cc:cc.execute("UPDATE promo_codes SET active=0 WHERE code=?",(code,))
+            return send(uid,f"✅ Промокод <code>{code}</code> выключен.")
         if cmd=="/grant":
-            _,target,days=text.split(maxsplit=2); end=add_days(int(target),int(days))
+            _,target,days=text.split(maxsplit=2); end=add_days(int(target),int(days),"admin")
             send(uid,f"✅ <code>{target}</code>: +{days} дней, до {dt(end)}")
             send(int(target),f"✅ Администратор начислил <b>{days} дней</b>.\nПодписка активна до {dt(end)}.",main_kb(int(target)))
         elif cmd=="/ban":
@@ -1097,7 +1140,8 @@ def handle_command(uid,text):
                 if p["status"]=="paid":return send(uid,"Эта заявка уже подтверждена.")
                 c.execute("UPDATE payments SET status='paid',paid_at=? WHERE id=?",(now(),pid))
             if int(p["plan_days"])>0:
-                end=add_days(p["user_id"],p["plan_days"])
+                end=add_days(p["user_id"],p["plan_days"],f"manual:{p['method']}")
+                notify_referral_reward(p["user_id"])
                 send(uid,f"✅ Заявка #{pid} подтверждена. Доступ до {dt(end)}.")
                 send(p["user_id"],f"✅ <b>Оплата подтверждена.</b>\nНачислено {p['plan_days']} дней.\nАктивно до {dt(end)}.",main_kb(p["user_id"]))
             else:
@@ -1123,22 +1167,109 @@ def handle_callback(q):
     if not (data=="topup" or data.startswith("topup:") or data.startswith("topup_pay:")):
         clear_pending(uid)
     if data=="menu":return send(uid,"<b>VO1D_VPN</b>\nВыбери действие:",main_kb(uid))
+    if data=="more":return more_menu(uid)
+    if data=="balance_history":return balance_history(uid)
+    if data=="sub_history":return subscription_history(uid)
+    if data=="promo":return promo_prompt(uid)
+    if data=="referral":return referral_screen(uid)
+    if data=="autorenew":return auto_renew_screen(uid)
+    if data=="servers":return servers_screen(uid)
+    if data=="diagnostics":return diagnostics(uid)
+    if data=="devices":return devices_screen(uid)
+    if data=="gifts":return gifts_screen(uid)
+    if data=="gift_direct":return gift_plan_menu(uid,"giftplan")
+    if data=="gift_code":return gift_plan_menu(uid,"gcodeplan")
+    if data=="device_add":
+        set_pending(uid,"device_add")
+        return send(uid,f"<b>📱 Новое устройство</b>\n\nОтправь название, например <code>iPhone</code> или <code>PC</code>.\nЛимит: {DEVICE_LIMIT}.",[[button("❌ Отмена","devices")]])
+    if data.startswith("device_del:"):
+        try:
+            did=int(data.split(":")[1])
+            with db() as cc:cc.execute("DELETE FROM devices WHERE id=? AND user_id=?",(did,uid))
+            return devices_screen(uid)
+        except:return
+    if data=="notifications":
+        with db() as cc:cc.execute("UPDATE users SET notifications=CASE notifications WHEN 1 THEN 0 ELSE 1 END WHERE id=?",(uid,))
+        return more_menu(uid)
+    if data=="reset_access":
+        return send(uid,"<b>🔐 Сбросить доступ?</b>\n\nБудет создана новая subscription-ссылка и новый персональный ключ.",[[button("✅ Да, сбросить","reset_access_confirm")],[button("❌ Отмена","more")]])
+    if data=="reset_access_confirm":
+        return send(uid,reset_access(uid),[[button("⚡ Получить новую ссылку","connect")],[button("◀️ Ещё","more")]])
+    if data.startswith("welcome:"):
+        try:return welcome_screen(uid,int(data.split(":")[1]))
+        except:return
+    if data.startswith("autorenew:"):
+        val=data.split(":",1)[1]
+        if val=="toggle":
+            with db() as cc:cc.execute("UPDATE users SET auto_renew=CASE auto_renew WHEN 1 THEN 0 ELSE 1 END WHERE id=?",(uid,))
+        else:
+            try:
+                days=int(val)
+                if days in PLANS:
+                    with db() as cc:cc.execute("UPDATE users SET auto_renew_days=? WHERE id=?",(days,uid))
+            except:pass
+        return auto_renew_screen(uid)
+    if data.startswith("server:"):
+        try:
+            idx=int(data.split(":")[1])
+            if 0<=idx<len(VPN_NODES):
+                with db() as cc:cc.execute("UPDATE users SET preferred_node=? WHERE id=?",(idx,uid))
+            return servers_screen(uid)
+        except:return
+    if data.startswith("giftplan:"):
+        try:
+            days=int(data.split(":")[1])
+            if days in PLANS:return direct_gift_recipient_prompt(uid,days)
+        except:return
+    if data.startswith("gcodeplan:"):
+        try:
+            days=int(data.split(":")[1])
+            if days in PLANS:return gift_code_payment(uid,days)
+        except:return
+    if data.startswith("giftpay:"):
+        try:
+            _,target_s,days_s,method=data.split(":")
+            target=int(target_s);days=int(days_s)
+            if days not in PLANS:return
+            if method=="balance":
+                result,status=gift_with_balance(uid,target,days)
+                if status=="insufficient":
+                    return send(uid,f"Недостаточно средств. Баланс: <b>{money(int(result or 0))}</b>.",[[button("➕ Пополнить","topup")],[button("◀️ Подарки","gifts")]])
+                if status!="ok":return send(uid,"Не удалось оформить подарок.")
+                try:send(target,f"🎁 <b>Тебе подарили {days} дней VO1D_VPN.</b>\nДоступ до {dt(result['end'])}.",main_kb(target))
+                except Exception:pass
+                return send(uid,f"✅ Подарок отправлен. Остаток: <b>{money(result['balance'])}</b>.",[[button("◀️ Подарки","gifts")]])
+            if method=="stars":return gift_star_invoice(uid,target,days)
+        except Exception as e:return send(uid,f"Ошибка подарка: <code>{esc(e)}</code>")
+    if data.startswith("gcodepay:"):
+        try:
+            _,days_s,method=data.split(":");days=int(days_s)
+            if days not in PLANS:return
+            if method=="balance":
+                result,status=giftcode_with_balance(uid,days)
+                if status=="insufficient":return send(uid,f"Недостаточно средств. Баланс: <b>{money(int(result or 0))}</b>.",[[button("➕ Пополнить","topup")]])
+                if status!="ok":return send(uid,"Не удалось создать подарочный код.")
+                return send(uid,f"🎫 <b>Подарочный код готов</b>\n\n<code>{result['code']}</code>\nСрок: <b>{days} дней</b>\nОдноразовый.",[[button("◀️ Подарки","gifts")]])
+            if method=="stars":return giftcode_star_invoice(uid,days)
+        except Exception as e:return send(uid,f"Ошибка подарочного кода: <code>{esc(e)}</code>")
+    if data=="admin_promos" and uid==ADMIN_ID:return admin_promos()
     if data=="check_sub":
         if not is_member(uid):
             kb=[]
             if CHANNEL_URL:kb.append([button("📢 Подписаться",url=CHANNEL_URL)])
             kb.append([button("🔄 Проверить","check_sub")])
             return send(uid,"Подписка пока не обнаружена. Подпишись на канал и нажми проверку ещё раз.",kb)
+        r=get_user(uid)
+        if r and not r["welcome_done"]:return welcome_screen(uid,1)
         if not r["trial_claimed"]:
             return send(uid,"✅ Подписка подтверждена.\n\nТебе доступна пробная подписка на <b>24 часа</b>.",
               [[button("🎁 Активировать 1 день","activate_trial")]])
         return send(uid,"✅ Подписка подтверждена.",main_kb(uid))
     if data=="activate_trial":
-        with db() as c:
-            rr=c.execute("SELECT trial_claimed FROM users WHERE id=?",(uid,)).fetchone()
-            if rr["trial_claimed"]:return send(uid,"Пробный период уже был активирован.",main_kb(uid))
-            end=max(now(),get_user(uid)["sub_until"])+TRIAL_HOURS*3600
-            c.execute("UPDATE users SET trial_claimed=1,sub_until=? WHERE id=?",(end,uid))
+        if CHANNEL_ID and not is_member(uid):return send(uid,"Сначала подпишись на канал.",[[button("📢 Канал",url=CHANNEL_URL)]])
+        end,status=claim_trial(uid)
+        if status=="used":return send(uid,"Пробный период уже был активирован.",main_kb(uid))
+        if status!="ok":return send(uid,"Не удалось активировать пробный период.")
         return send(uid,f"🎉 <b>Пробная подписка активирована.</b>\nДоступ до {dt(end)}.",main_kb(uid))
     if data=="profile":return profile(uid)
     if data=="balance":return balance_screen(uid)
@@ -1178,6 +1309,7 @@ def handle_callback(q):
                       f"Цена: <b>{money(price)}</b>\nНе хватает: <b>{money(missing)}</b>",
                       [[button("➕ Пополнить баланс","topup")],[button("◀️ Тарифы","plans")]])
                 if status!="ok":return send(uid,"Не удалось оплатить с баланса.")
+                notify_referral_reward(uid)
                 return send(uid,
                   f"✅ <b>Подписка оплачена с баланса.</b>\n\n"
                   f"Списано: <b>{money(PLANS[days]['usd'])}</b>\n"
@@ -1266,6 +1398,22 @@ def handle_update(u):
                   "Например: <code>7.50</code>",
                   [[button("❌ Отмена","balance")]])
             return topup_methods(uid,cents)
+        if pending and pending["action"]=="redeem_code":
+            ok,msg=redeem_code(uid,text)
+            clear_pending(uid)
+            return send(uid,msg,[[button("◀️ Ещё","more")]])
+        if pending and pending["action"]=="device_add":
+            ok,msg=add_device(uid,text)
+            clear_pending(uid)
+            send(uid,("✅ " if ok else "⚠️ ")+msg)
+            return devices_screen(uid)
+        if pending and pending["action"]=="gift_recipient":
+            try:
+                data=json.loads(pending["data"] or "{}");days=int(data["days"]);target=int(str(text).strip())
+            except Exception:
+                return send(uid,"Отправь числовой Telegram ID получателя.",[[button("❌ Отмена","gifts")]])
+            clear_pending(uid)
+            return direct_gift_payment(uid,target,days)
         return send(uid,"<b>VO1D_VPN</b>\nИспользуй меню ниже.",main_kb(uid))
     q=u.get("callback_query")
     if q:
