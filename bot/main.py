@@ -1,4 +1,4 @@
-import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse
+import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes
 from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -13,6 +13,7 @@ PUBLIC_URL=os.getenv("PUBLIC_URL","").rstrip("/")
 if not PUBLIC_URL and os.getenv("RAILWAY_PUBLIC_DOMAIN"):
     PUBLIC_URL="https://"+os.getenv("RAILWAY_PUBLIC_DOMAIN","").strip()
 SUPPORT_URL=os.getenv("SUPPORT_URL",f"https://t.me/{ADMIN_USERNAME}")
+MINI_APP_URL=os.getenv("MINI_APP_URL",(PUBLIC_URL+"/app") if PUBLIC_URL else "").rstrip("/")
 TRIAL_HOURS=int(os.getenv("TRIAL_HOURS","24"))
 PORT=int(os.getenv("PORT","8080"))
 VPN_NODES=[x.strip() for x in os.getenv("VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
@@ -20,6 +21,8 @@ VPN_NODES=[x.strip() for x in os.getenv("VPN_NODES","").replace("\\n","\n").spli
 mount=os.getenv("RAILWAY_VOLUME_MOUNT_PATH","").strip()
 DB_PATH=os.getenv("DB_PATH",(mount.rstrip("/")+"/vo1d.db") if mount else "vo1d.db")
 os.makedirs(os.path.dirname(DB_PATH) or ".",exist_ok=True)
+BASE_DIR=os.path.dirname(os.path.abspath(__file__))
+WEBAPP_DIR=os.path.join(BASE_DIR,"webapp")
 
 PLANS={
   30: {"title":"1 месяц","usd":399,"stars":250},
