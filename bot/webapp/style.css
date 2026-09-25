@@ -278,4 +278,7 @@ code,b,p,h1,h2,h3,span,small{overflow-wrap:anywhere}
 .admin-list b{font:700 8px var(--mono)}.admin-list small{font:500 6px var(--mono);color:#70706b;text-align:right}
 @media(max-width:390px){.admin-grid,.admin-form{grid-template-columns:1fr}.admin-card{padding:15px}}
 
+
+.retry-hint{cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,255,255,.18);text-underline-offset:4px}
+.retry-hint:active{opacity:.65}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}.reveal{opacity:1!important;transform:none!important}}
