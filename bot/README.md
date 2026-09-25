@@ -39,3 +39,18 @@ socks://...
 /paid PAYMENT_ID
 /balance USER_ID AMOUNT
 /broadcast TEXT
+
+
+## VO1D Community
+
+Optional public-relay country subscription. It is deliberately separate from the private VO1D node subscription.
+
+Variables:
+- COMMUNITY_ENABLED=1
+- COMMUNITY_COUNTRIES=JP,US,NL,SG,DE,GB,FR,PL,CA
+- COMMUNITY_PER_COUNTRY=2
+- COMMUNITY_REFRESH_SECONDS=900
+
+The Community feed consumes public third-party relay data from Au1rxx/free-vpn-subscriptions, keeps only supported URI schemes, checks candidate TCP reachability from the VO1D bot service, and renames display labels as `VO1D Community · CC · NN`.
+
+Community relays are not operated by VO1D and must not be represented as private VO1D infrastructure. Keep the owned VPS subscription as the privacy-focused option.
