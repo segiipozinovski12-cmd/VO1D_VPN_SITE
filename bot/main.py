@@ -1333,16 +1333,19 @@ def successful_payment(msg):
         kind=parts[0]
         puid=int(parts[1])
         if puid!=uid:return
+
         if kind=="sub":
             days=int(parts[2])
             if days not in PLANS:return
             expected=PLANS[days]["stars"]
             if int(sp.get("total_amount",0))!=expected:return
             make_payment(uid,"stars",days,"paid",charge)
-            end=add_days(uid,days)
+            end=add_days(uid,days,"stars")
+            notify_referral_reward(uid)
             send(uid,f"✅ <b>Оплата Stars получена.</b>\nНачислено {days} дней.\nПодписка до {dt(end)}.",main_kb(uid))
             send(ADMIN_ID,f"⭐ Stars payment\nUser: <code>{uid}</code>\n{days} дней · {expected} ⭐\nCharge: <code>{esc(charge)}</code>")
             return
+
         if kind=="bal":
             cents=int(parts[2]); expected_stars=int(parts[3])
             if not valid_topup_cents(cents) or topup_stars(cents)!=expected_stars:return
@@ -1356,6 +1359,29 @@ def successful_payment(msg):
             send(ADMIN_ID,
               f"⭐ Balance top-up\nUser: <code>{uid}</code>\n"
               f"+{money(cents)} · {expected_stars} ⭐\nCharge: <code>{esc(charge)}</code>")
+            return
+
+        if kind=="gift":
+            target=int(parts[2]); days=int(parts[3])
+            if days not in PLANS or not get_user(target):return
+            expected=PLANS[days]["stars"]
+            if int(sp.get("total_amount",0))!=expected:return
+            record_payment(uid,"gift_stars",days,expected,PLANS[days]["usd"],"paid",charge,f"target:{target}")
+            end=add_days(target,days,f"gift_stars:{uid}")
+            send(uid,f"✅ <b>Подарок отправлен.</b>\nПолучатель: <code>{target}</code>\nСрок: {days} дней.",main_kb(uid))
+            try:send(target,f"🎁 <b>Тебе подарили {days} дней VO1D_VPN.</b>\nДоступ до {dt(end)}.",main_kb(target))
+            except Exception:pass
+            send(ADMIN_ID,f"⭐ Gift payment\nFrom: <code>{uid}</code>\nTo: <code>{target}</code>\n{days} дней · {expected} ⭐")
+            return
+
+        if kind=="gcode":
+            days=int(parts[2])
+            if days not in PLANS:return
+            expected=PLANS[days]["stars"]
+            if int(sp.get("total_amount",0))!=expected:return
+            record_payment(uid,"giftcode_stars",days,expected,PLANS[days]["usd"],"paid",charge,"giftcode")
+            code=create_gift_code(uid,days)
+            send(uid,f"🎫 <b>Подарочный код готов</b>\n\n<code>{code}</code>\nСрок: <b>{days} дней</b>\nОдноразовый.",[[button("◀️ Подарки","gifts")]])
             return
     except Exception as e:
         print("successful payment parse error",repr(e),flush=True)
@@ -1375,6 +1401,12 @@ def handle_update(u):
                 elif parts[0]=="bal" and len(parts)>=5:
                     cents=int(parts[2]); stars=int(parts[3])
                     ok=valid_topup_cents(cents) and topup_stars(cents)==stars and int(q.get("total_amount",0))==stars
+                elif parts[0]=="gift" and len(parts)>=5:
+                    target=int(parts[2]); days=int(parts[3])
+                    ok=days in PLANS and bool(get_user(target)) and int(q.get("total_amount",0))==PLANS[days]["stars"]
+                elif parts[0]=="gcode" and len(parts)>=4:
+                    days=int(parts[2])
+                    ok=days in PLANS and int(q.get("total_amount",0))==PLANS[days]["stars"]
             api("answerPreCheckoutQuery",{"pre_checkout_query_id":q["id"],"ok":bool(ok),**({} if ok else {"error_message":err})},15)
         except Exception:
             try: api("answerPreCheckoutQuery",{"pre_checkout_query_id":q["id"],"ok":False,"error_message":err},15)
