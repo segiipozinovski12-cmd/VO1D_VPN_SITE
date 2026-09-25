@@ -1075,14 +1075,9 @@ def connect(uid):
     if not PUBLIC_URL:
         return send(uid,"Подписка активна, но публичный URL бота ещё не указан в Railway Variables: <code>PUBLIC_URL</code>.")
     sub=f"{PUBLIC_URL}/sub/{r['sub_token']}"
-    extra_note=""
-    if COMMUNITY_POOL.enabled:
-        extra_note=("\n\nВ этой же подписке находятся London и дополнительные публичные сторонние узлы. "
-                    "Имена <b>VO1D · XX · NN</b> — это метки списка, а не указание, что эти серверы принадлежат VO1D.")
     send(uid,
       f"<b>⚡ Подключение VO1D_VPN</b>\n\n"
-      f"Твоя персональная ссылка для Happ:\n<code>{esc(sub)}</code>"
-      f"{extra_note}\n\n"
+      f"Твоя персональная ссылка для Happ:\n<code>{esc(sub)}</code>\n\n"
       "Не передавай её другим: ссылка привязана к твоей подписке.",
       [[button("📖 Как добавить в Happ","guide")],[button("◀️ Меню","menu")]])
 
