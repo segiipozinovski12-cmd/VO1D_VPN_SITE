@@ -455,6 +455,7 @@ def webapp_user_payload(tg_user,row):
         "location":"London",
         "protocol":"VLESS + REALITY",
         "transport":"TCP / 443",
+        "servers":server_network_payload(row),
       },
       "plans":[
         {"days":days,"title":p["title"],"stars":p["stars"],"usd":money(p["usd"])}
@@ -1794,6 +1795,70 @@ def subscription_nodes(row):
         seen.add(key);out.append(node)
     return out
 
+SERVER_COUNTRY_UI={
+  "GB":{"name":"Великобритания","flag":"🇬🇧"},
+  "RU":{"name":"Россия","flag":"🇷🇺"},
+  "NL":{"name":"Нидерланды","flag":"🇳🇱"},
+  "SG":{"name":"Сингапур","flag":"🇸🇬"},
+  "US":{"name":"США","flag":"🇺🇸"},
+  "FR":{"name":"Франция","flag":"🇫🇷"},
+  "JP":{"name":"Япония","flag":"🇯🇵"},
+  "DE":{"name":"Германия","flag":"🇩🇪"},
+  "CA":{"name":"Канада","flag":"🇨🇦"},
+  "HK":{"name":"Гонконг","flag":"🇭🇰"},
+  "KR":{"name":"Корея","flag":"🇰🇷"},
+  "TW":{"name":"Тайвань","flag":"🇹🇼"},
+  "TR":{"name":"Турция","flag":"🇹🇷"},
+  "RO":{"name":"Румыния","flag":"🇷🇴"},
+  "FI":{"name":"Финляндия","flag":"🇫🇮"},
+  "PL":{"name":"Польша","flag":"🇵🇱"},
+}
+
+def _node_display_label(node):
+    try:
+        return urllib.parse.unquote(node.split("#",1)[1]) if "#" in node else ""
+    except Exception:
+        return ""
+
+def _node_country_code(node):
+    label=_node_display_label(node).upper()
+    cleaned=label
+    for ch in ("·","-","_","/","|",":","(",")","[","]"):
+        cleaned=cleaned.replace(ch," ")
+    tokens=set(cleaned.split())
+    if "LONDON" in tokens or "LONDON" in label:
+        return "GB"
+    if "RUSSIA" in tokens or "РОССИЯ" in label:
+        return "RU"
+    for code in SERVER_COUNTRY_UI:
+        if code in tokens:
+            return code
+    return ""
+
+def server_network_payload(row):
+    nodes=subscription_nodes(row)
+    countries=[]
+    positions={}
+    for node in nodes:
+        code=_node_country_code(node)
+        if not code:
+            continue
+        if code not in positions:
+            ui=SERVER_COUNTRY_UI.get(code,{"name":code,"flag":"◌"})
+            item={
+              "code":code,
+              "name":ui["name"],
+              "flag":ui["flag"],
+              "nodes":0,
+              "label":_node_display_label(node) or f"VO1D · {code}",
+            }
+            if code=="GB" and "LONDON" in item["label"].upper():
+                item["location"]="London"
+            positions[code]=len(countries)
+            countries.append(item)
+        countries[positions[code]]["nodes"]+=1
+    return {"countries":countries,"total_nodes":len(nodes),"total_countries":len(countries)}
+
 def xray_clients_payload():
     with db() as c:
         rows=c.execute("SELECT id,username,vpn_uuid,sub_until,banned FROM users WHERE sub_until>? AND banned=0",(now(),)).fetchall()
@@ -1971,6 +2036,12 @@ class Web(BaseHTTPRequestHandler):
             if not auth:return
             tg_user,row=auth
             return self.reply_json(200,webapp_user_payload(tg_user,row))
+
+        if path=="/api/servers":
+            auth=self.auth_user()
+            if not auth:return
+            tg_user,row=auth
+            return self.reply_json(200,{"ok":True,**server_network_payload(row)})
 
         if path=="/api/admin/overview":
             auth=self.auth_admin()
