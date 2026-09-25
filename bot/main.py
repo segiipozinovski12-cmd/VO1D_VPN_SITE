@@ -497,19 +497,89 @@ def handle_update(u):
 
 class Web(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
-    def reply(self,code,body,ctype="text/plain; charset=utf-8",extra=None):
-        data=body.encode()
-        self.send_response(code); self.send_header("Content-Type",ctype)
+
+    def common_headers(self,cache="no-store"):
+        self.send_header("Cache-Control",cache)
+        self.send_header("X-Content-Type-Options","nosniff")
+        self.send_header("Referrer-Policy","no-referrer")
+        self.send_header("X-Frame-Options","SAMEORIGIN")
+
+    def reply_bytes(self,code,data,ctype="application/octet-stream",cache="no-store",extra=None):
+        self.send_response(code)
+        self.send_header("Content-Type",ctype)
         self.send_header("Content-Length",str(len(data)))
-        self.send_header("Cache-Control","no-store")
+        self.common_headers(cache)
         if extra:
-            for k,v in extra.items():self.send_header(k,v)
-        self.end_headers(); self.wfile.write(data)
+            for k,v in extra.items(): self.send_header(k,v)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def reply(self,code,body,ctype="text/plain; charset=utf-8",extra=None):
+        self.reply_bytes(code,body.encode(),ctype,"no-store",extra)
+
+    def reply_json(self,code,obj):
+        self.reply(code,json.dumps(obj,ensure_ascii=False,separators=(",",":")),"application/json; charset=utf-8")
+
+    def read_json(self):
+        try:
+            size=min(int(self.headers.get("Content-Length","0") or 0),65536)
+            raw=self.rfile.read(size) if size else b"{}"
+            return json.loads(raw.decode() or "{}")
+        except Exception:
+            return {}
+
+    def auth_user(self):
+        try:
+            tg_user=validate_webapp_init_data(self.headers.get("X-Telegram-Init-Data",""))
+            row=upsert_user(tg_user)
+            return tg_user,row
+        except Exception as e:
+            self.reply_json(401,{"ok":False,"error":"telegram_auth_failed","message":"Открой Mini App заново из Telegram."})
+            return None
+
+    def serve_app_asset(self,path):
+        mapping={
+          "/app":"index.html",
+          "/app/":"index.html",
+          "/app/index.html":"index.html",
+          "/app/style.css":"style.css",
+          "/app/app.js":"app.js",
+        }
+        name=mapping.get(path)
+        if not name:return False
+        full=os.path.join(WEBAPP_DIR,name)
+        try:
+            with open(full,"rb") as f:data=f.read()
+            ctype=mimetypes.guess_type(full)[0] or "application/octet-stream"
+            if ctype.startswith("text/") or ctype in ("application/javascript","application/json"):
+                ctype+="; charset=utf-8"
+            cache="no-cache" if name=="index.html" else "public, max-age=300"
+            self.reply_bytes(200,data,ctype,cache)
+        except FileNotFoundError:
+            self.reply(404,"Mini App asset not found")
+        return True
+
     def do_GET(self):
-        if self.path=="/health":
-            return self.reply(200,json.dumps({"ok":True,"service":"VO1D_VPNbot"}),"application/json")
-        if self.path.startswith("/sub/"):
-            token=urllib.parse.unquote(self.path.split("?",1)[0][5:])
+        parsed=urllib.parse.urlparse(self.path)
+        path=parsed.path
+
+        if path=="/health":
+            return self.reply_json(200,{"ok":True,"service":"VO1D_VPNbot","mini_app":bool(MINI_APP_URL),"db":DB_PATH})
+
+        if path=="/api/ping":
+            return self.reply_json(200,{"ok":True,"time":now(),"service":"VO1D_VPN"})
+
+        if path=="/api/me":
+            auth=self.auth_user()
+            if not auth:return
+            tg_user,row=auth
+            return self.reply_json(200,webapp_user_payload(tg_user,row))
+
+        if self.serve_app_asset(path):
+            return
+
+        if path.startswith("/sub/"):
+            token=urllib.parse.unquote(path[5:])
             with db() as c:r=c.execute("SELECT * FROM users WHERE sub_token=?",(token,)).fetchone()
             if not r:return self.reply(404,"subscription not found")
             if r["banned"]:return self.reply(403,"subscription blocked")
@@ -521,7 +591,53 @@ class Web(BaseHTTPRequestHandler):
             body.extend(VPN_NODES)
             return self.reply(200,"\n".join(body)+"\n","text/plain; charset=utf-8",
               {"Content-Disposition":'inline; filename="vo1d-sub.txt"'})
+
         return self.reply(200,"VO1D_VPNbot is online\n")
+
+    def do_POST(self):
+        parsed=urllib.parse.urlparse(self.path)
+        path=parsed.path
+
+        if path not in ("/api/trial","/api/invoice"):
+            return self.reply_json(404,{"ok":False,"error":"not_found"})
+
+        auth=self.auth_user()
+        if not auth:return
+        tg_user,row=auth
+        uid=int(row["id"])
+
+        if row["banned"]:
+            return self.reply_json(403,{"ok":False,"error":"blocked","message":"Доступ заблокирован. Обратись в поддержку."})
+
+        if path=="/api/trial":
+            if CHANNEL_ID and not is_member(uid):
+                return self.reply_json(403,{
+                  "ok":False,"code":"channel_required",
+                  "message":"Сначала подпишись на канал.",
+                  "channel_url":CHANNEL_URL,
+                })
+            with db() as c:
+                rr=c.execute("SELECT trial_claimed,sub_until FROM users WHERE id=?",(uid,)).fetchone()
+                if not rr:
+                    return self.reply_json(404,{"ok":False,"error":"user_not_found"})
+                if rr["trial_claimed"]:
+                    return self.reply_json(409,{"ok":False,"error":"trial_used","message":"Пробный период уже использован."})
+                end=max(now(),int(rr["sub_until"]))+TRIAL_HOURS*3600
+                c.execute("UPDATE users SET trial_claimed=1,sub_until=? WHERE id=?",(end,uid))
+            return self.reply_json(200,webapp_user_payload(tg_user,get_user(uid)))
+
+        if path=="/api/invoice":
+            body=self.read_json()
+            try: days=int(body.get("days",0))
+            except Exception: days=0
+            if days not in PLANS:
+                return self.reply_json(400,{"ok":False,"error":"bad_plan","message":"Тариф не найден."})
+            try:
+                invoice_url=create_star_invoice_link(uid,days)
+                return self.reply_json(200,{"ok":True,"invoice_url":invoice_url})
+            except Exception as e:
+                print("invoice link error",repr(e),flush=True)
+                return self.reply_json(502,{"ok":False,"error":"invoice_failed","message":"Не удалось создать счёт Telegram Stars."})
 
 def web_thread():
     ThreadingHTTPServer(("0.0.0.0",PORT),Web).serve_forever()
