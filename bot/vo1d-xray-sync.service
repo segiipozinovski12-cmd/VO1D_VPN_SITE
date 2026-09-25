@@ -1,0 +1,14 @@
+[Unit]
+Description=VO1D VPN Xray Client Sync
+After=network-online.target xray.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/vo1d-xray-sync.env
+ExecStart=/usr/bin/python3 /opt/vo1d/xray_sync.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
