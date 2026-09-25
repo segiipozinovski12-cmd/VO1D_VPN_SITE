@@ -6,20 +6,26 @@
   <meta name="theme-color" content="#050505">
   <title>VO1D_VPN</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="/app/style.css">
+  <link rel="stylesheet" href="/app/style.css?v=2">
 </head>
 <body>
-  <div class="noise"></div>
+  <div class="ambient" aria-hidden="true">
+    <i class="ambient-a"></i><i class="ambient-b"></i><i class="ambient-grid"></i>
+  </div>
+  <div class="noise" aria-hidden="true"></div>
+
   <div id="boot" class="boot">
-    <div class="boot-mark">VO1D</div>
-    <div class="boot-sub">SECURE SURFACE</div>
-    <div class="boot-track"><i id="bootFill"></i></div>
-    <div class="boot-row"><span id="bootText">INITIALIZING</span><span id="bootPct">00%</span></div>
+    <div class="boot-wrap">
+      <div class="boot-mark">VO1D</div>
+      <div class="boot-sub">SECURE ACCESS LAYER</div>
+      <div class="boot-track"><i id="bootFill"></i></div>
+      <div class="boot-row"><span id="bootText">INITIALIZING</span><span id="bootPct">00%</span></div>
+    </div>
   </div>
 
   <div id="shell" class="shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-dot"></span><b>VO1D_VPN</b><small>MINI APP</small></div>
+      <div class="brand"><span class="brand-dot"></span><b>VO1D_VPN</b></div>
       <button id="profileChip" class="profile-chip" data-tab="account">
         <span id="avatar">V</span>
         <span class="profile-copy"><b id="chipName">VO1D</b><small id="chipStatus">loading</small></span>
@@ -30,12 +36,18 @@
       <section id="tab-home" class="tab active">
         <div class="hero-card reveal">
           <div class="hero-grid"></div>
+          <div class="hero-scan"></div>
           <div class="orbit o1"></div><div class="orbit o2"></div><div class="orbit o3"></div>
-          <div class="hero-top"><span class="eyebrow">// PRIVACY CORE</span><span id="nodeStatus" class="status-pill"><i></i>CHECKING</span></div>
+          <div class="hero-top">
+            <span class="eyebrow">// PRIVACY CORE</span>
+            <span id="nodeStatus" class="status-pill"><i></i>CHECKING</span>
+          </div>
           <div class="hero-center">
             <div class="shield">
               <div class="shield-ring"></div>
+              <div class="shield-ring inner"></div>
               <div class="shield-core"><span id="privacyValue">—</span><small>ACCESS</small></div>
+              <i class="shield-pip p-a"></i><i class="shield-pip p-b"></i><i class="shield-pip p-c"></i>
             </div>
             <h1>ПРИВАТНОСТЬ<br><em>БЕЗ ШУМА</em></h1>
             <p id="heroHint">Проверяем твою подписку и доступ к VO1D_VPN.</p>
@@ -54,13 +66,50 @@
           <button class="metric reveal" data-tab="help"><span>HELP</span><b>24/7</b><small>инструкция и поддержка</small></button>
         </div>
 
+        <div class="section-title reveal">
+          <div><span>// PRIVACY TEST</span><h2>ПРОВЕРКА IP</h2></div>
+          <span id="privacyBadge" class="tiny-badge">READY</span>
+        </div>
+
+        <section id="privacyTest" class="privacy-test reveal">
+          <div class="scanner-pane">
+            <div class="scan-lines"></div>
+            <div class="score-ring" id="scoreRing">
+              <div class="score-inner">
+                <strong id="privacyScore">—</strong>
+                <small>%</small>
+              </div>
+            </div>
+            <span id="privacyLevel" class="privacy-level">НЕ ПРОВЕРЕНО</span>
+            <p>Уровень приватности</p>
+          </div>
+
+          <div class="test-info">
+            <div class="ip-row">
+              <span>ТЕКУЩИЙ IP</span>
+              <code id="observedIp">нажми «проверить»</code>
+            </div>
+            <div class="check-list">
+              <div><span>VO1D ROUTE</span><b id="routeCheck">—</b></div>
+              <div><span>TELEGRAM AUTH</span><b>VERIFIED</b></div>
+              <div><span>HTTPS</span><b>ACTIVE</b></div>
+            </div>
+            <button id="runPrivacyTest" class="primary-btn scan-btn"><span>ПРОВЕРИТЬ IP И ЗАЩИТУ</span><i>↗</i></button>
+            <p class="test-note">Оценка показывает, видит ли сервис твой запрос с IP узла VO1D. Это индикатор маршрута, а не абсолютная гарантия анонимности.</p>
+          </div>
+        </section>
+
         <div class="section-title reveal"><div><span>// LIVE ROUTE</span><h2>ТВОЙ МАРШРУТ</h2></div><button id="refreshBtn" class="icon-btn" aria-label="Обновить">↻</button></div>
         <div class="route-card reveal">
-          <div class="route-line"><i class="packet p1"></i><i class="packet p2"></i></div>
+          <div class="route-line"><i class="packet p1"></i><i class="packet p2"></i><i class="packet p3"></i></div>
           <div class="route-node"><span>01</span><b>YOU</b><small>Telegram</small></div>
           <div class="route-node"><span>02</span><b>HAPP</b><small>client</small></div>
           <div class="route-node"><span>03</span><b>VO1D</b><small>London</small></div>
           <div class="route-node"><span>04</span><b>NET</b><small>destination</small></div>
+        </div>
+
+        <div class="protocol-strip reveal">
+          <span>01 / encrypted</span><i></i><span>02 / reality</span><i></i><span>03 / edge</span><i></i><span>04 / internet</span>
         </div>
       </section>
 
@@ -75,6 +124,14 @@
             <button class="ghost-btn" data-tab="help">КАК ПОДКЛЮЧИТЬ</button>
           </div>
         </div>
+
+        <div class="access-details reveal">
+          <div><span>LOCATION</span><b>LONDON / UK</b></div>
+          <div><span>SECURITY</span><b>REALITY</b></div>
+          <div><span>FLOW</span><b>VISION</b></div>
+          <div><span>PORT</span><b>443/TCP</b></div>
+        </div>
+
         <div id="trialCard" class="trial-card reveal">
           <span>// FIRST ACCESS</span><h2>24 ЧАСА<br>ПРОБНОГО ДОСТУПА</h2><p>Если пробный период ещё не использован, активируй его одним нажатием.</p>
           <button id="trialBtn" class="primary-btn">АКТИВИРОВАТЬ</button>
@@ -82,7 +139,7 @@
       </section>
 
       <section id="tab-plans" class="tab">
-        <div class="page-head reveal"><span>// PLANS</span><h1>ВЫБЕРИ<br>ДОСТУП</h1><p>Telegram Stars оплачиваются прямо внутри Mini App.</p></div>
+        <div class="page-head reveal"><span>// PLANS</span><h1>ВЫБЕРИ<br>ДОСТУП</h1><p>Telegram Stars оплачиваются прямо внутри приложения.</p></div>
         <div id="plansList" class="plans-list"></div>
         <div class="manual-card reveal">
           <span>ДРУГОЙ СПОСОБ ОПЛАТЫ</span>
@@ -95,7 +152,7 @@
         <div class="page-head reveal"><span>// ACCOUNT</span><h1>ТВОЙ<br>ПРОФИЛЬ</h1><p>Данные профиля берутся из Telegram после серверной проверки.</p></div>
         <div class="identity-card reveal">
           <div id="accountAvatar" class="big-avatar">V</div>
-          <div><span>TELEGRAM IDENTITY</span><h2 id="accountName">—</h2><p id="accountUsername">—</p></div>
+          <div class="identity-copy"><span>TELEGRAM IDENTITY</span><h2 id="accountName">—</h2><p id="accountUsername">—</p></div>
         </div>
         <div class="account-grid">
           <div class="info-card reveal"><span>TELEGRAM ID</span><b id="accountId">—</b></div>
@@ -112,9 +169,9 @@
           <article class="step reveal"><span>01</span><div><b>ОТКРОЙ «ПОДКЛЮЧЕНИЕ»</b><p>Скопируй персональную ссылку VO1D_VPN.</p></div></article>
           <article class="step reveal"><span>02</span><div><b>ОТКРОЙ HAPP</b><p>Нажми + и выбери добавление подписки.</p></div></article>
           <article class="step reveal"><span>03</span><div><b>ВСТАВЬ ССЫЛКУ</b><p>Обнови список и выбери VO1D-LONDON-01.</p></div></article>
-          <article class="step reveal"><span>04</span><div><b>ПОДКЛЮЧИСЬ</b><p>После подключения твой трафик пойдёт через VPN-узел.</p></div></article>
+          <article class="step reveal"><span>04</span><div><b>ПОДКЛЮЧИСЬ</b><p>После подключения запусти проверку IP на главной.</p></div></article>
         </div>
-        <div class="help-note reveal"><span>ВАЖНО</span><p>Показатель «APP LATENCY» измеряет отклик Mini App, а не скорость VPN-туннеля — мы не рисуем фейковые цифры.</p></div>
+        <div class="help-note reveal"><span>ВАЖНО</span><p>APP LATENCY измеряет отклик панели, а IP-тест проверяет видимый для сервиса адрес. Эти показатели не являются полной проверкой всех возможных утечек.</p></div>
         <button id="supportBtn" class="primary-btn reveal">ПОДДЕРЖКА @VO1D_ROOT ↗</button>
       </section>
     </main>
@@ -129,6 +186,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="/app/app.js"></script>
+  <script src="/app/app.js?v=2"></script>
 </body>
 </html>
