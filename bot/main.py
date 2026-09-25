@@ -33,6 +33,16 @@ PLANS={
   365:{"title":"12 месяцев","usd":2799,"stars":1800},
 }
 
+# Внутренний баланс VO1D: пополнение фиксированными пакетами.
+# Баланс используется только внутри сервиса для покупки подписок и не является выводимыми деньгами.
+TOPUPS={
+  500: {"title":"$5.00","stars":325},
+  1000:{"title":"$10.00","stars":650},
+  2000:{"title":"$20.00","stars":1300},
+  3000:{"title":"$30.00","stars":1950},
+  5000:{"title":"$50.00","stars":3250},
+}
+
 def now(): return int(time.time())
 def dt(ts):
     return datetime.fromtimestamp(ts,timezone.utc).strftime("%d.%m.%Y %H:%M UTC") if ts else "—"
@@ -84,6 +94,14 @@ def init_db():
           created_at INTEGER NOT NULL,
           paid_at INTEGER NOT NULL DEFAULT 0,
           charge_id TEXT DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS balance_transactions(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          amount_cents INTEGER NOT NULL,
+          reference TEXT DEFAULT '',
+          created_at INTEGER NOT NULL
         );
         """)
 init_db()
@@ -231,13 +249,48 @@ def add_days(uid,days):
         c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,uid))
         return end
 
+def change_balance(uid,delta_cents,kind="adjustment",reference=""):
+    uid=int(uid); delta_cents=int(delta_cents)
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        r=c.execute("SELECT balance_cents FROM users WHERE id=?",(uid,)).fetchone()
+        if not r:return None
+        new_balance=int(r["balance_cents"])+delta_cents
+        if new_balance<0:return None
+        c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,uid))
+        c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
+                  (uid,kind,delta_cents,str(reference or ""),now()))
+        return new_balance
+
+def buy_with_balance(uid,days):
+    uid=int(uid); days=int(days)
+    p=PLANS.get(days)
+    if not p:return None,"bad_plan"
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        r=c.execute("SELECT balance_cents,sub_until,banned FROM users WHERE id=?",(uid,)).fetchone()
+        if not r:return None,"user_not_found"
+        if r["banned"]:return None,"banned"
+        price=int(p["usd"])
+        balance=int(r["balance_cents"])
+        if balance<price:return balance,"insufficient"
+        end=max(now(),int(r["sub_until"]))+days*86400
+        new_balance=balance-price
+        cur=c.execute("""INSERT INTO payments(user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id)
+          VALUES(?,?,?,?,?,?,?,?,?)""",(uid,"balance",days,0,price,"paid",now(),now(),""))
+        pid=cur.lastrowid
+        c.execute("UPDATE users SET balance_cents=?,sub_until=? WHERE id=?",(new_balance,end,uid))
+        c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
+                  (uid,"subscription",-price,f"payment:{pid}",now()))
+        return {"end":end,"balance":new_balance,"payment_id":pid},"ok"
+
 def main_kb(uid):
     rows=[]
     if MINI_APP_URL:
         rows.append([button("⚫ Открыть VO1D Mini App",web_app=MINI_APP_URL)])
     rows += [
-      [button("👤 Профиль","profile"),button("💎 Подписка","plans")],
-      [button("⚡ Подключить","connect"),button("💰 Купить время","plans")],
+      [button("👤 Профиль","profile"),button("💳 Баланс","balance")],
+      [button("💎 Подписка","plans"),button("⚡ Подключить","connect")],
       [button("📖 Инструкция","guide"),button("🛟 Поддержка",url=SUPPORT_URL)],
     ]
     if uid==ADMIN_ID: rows.append([button("🛠 Админ-панель","admin")])
@@ -273,31 +326,78 @@ def profile(uid):
       f"До: <b>{dt(r['sub_until'])}</b>\n"
       f"Осталось: <b>{remaining(r['sub_until'])}</b>\n"
       f"Баланс: <b>{money(r['balance_cents'])}</b>",
-      [[button("⚡ Подключить","connect")],[button("💎 Продлить","plans")],[button("◀️ Меню","menu")]])
+      [[button("💳 Пополнить баланс","topup")],[button("💎 Купить подписку","plans")],[button("⚡ Подключить","connect")],[button("◀️ Меню","menu")]])
+
+def balance_screen(uid):
+    r=get_user(uid)
+    if not r:return
+    send(uid,
+      f"<b>💳 Баланс VO1D</b>\n\n"
+      f"Доступно: <b>{money(r['balance_cents'])}</b>\n\n"
+      "Баланс можно пополнять и использовать для покупки любой подписки VO1D. "
+      "Внутренний баланс не выводится обратно в деньги.",
+      [[button("➕ Пополнить баланс","topup")],
+       [button("💎 Купить подписку","plans")],
+       [button("◀️ Меню","menu")]])
+
+def topup_menu(uid):
+    r=get_user(uid)
+    kb=[]
+    row=[]
+    for cents,p in TOPUPS.items():
+        row.append(button(f"+{p['title']}",f"topup:{cents}"))
+        if len(row)==2:
+            kb.append(row);row=[]
+    if row:kb.append(row)
+    kb.append([button("◀️ Баланс","balance")])
+    send(uid,
+      f"<b>➕ Пополнение баланса</b>\n\n"
+      f"Сейчас: <b>{money(r['balance_cents'])}</b>\n"
+      "Выбери сумму пополнения:",kb)
+
+def topup_methods(uid,cents):
+    p=TOPUPS.get(int(cents))
+    if not p:return
+    send(uid,
+      f"<b>Пополнение {p['title']}</b>\n\n"
+      f"Telegram Stars: <b>{p['stars']} ⭐</b>\n\n"
+      "После оплаты сумма появится на внутреннем балансе VO1D.",
+      [[button(f"⭐ Оплатить {p['stars']} Stars",f"topup_pay:{cents}:stars")],
+       [button("₿ Криптовалюта",f"topup_pay:{cents}:crypto"),button("💳 Карта",f"topup_pay:{cents}:card")],
+       [button("◀️ Назад","topup")]])
 
 def plans(uid):
     kb=[]
     for days,p in PLANS.items():
         kb.append([button(f"{p['title']} · {money(p['usd'])} · {p['stars']} ⭐",f"plan:{days}")])
     kb.append([button("◀️ Меню","menu")])
-    send(uid,"<b>💎 Подписка VO1D_VPN</b>\n\nВыбери срок. После этого выберешь способ оплаты.",kb)
+    r=get_user(uid)
+    send(uid,
+      f"<b>💎 Подписка VO1D_VPN</b>\n\n"
+      f"Баланс: <b>{money(r['balance_cents'])}</b>\n"
+      "Выбери срок. На следующем шаге можно оплатить с баланса или другим способом.",kb)
 
 def payment_methods(uid,days):
     p=PLANS.get(days)
     if not p:return
     send(uid,
       f"<b>{p['title']}</b>\nЦена: <b>{money(p['usd'])}</b> или <b>{p['stars']} ⭐</b>\n\n"
+      f"Баланс: <b>{money(get_user(uid)['balance_cents'])}</b>\n\n"
       "Выбери способ оплаты:",
-      [[button("⭐ Telegram Stars",f"pay:{days}:stars")],
+      [[button(f"💰 С баланса · {money(p['usd'])}",f"pay:{days}:balance")],
+       [button("⭐ Telegram Stars",f"pay:{days}:stars")],
        [button("₿ Криптовалюта",f"pay:{days}:crypto"),button("💳 Банковская карта",f"pay:{days}:card")],
        [button("◀️ Назад","plans")]])
 
-def make_payment(uid,method,days,status="pending",charge=""):
-    p=PLANS[days]
+def record_payment(uid,method,days=0,amount_stars=0,amount_cents=0,status="pending",charge=""):
     with db() as c:
         cur=c.execute("""INSERT INTO payments(user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id)
-          VALUES(?,?,?,?,?,?,?,?,?)""",(uid,method,days,p["stars"] if method=="stars" else 0,p["usd"],status,now(),now() if status=="paid" else 0,charge))
+          VALUES(?,?,?,?,?,?,?,?,?)""",(uid,method,int(days),int(amount_stars),int(amount_cents),status,now(),now() if status=="paid" else 0,charge))
         return cur.lastrowid
+
+def make_payment(uid,method,days,status="pending",charge=""):
+    p=PLANS[days]
+    return record_payment(uid,method,days,p["stars"] if method=="stars" else 0,p["usd"],status,charge)
 
 def star_invoice(uid,days):
     p=PLANS[days]
@@ -308,6 +408,35 @@ def star_invoice(uid,days):
       "payload":payload,"currency":"XTR",
       "prices":[{"label":p["title"],"amount":p["stars"]}]
     },30)
+
+def topup_star_invoice(uid,cents):
+    p=TOPUPS[cents]
+    payload=f"bal:{uid}:{cents}:{p['stars']}:{secrets.token_hex(6)}"
+    api("sendInvoice",{
+      "chat_id":uid,
+      "title":f"VO1D Balance +{p['title']}",
+      "description":"Пополнение внутреннего баланса VO1D для покупки подписок.",
+      "payload":payload,
+      "currency":"XTR",
+      "prices":[{"label":f"Баланс +{p['title']}","amount":p["stars"]}]
+    },30)
+
+def manual_topup(uid,cents,method):
+    p=TOPUPS[cents]
+    method_name="topup_crypto" if method=="crypto" else "topup_card"
+    pid=record_payment(uid,method_name,0,0,cents,"pending","")
+    label="криптовалютой" if method=="crypto" else "банковской картой"
+    draft=f"VO1D_VPN | Пополнение #{pid}\nХочу пополнить баланс на {money(cents)} {label}.\nTelegram ID: {uid}"
+    url=f"https://t.me/{ADMIN_USERNAME}?text="+urllib.parse.quote(draft)
+    send(uid,
+      f"<b>Пополнение #{pid}</b>\n\n"
+      f"Сумма: <b>{money(cents)}</b>\nСпособ: {label}\n\n"
+      "После подтверждения администратора сумма появится на балансе.",
+      [[button("💬 Открыть @"+ADMIN_USERNAME,url=url)],[button("◀️ Баланс","balance")]])
+    send(ADMIN_ID,
+      f"<b>💳 Пополнение баланса #{pid}</b>\nUser: <code>{uid}</code>\n"
+      f"Сумма: <b>{money(cents)}</b>\nМетод: {label}\n"
+      f"Подтвердить: <code>/paid {pid}</code>")
 
 def manual_payment(uid,days,method):
     pid=make_payment(uid,method,days)
@@ -358,8 +487,8 @@ def admin_panel():
         act=c.execute("SELECT COUNT(*) n FROM users WHERE sub_until>? AND banned=0",(now(),)).fetchone()["n"]
         bans=c.execute("SELECT COUNT(*) n FROM users WHERE banned=1").fetchone()["n"]
         pend=c.execute("SELECT COUNT(*) n FROM payments WHERE status='pending'").fetchone()["n"]
-        stars=c.execute("SELECT COALESCE(SUM(amount_stars),0) n FROM payments WHERE status='paid' AND method='stars'").fetchone()["n"]
-        usd=c.execute("SELECT COALESCE(SUM(amount_usd_cents),0) n FROM payments WHERE status='paid' AND method!='stars'").fetchone()["n"]
+        stars=c.execute("SELECT COALESCE(SUM(amount_stars),0) n FROM payments WHERE status='paid' AND method IN ('stars','stars_topup')").fetchone()["n"]
+        usd=c.execute("SELECT COALESCE(SUM(amount_usd_cents),0) n FROM payments WHERE status='paid' AND method IN ('crypto','card','topup_crypto','topup_card')").fetchone()["n"]
     send(ADMIN_ID,
       f"<b>🛠 VO1D Admin</b>\n\n"
       f"Пользователей: <b>{users}</b>\nАктивных: <b>{act}</b>\nБанов: <b>{bans}</b>\n"
@@ -409,8 +538,9 @@ def handle_command(uid,text):
             send(uid,f"✅ <code>{target}</code> разблокирован.")
         elif cmd=="/balance":
             _,target,amount=text.split(maxsplit=2); cents=round(float(amount)*100)
-            with db() as c:c.execute("UPDATE users SET balance_cents=balance_cents+? WHERE id=?",(cents,int(target)))
-            send(uid,f"✅ Баланс <code>{target}</code> изменён на {money(cents)}.")
+            new_balance=change_balance(int(target),cents,"admin",f"admin:{uid}")
+            if new_balance is None:return send(uid,"Не удалось изменить баланс.")
+            send(uid,f"✅ Баланс <code>{target}</code> изменён на {money(cents)}. Теперь: <b>{money(new_balance)}</b>.")
         elif cmd=="/paid":
             pid=int(parts[1])
             with db() as c:
@@ -418,9 +548,14 @@ def handle_command(uid,text):
                 if not p:return send(uid,"Заявка не найдена.")
                 if p["status"]=="paid":return send(uid,"Эта заявка уже подтверждена.")
                 c.execute("UPDATE payments SET status='paid',paid_at=? WHERE id=?",(now(),pid))
-            end=add_days(p["user_id"],p["plan_days"])
-            send(uid,f"✅ Заявка #{pid} подтверждена. Доступ до {dt(end)}.")
-            send(p["user_id"],f"✅ <b>Оплата подтверждена.</b>\nНачислено {p['plan_days']} дней.\nАктивно до {dt(end)}.",main_kb(p["user_id"]))
+            if int(p["plan_days"])>0:
+                end=add_days(p["user_id"],p["plan_days"])
+                send(uid,f"✅ Заявка #{pid} подтверждена. Доступ до {dt(end)}.")
+                send(p["user_id"],f"✅ <b>Оплата подтверждена.</b>\nНачислено {p['plan_days']} дней.\nАктивно до {dt(end)}.",main_kb(p["user_id"]))
+            else:
+                new_balance=change_balance(p["user_id"],p["amount_usd_cents"],"manual_topup",f"payment:{pid}")
+                send(uid,f"✅ Пополнение #{pid} подтверждено. Баланс пользователя: <b>{money(new_balance)}</b>.")
+                send(p["user_id"],f"✅ <b>Баланс пополнен на {money(p['amount_usd_cents'])}.</b>\nТеперь на балансе: <b>{money(new_balance)}</b>.",main_kb(p["user_id"]))
         elif cmd=="/broadcast":
             msg=text.split(maxsplit=1)[1]
             with db() as c: ids=[r["id"] for r in c.execute("SELECT id FROM users WHERE banned=0").fetchall()]
@@ -456,12 +591,26 @@ def handle_callback(q):
             c.execute("UPDATE users SET trial_claimed=1,sub_until=? WHERE id=?",(end,uid))
         return send(uid,f"🎉 <b>Пробная подписка активирована.</b>\nДоступ до {dt(end)}.",main_kb(uid))
     if data=="profile":return profile(uid)
+    if data=="balance":return balance_screen(uid)
+    if data=="topup":return topup_menu(uid)
     if data=="plans":return plans(uid)
     if data=="connect":return connect(uid)
     if data=="guide":return guide(uid)
     if data=="admin" and uid==ADMIN_ID:return admin_panel()
     if data=="admin_users" and uid==ADMIN_ID:return admin_users()
     if data=="admin_payments" and uid==ADMIN_ID:return admin_payments()
+    if data.startswith("topup:"):
+        try:
+            cents=int(data.split(":")[1])
+            if cents in TOPUPS:return topup_methods(uid,cents)
+        except:return
+    if data.startswith("topup_pay:"):
+        try:
+            _,amount,method=data.split(":"); cents=int(amount)
+            if cents not in TOPUPS:return
+            if method=="stars":return topup_star_invoice(uid,cents)
+            if method in ("crypto","card"):return manual_topup(uid,cents,method)
+        except Exception as e:return send(uid,f"Ошибка пополнения: <code>{esc(e)}</code>")
     if data.startswith("plan:"):
         try:return payment_methods(uid,int(data.split(":")[1]))
         except:return
@@ -469,6 +618,22 @@ def handle_callback(q):
         try:
             _,d,method=data.split(":"); days=int(d)
             if days not in PLANS:return
+            if method=="balance":
+                result,status=buy_with_balance(uid,days)
+                if status=="insufficient":
+                    price=PLANS[days]["usd"]
+                    missing=max(0,price-int(result or 0))
+                    return send(uid,
+                      f"Недостаточно средств.\n\nБаланс: <b>{money(int(result or 0))}</b>\n"
+                      f"Цена: <b>{money(price)}</b>\nНе хватает: <b>{money(missing)}</b>",
+                      [[button("➕ Пополнить баланс","topup")],[button("◀️ Тарифы","plans")]])
+                if status!="ok":return send(uid,"Не удалось оплатить с баланса.")
+                return send(uid,
+                  f"✅ <b>Подписка оплачена с баланса.</b>\n\n"
+                  f"Списано: <b>{money(PLANS[days]['usd'])}</b>\n"
+                  f"Остаток: <b>{money(result['balance'])}</b>\n"
+                  f"Доступ до: <b>{dt(result['end'])}</b>",
+                  main_kb(uid))
             if method=="stars":return star_invoice(uid,days)
             if method in ("crypto","card"):return manual_payment(uid,days,method)
         except Exception as e:return send(uid,f"Ошибка оплаты: <code>{esc(e)}</code>")
@@ -477,26 +642,61 @@ def successful_payment(msg):
     sp=msg.get("successful_payment")
     if not sp:return
     uid=int(msg["from"]["id"]); payload=sp.get("invoice_payload","")
-    try:
-        kind,puid,pdays,_=payload.split(":",3)
-        if kind!="sub" or int(puid)!=uid:return
-        days=int(pdays)
-        if days not in PLANS:return
-    except:return
     charge=sp.get("telegram_payment_charge_id","")
     with db() as c:
         dup=c.execute("SELECT id FROM payments WHERE charge_id=?",(charge,)).fetchone()
     if dup:return
-    make_payment(uid,"stars",days,"paid",charge)
-    end=add_days(uid,days)
-    send(uid,f"✅ <b>Оплата Stars получена.</b>\nНачислено {days} дней.\nПодписка до {dt(end)}.",main_kb(uid))
-    send(ADMIN_ID,f"⭐ Stars payment\nUser: <code>{uid}</code>\n{days} дней · {PLANS[days]['stars']} ⭐\nCharge: <code>{esc(charge)}</code>")
+    try:
+        parts=payload.split(":")
+        kind=parts[0]
+        puid=int(parts[1])
+        if puid!=uid:return
+        if kind=="sub":
+            days=int(parts[2])
+            if days not in PLANS:return
+            expected=PLANS[days]["stars"]
+            if int(sp.get("total_amount",0))!=expected:return
+            make_payment(uid,"stars",days,"paid",charge)
+            end=add_days(uid,days)
+            send(uid,f"✅ <b>Оплата Stars получена.</b>\nНачислено {days} дней.\nПодписка до {dt(end)}.",main_kb(uid))
+            send(ADMIN_ID,f"⭐ Stars payment\nUser: <code>{uid}</code>\n{days} дней · {expected} ⭐\nCharge: <code>{esc(charge)}</code>")
+            return
+        if kind=="bal":
+            cents=int(parts[2]); expected_stars=int(parts[3])
+            if cents not in TOPUPS or TOPUPS[cents]["stars"]!=expected_stars:return
+            if int(sp.get("total_amount",0))!=expected_stars:return
+            pid=record_payment(uid,"stars_topup",0,expected_stars,cents,"paid",charge)
+            new_balance=change_balance(uid,cents,"stars_topup",f"payment:{pid}")
+            send(uid,
+              f"✅ <b>Баланс пополнен на {money(cents)}.</b>\n"
+              f"Теперь на балансе: <b>{money(new_balance)}</b>.",
+              main_kb(uid))
+            send(ADMIN_ID,
+              f"⭐ Balance top-up\nUser: <code>{uid}</code>\n"
+              f"+{money(cents)} · {expected_stars} ⭐\nCharge: <code>{esc(charge)}</code>")
+            return
+    except Exception as e:
+        print("successful payment parse error",repr(e),flush=True)
 
 def handle_update(u):
     if "pre_checkout_query" in u:
         q=u["pre_checkout_query"]
-        try: api("answerPreCheckoutQuery",{"pre_checkout_query_id":q["id"],"ok":True},15)
-        except Exception: pass
+        ok=False; err="Платёж не прошёл проверку. Открой счёт заново."
+        try:
+            payload=q.get("invoice_payload","")
+            parts=payload.split(":")
+            uid=int(q["from"]["id"])
+            if q.get("currency")=="XTR" and len(parts)>=4 and int(parts[1])==uid:
+                if parts[0]=="sub":
+                    days=int(parts[2])
+                    ok=days in PLANS and int(q.get("total_amount",0))==PLANS[days]["stars"]
+                elif parts[0]=="bal" and len(parts)>=5:
+                    cents=int(parts[2]); stars=int(parts[3])
+                    ok=cents in TOPUPS and TOPUPS[cents]["stars"]==stars and int(q.get("total_amount",0))==stars
+            api("answerPreCheckoutQuery",{"pre_checkout_query_id":q["id"],"ok":bool(ok),**({} if ok else {"error_message":err})},15)
+        except Exception:
+            try: api("answerPreCheckoutQuery",{"pre_checkout_query_id":q["id"],"ok":False,"error_message":err},15)
+            except Exception: pass
         return
     msg=u.get("message")
     if msg:
