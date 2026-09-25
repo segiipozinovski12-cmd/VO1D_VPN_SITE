@@ -17,7 +17,7 @@ jobs:
           node-version: "22"
 
       - name: Check Python
-        run: python -m py_compile bot/main.py bot/xray_sync.py bot/community_nodes.py
+        run: python -m py_compile bot/main.py bot/xray_sync.py bot/community_nodes.py bot/test_ru_e2e.py
 
       - name: Check JavaScript syntax
         run: |
@@ -54,3 +54,26 @@ jobs:
 
           print(f"Mini App regression check OK ({len(ids)} selectors)")
           PY
+
+
+  ru-e2e:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Download Xray
+        run: |
+          set -e
+          TAG=$(curl -fsSL https://api.github.com/repos/XTLS/Xray-core/releases/latest | python -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+          curl -fsSL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/${TAG}/Xray-linux-64.zip"
+          mkdir -p /tmp/xray
+          unzip -q /tmp/xray.zip xray -d /tmp/xray
+          chmod +x /tmp/xray/xray
+      - name: RU VPN end-to-end probe
+        env:
+          XRAY_BIN: /tmp/xray/xray
+          RU_E2E_MAX: "16"
+        run: python bot/test_ru_e2e.py
