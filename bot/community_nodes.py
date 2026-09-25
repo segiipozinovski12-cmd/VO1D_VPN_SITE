@@ -9,9 +9,9 @@ COUNTRY_NAMES={
     "JP":"Japan","US":"United States","NL":"Netherlands","SG":"Singapore",
     "DE":"Germany","GB":"United Kingdom","FR":"France","PL":"Poland",
     "CA":"Canada","HK":"Hong Kong","KR":"Korea","TW":"Taiwan",
-    "TR":"Turkey","RO":"Romania","FI":"Finland"
+    "TR":"Turkey","RO":"Romania","FI":"Finland","RU":"Russia"
 }
-ALLOWED_SCHEMES={"vless","vmess","trojan","ss"}
+ALLOWED_SCHEMES={"vless","vmess","trojan","ss","hy2","hysteria2"}
 
 def _b64decode_text(value):
     raw="".join(str(value or "").split())
@@ -50,6 +50,34 @@ def _tcp_alive(uri,timeout=1.4):
     except Exception:
         return False
 
+def _hy2_score(uri):
+    try:
+        p=urllib.parse.urlsplit(uri)
+        q=urllib.parse.parse_qs(p.query)
+        sni=(q.get("sni") or [""])[0].strip()
+        insecure=(q.get("insecure") or ["0"])[0].strip().lower()
+        score=0
+        if insecure not in ("1","true","yes"):score+=2
+        if sni and not sni.replace(".","").isdigit():score+=3
+        return score
+    except Exception:
+        return 0
+
+def _prefer_same_endpoint(items):
+    out=[]; hy2={}
+    for uri in items:
+        scheme=uri.split("://",1)[0].lower()
+        if scheme not in ("hy2","hysteria2"):
+            out.append(uri);continue
+        ep=_endpoint(uri)
+        if not ep:
+            out.append(uri);continue
+        previous=hy2.get(ep)
+        if previous is None or _hy2_score(uri)>_hy2_score(previous):
+            hy2[ep]=uri
+    out.extend(hy2.values())
+    return out
+
 def _rename(uri,label):
     scheme=uri.split("://",1)[0].lower()
     if scheme=="vmess":
@@ -66,8 +94,13 @@ def _rename(uri,label):
 class CommunityPool:
     def __init__(self):
         self.enabled=os.getenv("COMMUNITY_ENABLED","0").strip().lower() in ("1","true","yes","on")
-        raw=os.getenv("COMMUNITY_COUNTRIES","JP,US,NL,SG,DE,GB,FR,PL,CA")
-        self.countries=[x.strip().upper() for x in raw.split(",") if x.strip().upper() in COUNTRY_NAMES]
+        raw=os.getenv("COMMUNITY_COUNTRIES","JP,US,NL,SG,DE,GB,FR,PL,CA,RU")
+        requested=[x.strip().upper() for x in raw.split(",") if x.strip().upper() in COUNTRY_NAMES]
+        forced=os.getenv("COMMUNITY_FORCE_COUNTRIES","RU")
+        for cc in [x.strip().upper() for x in forced.split(",") if x.strip().upper() in COUNTRY_NAMES]:
+            if cc not in requested:
+                requested.append(cc)
+        self.countries=requested
         self.per_country=max(1,min(5,int(os.getenv("COMMUNITY_PER_COUNTRY","2"))))
         self.candidate_limit=max(self.per_country,min(40,int(os.getenv("COMMUNITY_CANDIDATE_LIMIT","18"))))
         self.refresh_seconds=max(300,int(os.getenv("COMMUNITY_REFRESH_SECONDS","900")))
@@ -118,6 +151,7 @@ class CommunityPool:
             seen.add(key);unique.append(uri)
             if len(unique)>=self.candidate_limit:break
         if not unique:return []
+        unique=_prefer_same_endpoint(unique)
         workers=min(12,len(unique))
         with ThreadPoolExecutor(max_workers=workers) as ex:
             alive=list(ex.map(_tcp_alive,unique))
