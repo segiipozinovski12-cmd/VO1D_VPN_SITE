@@ -1,4 +1,4 @@
-import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress
+import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress, uuid, socket, shutil, glob
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -18,6 +18,11 @@ MINI_APP_URL=os.getenv("MINI_APP_URL",(PUBLIC_URL+"/app") if PUBLIC_URL else "")
 TRIAL_HOURS=int(os.getenv("TRIAL_HOURS","24"))
 PORT=int(os.getenv("PORT","8080"))
 VPN_NODES=[x.strip() for x in os.getenv("VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
+BOT_USERNAME=os.getenv("BOT_USERNAME","VO1D_VPNbot").lstrip("@")
+DEVICE_LIMIT=max(1,int(os.getenv("DEVICE_LIMIT","3")))
+REFERRAL_REWARD_CENTS=max(0,int(os.getenv("REFERRAL_REWARD_CENTS","100")))
+PER_USER_KEYS=os.getenv("PER_USER_KEYS","0").strip().lower() in ("1","true","yes","on")
+XRAY_SYNC_SECRET=os.getenv("XRAY_SYNC_SECRET","").strip()
 
 mount=os.getenv("RAILWAY_VOLUME_MOUNT_PATH","").strip()
 DB_PATH=os.getenv("DB_PATH",(mount.rstrip("/")+"/vo1d.db") if mount else "vo1d.db")
@@ -26,6 +31,7 @@ BASE_DIR=os.path.dirname(os.path.abspath(__file__))
 WEBAPP_DIR=os.path.join(BASE_DIR,"webapp")
 BUNDLED_AUDIO_PATH=os.path.join(WEBAPP_DIR,"audio","leaveamsg-slowed.mp3")
 VOLUME_AUDIO_PATH=os.getenv("AUDIO_PATH",(mount.rstrip("/")+"/leaveamsg-slowed.mp3") if mount else "")
+BACKUP_DIR=os.getenv("BACKUP_DIR",(mount.rstrip("/")+"/backups") if mount else os.path.join(BASE_DIR,"backups"))
 
 PLANS={
   30: {"title":"1 месяц","usd":399,"stars":250},
@@ -105,6 +111,11 @@ def db():
     c.row_factory=sqlite3.Row
     return c
 
+def ensure_column(c,table,column,definition):
+    cols={r["name"] for r in c.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in cols:
+        c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
 def init_db():
     with db() as c:
         c.executescript("""
@@ -145,7 +156,93 @@ def init_db():
           data TEXT DEFAULT '',
           created_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS promo_codes(
+          code TEXT PRIMARY KEY,
+          reward_type TEXT NOT NULL,
+          reward_value INTEGER NOT NULL,
+          max_uses INTEGER NOT NULL DEFAULT 0,
+          uses INTEGER NOT NULL DEFAULT 0,
+          expires_at INTEGER NOT NULL DEFAULT 0,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_by INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS promo_redemptions(
+          code TEXT NOT NULL,
+          user_id INTEGER NOT NULL,
+          redeemed_at INTEGER NOT NULL,
+          PRIMARY KEY(code,user_id)
+        );
+        CREATE TABLE IF NOT EXISTS referral_rewards(
+          invitee_id INTEGER PRIMARY KEY,
+          referrer_id INTEGER NOT NULL,
+          reward_cents INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS reminders(
+          user_id INTEGER NOT NULL,
+          event_key TEXT NOT NULL,
+          sent_at INTEGER NOT NULL,
+          PRIMARY KEY(user_id,event_key)
+        );
+        CREATE TABLE IF NOT EXISTS devices(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          vpn_uuid TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(user_id,name)
+        );
+        CREATE TABLE IF NOT EXISTS gift_codes(
+          code TEXT PRIMARY KEY,
+          days INTEGER NOT NULL,
+          created_by INTEGER NOT NULL,
+          redeemed_by INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          redeemed_at INTEGER NOT NULL DEFAULT 0,
+          active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS subscription_events(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          days INTEGER NOT NULL,
+          source TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          sub_until INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS trial_claims(
+          user_id INTEGER PRIMARY KEY,
+          claimed_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS meta(
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
         """)
+        ensure_column(c,"users","vpn_uuid","TEXT NOT NULL DEFAULT ''")
+        ensure_column(c,"users","auto_renew","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"users","auto_renew_days","INTEGER NOT NULL DEFAULT 30")
+        ensure_column(c,"users","referrer_id","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"users","referral_awarded","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"users","preferred_node","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"users","notifications","INTEGER NOT NULL DEFAULT 1")
+        ensure_column(c,"users","welcome_done","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"payments","reference","TEXT NOT NULL DEFAULT ''")
+        rows=c.execute("SELECT id FROM users WHERE vpn_uuid='' OR vpn_uuid IS NULL").fetchall()
+        for r in rows:
+            c.execute("UPDATE users SET vpn_uuid=? WHERE id=?",(str(uuid.uuid4()),r["id"]))
+
+        builtins=[
+          ("VOID24","days",1,100),
+          ("GHOST48","days",2,60),
+          ("NIGHT3","days",3,40),
+          ("WELCOME50","balance",50,100),
+          ("LONDON1","days",1,100),
+        ]
+        for code,reward_type,reward_value,max_uses in builtins:
+            c.execute("""INSERT OR IGNORE INTO promo_codes
+              (code,reward_type,reward_value,max_uses,uses,expires_at,active,created_by,created_at)
+              VALUES(?,?,?,?,0,0,1,0,?)""",(code,reward_type,reward_value,max_uses,now()))
 init_db()
 
 def api(method, payload=None, timeout=70):
