@@ -628,6 +628,8 @@ def handle_callback(q):
     r=get_user(uid)
     if not r:return
     if r["banned"] and uid!=ADMIN_ID:return send(uid,"⛔ Доступ заблокирован.")
+    if not (data=="topup" or data.startswith("topup:") or data.startswith("topup_pay:")):
+        clear_pending(uid)
     if data=="menu":return send(uid,"<b>VO1D_VPN</b>\nВыбери действие:",main_kb(uid))
     if data=="check_sub":
         if not is_member(uid):
