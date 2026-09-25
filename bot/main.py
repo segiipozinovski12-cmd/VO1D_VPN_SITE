@@ -1451,6 +1451,35 @@ def handle_update(u):
     if q:
         upsert_user(q["from"]); return handle_callback(q)
 
+def personalize_node(node,row):
+    if not PER_USER_KEYS or not row or not row["vpn_uuid"]:return node
+    try:
+        scheme,rest=node.split("://",1)
+        if "@" not in rest:return node
+        rest=rest.split("@",1)[1]
+        return f"{scheme}://{row['vpn_uuid']}@{rest}"
+    except Exception:return node
+
+def subscription_nodes(row):
+    if not VPN_NODES:return []
+    preferred=int(row["preferred_node"] or 0) if row else 0
+    order=list(range(len(VPN_NODES)))
+    if 0<=preferred<len(order):
+        order.remove(preferred);order.insert(0,preferred)
+    return [personalize_node(VPN_NODES[i],row) for i in order]
+
+def xray_clients_payload():
+    with db() as c:
+        rows=c.execute("SELECT id,username,vpn_uuid,sub_until,banned FROM users WHERE sub_until>? AND banned=0",(now(),)).fetchall()
+    return {
+      "ok":True,
+      "generated_at":now(),
+      "clients":[
+        {"id":r["vpn_uuid"],"email":f"vo1d_{r['id']}","telegram_id":int(r["id"]),"expires_at":int(r["sub_until"])}
+        for r in rows if r["vpn_uuid"]
+      ]
+    }
+
 class Web(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
 
@@ -1554,7 +1583,7 @@ class Web(BaseHTTPRequestHandler):
         path=parsed.path
 
         if path=="/health":
-            return self.reply_json(200,{"ok":True,"service":"VO1D_VPNbot","mini_app":bool(MINI_APP_URL),"db":DB_PATH})
+            return self.reply_json(200,{"ok":True,"service":"VO1D_VPNbot","mini_app":bool(MINI_APP_URL),"db":DB_PATH,"per_user_keys":PER_USER_KEYS})
 
         if path=="/api/ping":
             return self.reply_json(200,{"ok":True,"time":now(),"service":"VO1D_VPN"})
@@ -1590,6 +1619,13 @@ class Web(BaseHTTPRequestHandler):
               "note":"Score confirms whether this request is seen from a configured VO1D node; it is not a complete anonymity audit."
             })
 
+        if path=="/internal/xray/clients":
+            query=urllib.parse.parse_qs(parsed.query)
+            supplied=(query.get("token") or [""])[0]
+            if not XRAY_SYNC_SECRET or not hmac.compare_digest(str(supplied),XRAY_SYNC_SECRET):
+                return self.reply_json(403,{"ok":False,"error":"forbidden"})
+            return self.reply_json(200,xray_clients_payload())
+
         if self.serve_app_asset(path):
             return
 
@@ -1603,7 +1639,7 @@ class Web(BaseHTTPRequestHandler):
             body=[]
             if SITE_URL:body.append("#profile-web-page-url: "+SITE_URL)
             body.append("#announce: VO1D_VPN active until "+dt(r["sub_until"]))
-            body.extend(VPN_NODES)
+            body.extend(subscription_nodes(r))
             return self.reply(200,"\n".join(body)+"\n","text/plain; charset=utf-8",
               {"Content-Disposition":'inline; filename="vo1d-sub.txt"'})
 
@@ -1631,14 +1667,13 @@ class Web(BaseHTTPRequestHandler):
                   "message":"Сначала подпишись на канал.",
                   "channel_url":CHANNEL_URL,
                 })
-            with db() as c:
-                rr=c.execute("SELECT trial_claimed,sub_until FROM users WHERE id=?",(uid,)).fetchone()
-                if not rr:
-                    return self.reply_json(404,{"ok":False,"error":"user_not_found"})
-                if rr["trial_claimed"]:
-                    return self.reply_json(409,{"ok":False,"error":"trial_used","message":"Пробный период уже использован."})
-                end=max(now(),int(rr["sub_until"]))+TRIAL_HOURS*3600
-                c.execute("UPDATE users SET trial_claimed=1,sub_until=? WHERE id=?",(end,uid))
+            end,status=claim_trial(uid)
+            if status=="missing":
+                return self.reply_json(404,{"ok":False,"error":"user_not_found"})
+            if status=="used":
+                return self.reply_json(409,{"ok":False,"error":"trial_used","message":"Пробный период уже использован."})
+            if status!="ok":
+                return self.reply_json(403,{"ok":False,"error":"trial_failed","message":"Пробный период недоступен."})
             return self.reply_json(200,webapp_user_payload(tg_user,get_user(uid)))
 
         if path=="/api/invoice":
