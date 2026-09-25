@@ -1707,10 +1707,42 @@ def handle_update(u):
         if not usr:return
         row=upsert_user(usr); uid=int(usr["id"])
         if msg.get("successful_payment"):return successful_payment(msg)
+        pending=get_pending(uid)
+        doc=msg.get("document")
+        if doc and uid==ADMIN_ID and pending and pending["action"]=="set_ru_json":
+            try:
+                size=int(doc.get("file_size") or 0)
+                if size and size>2_000_000:
+                    return send(uid,"JSON слишком большой. Максимум 2 MB.")
+                raw=download_telegram_file(doc.get("file_id",""),2_000_000)
+                meta=set_pinned_ru_from_json(raw,True)
+                clear_pending(uid)
+                st=pinned_ru_health()
+                state="ONLINE" if st.get("online") else "SAVED"
+                latency=f" · {st.get('latency_ms')} ms" if st.get("latency_ms") is not None else ""
+                return send(uid,
+                  f"✅ <b>RU-01 закреплён.</b>\n\n"
+                  f"Endpoint: <code>{esc(meta.get('address'))}:{meta.get('port')}</code>\n"
+                  f"Транспорт: <b>{esc(meta.get('network'))} + {esc(meta.get('security'))}</b>\n"
+                  f"Статус: <b>{state}{latency}</b>\n\n"
+                  "Он сохранён в persistent DB и останется после redeploy. London и остальные страны не изменены.",
+                  [[button("🇷🇺 RU статус","admin_ru")],[button("⚡ Подключить","connect")]])
+            except Exception as e:
+                return send(uid,f"Не удалось импортировать JSON: <code>{esc(e)}</code>",
+                            [[button("❌ Отмена","admin_ru")]])
         text=msg.get("text","")
         if text.startswith("/"):return handle_command(uid,text)
         if row["banned"]:return
-        pending=get_pending(uid)
+        if uid==ADMIN_ID and pending and pending["action"]=="set_ru_json" and text.lstrip().startswith("{"):
+            try:
+                meta=set_pinned_ru_from_json(text,True)
+                clear_pending(uid)
+                return send(uid,
+                  f"✅ <b>RU-01 закреплён.</b>\nEndpoint: <code>{esc(meta.get('address'))}:{meta.get('port')}</code>\n"
+                  f"Транспорт: <b>{esc(meta.get('network'))} + {esc(meta.get('security'))}</b>.",
+                  [[button("🇷🇺 RU статус","admin_ru")],[button("⚡ Подключить","connect")]])
+            except Exception as e:
+                return send(uid,f"Не удалось импортировать JSON: <code>{esc(e)}</code>")
         if pending and pending["action"]=="topup_amount":
             cents=parse_topup_amount(text)
             if cents is None:
