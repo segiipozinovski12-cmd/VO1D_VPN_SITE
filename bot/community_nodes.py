@@ -18,6 +18,12 @@ COUNTRY_NAMES={
 ALLOWED_SCHEMES={"vless","vmess","trojan","ss","hy2","hysteria2"}
 # These RU endpoints were confirmed by the client as unusable/N/A, so never publish them again.
 RU_BLOCKED_HOSTS={"91.240.86.70","45.12.75.242","83.222.26.101"}
+RU_ALLOWED_HOSTS={
+    x.strip() for x in os.getenv(
+        "COMMUNITY_RU_ALLOWED_HOSTS",
+        "176.32.35.2,185.22.154.239"
+    ).split(",") if x.strip()
+}
 
 def _b64decode_text(value):
     raw="".join(str(value or "").split())
@@ -47,19 +53,22 @@ def _endpoint(uri):
         return None
     return None
 
-def _tcp_alive(uri,timeout=1.4):
+def _tcp_latency_ms(uri,timeout=1.6):
     scheme=uri.split("://",1)[0].lower()
     ep=_endpoint(uri)
-    if not ep:return False
+    if not ep:return None
     if scheme in ("hy2","hysteria2"):
-        # We cannot validate a QUIC/Hysteria2 tunnel with a TCP probe.
-        # Do not publish it as "healthy" until we have a protocol-aware end-to-end check.
-        return False
+        return None
+    started=time.monotonic()
     try:
         with socket.create_connection(ep,timeout=timeout):
-            return True
+            pass
+        return int((time.monotonic()-started)*1000)
     except Exception:
-        return False
+        return None
+
+def _tcp_alive(uri,timeout=1.6):
+    return _tcp_latency_ms(uri,timeout) is not None
 
 def _hy2_score(uri):
     try:
@@ -216,10 +225,12 @@ class CommunityPool:
             scheme=uri.split("://",1)[0].lower()
             if scheme not in ALLOWED_SCHEMES:continue
             if cc=="RU":
-                if scheme in ("hy2","hysteria2"):
-                    continue
+                # RU must be a direct exit, not CDN/WS. Only keep the two current
+                # direct Shadowsocks endpoints whose network ranges are RU.
                 ep=_endpoint(uri)
-                if ep and ep[0] in RU_BLOCKED_HOSTS:
+                if scheme!="ss" or not ep:
+                    continue
+                if ep[0] in RU_BLOCKED_HOSTS or ep[0] not in RU_ALLOWED_HOSTS:
                     continue
             key=uri.split("#",1)[0]
             if key in seen:continue
@@ -233,8 +244,10 @@ class CommunityPool:
             unique=_prefer_same_endpoint(unique)
         workers=min(12,len(unique))
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            alive=list(ex.map(_tcp_alive,unique))
-        selected=[u for u,ok in zip(unique,alive) if ok][:self.per_country]
+            latencies=list(ex.map(_tcp_latency_ms,unique))
+        measured=[(u,lat) for u,lat in zip(unique,latencies) if lat is not None]
+        measured.sort(key=lambda pair:pair[1])
+        selected=[u for u,_ in measured][:self.per_country]
         out=[]
         for idx,uri in enumerate(selected,1):
             slot=f"{cc}:{idx:02d}"
