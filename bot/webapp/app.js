@@ -3,49 +3,90 @@ const tg=window.Telegram?.WebApp;
 const state={me:null,tab:'home',busy:false,privacy:null};
 
 
-const music=$('#bgMusic'),musicToggle=$('#musicToggle'),musicState=$('#musicState'),musicIcon=$('#musicIcon');
-let musicUserPaused=false;
-function syncMusicUI(){
-  if(!music||!musicToggle)return;
-  const playing=!music.paused&&!music.ended;
-  musicToggle.classList.toggle('paused',!playing);
-  musicIcon.textContent=playing?'Ⅱ':'▶';
-  if(music.error){
-    musicState.textContent='SLOWED · FILE NEEDED';
-    musicToggle.classList.add('unavailable');
-  }else{
-    musicToggle.classList.remove('unavailable');
-    musicState.textContent=playing?'SLOWED · PLAYING':'SLOWED · PAUSED';
+const musicFrame=$('#soundcloudPlayer'),musicToggle=$('#musicToggle'),musicState=$('#musicState'),musicIcon=$('#musicIcon');
+let scWidget=null,musicReady=false,musicPlaying=false,musicUserPaused=false;
+
+function syncMusicUI(label){
+  if(!musicToggle)return;
+  musicToggle.classList.toggle('paused',!musicPlaying);
+  musicIcon.textContent=musicPlaying?'Ⅱ':'▶';
+  if(label)musicState.textContent=label;
+  else musicState.textContent=musicPlaying?'SLOWED · PLAYING':'SLOWED · PAUSED';
+}
+
+function tryStartMusic(){
+  if(!scWidget||!musicReady||musicUserPaused)return;
+  try{
+    musicState.textContent='SLOWED · STARTING';
+    scWidget.play();
+  }catch(e){
+    syncMusicUI('SLOWED · TAP TO PLAY');
   }
 }
-async function tryStartMusic(){
-  if(!music||musicUserPaused||music.error)return;
-  music.volume=.42;
-  try{await music.play();syncMusicUI()}catch(e){
-    musicState.textContent='SLOWED · TAP TO PLAY';
-    syncMusicUI();
-  }
-}
+
 function toggleMusic(){
-  if(!music)return;
   haptic('light');
-  if(music.paused){
-    musicUserPaused=false;
-    music.play().then(syncMusicUI).catch(()=>{musicState.textContent='SLOWED · TAP TO PLAY';syncMusicUI()});
-  }else{
+  if(!scWidget||!musicReady){
+    syncMusicUI('SLOWED · CONNECTING');
+    return;
+  }
+  if(musicPlaying){
     musicUserPaused=true;
-    music.pause();
-    syncMusicUI();
+    scWidget.pause();
+  }else{
+    musicUserPaused=false;
+    scWidget.play();
   }
 }
-music?.addEventListener('play',syncMusicUI);
-music?.addEventListener('pause',syncMusicUI);
-music?.addEventListener('error',syncMusicUI);
+
+function initSoundCloud(){
+  if(!musicFrame||!musicToggle)return;
+  if(!window.SC?.Widget){
+    setTimeout(initSoundCloud,120);
+    return;
+  }
+  scWidget=window.SC.Widget(musicFrame);
+  const E=window.SC.Widget.Events;
+  scWidget.bind(E.READY,()=>{
+    musicReady=true;
+    try{scWidget.setVolume(42)}catch(e){}
+    syncMusicUI('SLOWED · TAP TO PLAY');
+    setTimeout(tryStartMusic,180);
+  });
+  scWidget.bind(E.PLAY,()=>{
+    musicPlaying=true;
+    syncMusicUI();
+  });
+  scWidget.bind(E.PAUSE,()=>{
+    musicPlaying=false;
+    syncMusicUI(musicUserPaused?'SLOWED · PAUSED':'SLOWED · TAP TO PLAY');
+  });
+  scWidget.bind(E.FINISH,()=>{
+    musicPlaying=false;
+    try{
+      scWidget.seekTo(0);
+      if(!musicUserPaused)setTimeout(()=>scWidget.play(),120);
+    }catch(e){}
+  });
+  scWidget.bind(E.ERROR,()=>{
+    musicReady=false;
+    musicPlaying=false;
+    musicToggle.classList.add('unavailable');
+    syncMusicUI('SLOWED · UNAVAILABLE');
+  });
+}
+
 musicToggle?.addEventListener('click',toggleMusic);
 document.addEventListener('pointerdown',()=>{
-  if(music&&!musicUserPaused&&music.paused&&!music.error)tryStartMusic();
+  if(!musicUserPaused)tryStartMusic();
 },{once:true,passive:true});
-setTimeout(tryStartMusic,450);
+initSoundCloud();
+setTimeout(()=>{
+  if(!musicReady){
+    musicToggle?.classList.add('unavailable');
+    if(musicState)musicState.textContent='SLOWED · TAP TO RETRY';
+  }
+},6500);
 
 function telegramInit(){
   if(!tg)return;
