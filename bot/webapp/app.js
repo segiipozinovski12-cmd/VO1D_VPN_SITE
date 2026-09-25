@@ -287,7 +287,10 @@ function switchTab(name){
   refreshReveal();
   if(name==='admin')loadAdmin();
 }
-$('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
+document.addEventListener('click',e=>{
+  const btn=e.target.closest?.('[data-tab]');
+  if(btn?.dataset?.tab)switchTab(btn.dataset.tab);
+});
 try{tg?.BackButton?.onClick(()=>switchTab('home'))}catch(e){}
 
 function setLoadingError(){
@@ -546,6 +549,7 @@ $('#openBotBtn')?.addEventListener('click',()=>openTelegramUser('VO1D_VPNbot'));
 $('#createPromoBtn')?.addEventListener('click',createAdminPromo);
 $('#grantBtn')?.addEventListener('click',adminGrant);
 
+document.documentElement.dataset.vo1dJs='ready';
 bindPressEffects();
 setupReveal();
 loadMe();
