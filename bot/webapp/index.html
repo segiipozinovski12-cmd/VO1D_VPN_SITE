@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#050505">
+  <title>VO1D_VPN</title>
+  <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+  <link rel="stylesheet" href="/app/style.css">
+</head>
+<body>
+  <div class="noise"></div>
+  <div id="boot" class="boot">
+    <div class="boot-mark">VO1D</div>
+    <div class="boot-sub">SECURE SURFACE</div>
+    <div class="boot-track"><i id="bootFill"></i></div>
+    <div class="boot-row"><span id="bootText">INITIALIZING</span><span id="bootPct">00%</span></div>
+  </div>
+
+  <div id="shell" class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-dot"></span><b>VO1D_VPN</b><small>MINI APP</small></div>
+      <button id="profileChip" class="profile-chip" data-tab="account">
+        <span id="avatar">V</span>
+        <span class="profile-copy"><b id="chipName">VO1D</b><small id="chipStatus">loading</small></span>
+      </button>
+    </header>
+
+    <main class="main">
+      <section id="tab-home" class="tab active">
+        <div class="hero-card reveal">
+          <div class="hero-grid"></div>
+          <div class="orbit o1"></div><div class="orbit o2"></div><div class="orbit o3"></div>
+          <div class="hero-top"><span class="eyebrow">// PRIVACY CORE</span><span id="nodeStatus" class="status-pill"><i></i>CHECKING</span></div>
+          <div class="hero-center">
+            <div class="shield">
+              <div class="shield-ring"></div>
+              <div class="shield-core"><span id="privacyValue">—</span><small>ACCESS</small></div>
+            </div>
+            <h1>ПРИВАТНОСТЬ<br><em>БЕЗ ШУМА</em></h1>
+            <p id="heroHint">Проверяем твою подписку и доступ к VO1D_VPN.</p>
+          </div>
+          <div class="hero-bottom">
+            <div><span>NODE</span><b>LONDON / 01</b></div>
+            <div><span>PROTOCOL</span><b>VLESS + REALITY</b></div>
+            <div><span>TRANSPORT</span><b>TCP / 443</b></div>
+          </div>
+        </div>
+
+        <div class="quick-grid">
+          <button class="metric reveal" data-tab="access"><span>SUBSCRIPTION</span><b id="daysLeft">—</b><small id="untilText">loading</small></button>
+          <button id="pingCard" class="metric reveal"><span>APP LATENCY</span><b id="pingValue">—</b><small>до панели управления</small></button>
+          <button class="metric reveal" data-tab="plans"><span>PLAN</span><b id="planState">—</b><small>управление доступом</small></button>
+          <button class="metric reveal" data-tab="help"><span>HELP</span><b>24/7</b><small>инструкция и поддержка</small></button>
+        </div>
+
+        <div class="section-title reveal"><div><span>// LIVE ROUTE</span><h2>ТВОЙ МАРШРУТ</h2></div><button id="refreshBtn" class="icon-btn" aria-label="Обновить">↻</button></div>
+        <div class="route-card reveal">
+          <div class="route-line"><i class="packet p1"></i><i class="packet p2"></i></div>
+          <div class="route-node"><span>01</span><b>YOU</b><small>Telegram</small></div>
+          <div class="route-node"><span>02</span><b>HAPP</b><small>client</small></div>
+          <div class="route-node"><span>03</span><b>VO1D</b><small>London</small></div>
+          <div class="route-node"><span>04</span><b>NET</b><small>destination</small></div>
+        </div>
+      </section>
+
+      <section id="tab-access" class="tab">
+        <div class="page-head reveal"><span>// ACCESS</span><h1>ПОДКЛЮЧЕНИЕ</h1><p>Персональная подписка для Happ. Не передавай её другим.</p></div>
+        <div id="accessActive" class="access-card reveal">
+          <div class="access-orb"><i></i><span>VO1D</span></div>
+          <div class="access-meta"><span>STATUS</span><b id="accessStatus">—</b><small id="accessRemaining">—</small></div>
+          <div class="url-box"><span>SUBSCRIPTION URL</span><code id="subUrl">Доступ появится после проверки</code></div>
+          <div class="button-row">
+            <button id="copySub" class="primary-btn">СКОПИРОВАТЬ ССЫЛКУ</button>
+            <button class="ghost-btn" data-tab="help">КАК ПОДКЛЮЧИТЬ</button>
+          </div>
+        </div>
+        <div id="trialCard" class="trial-card reveal">
+          <span>// FIRST ACCESS</span><h2>24 ЧАСА<br>ПРОБНОГО ДОСТУПА</h2><p>Если пробный период ещё не использован, активируй его одним нажатием.</p>
+          <button id="trialBtn" class="primary-btn">АКТИВИРОВАТЬ</button>
+        </div>
+      </section>
+
+      <section id="tab-plans" class="tab">
+        <div class="page-head reveal"><span>// PLANS</span><h1>ВЫБЕРИ<br>ДОСТУП</h1><p>Telegram Stars оплачиваются прямо внутри Mini App.</p></div>
+        <div id="plansList" class="plans-list"></div>
+        <div class="manual-card reveal">
+          <span>ДРУГОЙ СПОСОБ ОПЛАТЫ</span>
+          <p>Карта или криптовалюта остаются доступны через администратора в Telegram.</p>
+          <button id="supportPayBtn" class="ghost-btn">НАПИСАТЬ В ПОДДЕРЖКУ ↗</button>
+        </div>
+      </section>
+
+      <section id="tab-account" class="tab">
+        <div class="page-head reveal"><span>// ACCOUNT</span><h1>ТВОЙ<br>ПРОФИЛЬ</h1><p>Данные профиля берутся из Telegram после серверной проверки.</p></div>
+        <div class="identity-card reveal">
+          <div id="accountAvatar" class="big-avatar">V</div>
+          <div><span>TELEGRAM IDENTITY</span><h2 id="accountName">—</h2><p id="accountUsername">—</p></div>
+        </div>
+        <div class="account-grid">
+          <div class="info-card reveal"><span>TELEGRAM ID</span><b id="accountId">—</b></div>
+          <div class="info-card reveal"><span>БАЛАНС</span><b id="balance">$0.00</b></div>
+          <div class="info-card reveal"><span>ПОДПИСКА ДО</span><b id="accountUntil">—</b></div>
+          <div class="info-card reveal"><span>TRIAL</span><b id="trialState">—</b></div>
+        </div>
+        <button id="openBotBtn" class="wide-link reveal">ОТКРЫТЬ ЧАТ С БОТОМ <span>↗</span></button>
+      </section>
+
+      <section id="tab-help" class="tab">
+        <div class="page-head reveal"><span>// HELP</span><h1>ПОДКЛЮЧИТЬСЯ<br>ЗА МИНУТУ</h1><p>Никакой ручной настройки ключей — используй персональную subscription URL.</p></div>
+        <div class="steps">
+          <article class="step reveal"><span>01</span><div><b>ОТКРОЙ «ПОДКЛЮЧЕНИЕ»</b><p>Скопируй персональную ссылку VO1D_VPN.</p></div></article>
+          <article class="step reveal"><span>02</span><div><b>ОТКРОЙ HAPP</b><p>Нажми + и выбери добавление подписки.</p></div></article>
+          <article class="step reveal"><span>03</span><div><b>ВСТАВЬ ССЫЛКУ</b><p>Обнови список и выбери VO1D-LONDON-01.</p></div></article>
+          <article class="step reveal"><span>04</span><div><b>ПОДКЛЮЧИСЬ</b><p>После подключения твой трафик пойдёт через VPN-узел.</p></div></article>
+        </div>
+        <div class="help-note reveal"><span>ВАЖНО</span><p>Показатель «APP LATENCY» измеряет отклик Mini App, а не скорость VPN-туннеля — мы не рисуем фейковые цифры.</p></div>
+        <button id="supportBtn" class="primary-btn reveal">ПОДДЕРЖКА @VO1D_ROOT ↗</button>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-tab="home"><i>◉</i><span>ГЛАВНАЯ</span></button>
+      <button class="nav-item" data-tab="access"><i>⌁</i><span>ДОСТУП</span></button>
+      <button class="nav-item" data-tab="plans"><i>◇</i><span>ТАРИФЫ</span></button>
+      <button class="nav-item" data-tab="account"><i>○</i><span>АККАУНТ</span></button>
+      <button class="nav-item" data-tab="help"><i>?</i><span>ПОМОЩЬ</span></button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="/app/app.js"></script>
+</body>
+</html>
