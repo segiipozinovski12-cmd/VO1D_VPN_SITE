@@ -19,6 +19,7 @@ MINI_APP_URL=os.getenv("MINI_APP_URL",(PUBLIC_URL+"/app") if PUBLIC_URL else "")
 TRIAL_HOURS=int(os.getenv("TRIAL_HOURS","24"))
 PORT=int(os.getenv("PORT","8080"))
 VPN_NODES=[x.strip() for x in os.getenv("VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
+RU_VPN_NODES=[x.strip() for x in os.getenv("RU_VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
 BOT_USERNAME=os.getenv("BOT_USERNAME","VO1D_VPNbot").lstrip("@")
 DEVICE_LIMIT=max(1,int(os.getenv("DEVICE_LIMIT","3")))
 REFERRAL_REWARD_CENTS=max(0,int(os.getenv("REFERRAL_REWARD_CENTS","100")))
@@ -1595,8 +1596,13 @@ def personalize_node(node,row):
 
 def subscription_nodes(row):
     nodes=[personalize_node(node,row) for node in VPN_NODES]
+    nodes.extend(RU_VPN_NODES)
     if COMMUNITY_POOL.enabled:
-        nodes.extend(COMMUNITY_POOL.flattened())
+        snap=COMMUNITY_POOL.snapshot()
+        for cc in COMMUNITY_POOL.countries:
+            if cc=="RU":
+                continue
+            nodes.extend(snap["countries"].get(cc,[]))
     return nodes
 
 def xray_clients_payload():
