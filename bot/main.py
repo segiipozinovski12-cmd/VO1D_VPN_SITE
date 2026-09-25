@@ -716,34 +716,12 @@ def more_menu(uid):
       [button("👥 Рефералы","referral"),button("🎁 Подарки","gifts")],
       [button("🕘 История подписки","sub_history")],
     ]
-    if COMMUNITY_POOL.enabled:
-        kb.append([button("🌍 VO1D Community","community")])
     kb += [
       [button("🔔 Уведомления: "+("ON" if r["notifications"] else "OFF"),"notifications")],
       [button("🔐 Сбросить доступ","reset_access")],
       [button("◀️ Меню","menu")]
     ]
     send(uid,"<b>⚙️ VO1D Control</b>\nВыбери раздел:",kb)
-
-def community_screen(uid):
-    if not COMMUNITY_POOL.enabled:
-        return send(uid,"VO1D Community сейчас отключён.",[[button("◀️ Ещё","more")]])
-    snap=COMMUNITY_POOL.snapshot()
-    total=sum(len(v) for v in snap["countries"].values())
-    countries=", ".join(cc for cc in COMMUNITY_POOL.countries if snap["countries"].get(cc)) or "обновление…"
-    if not PUBLIC_URL:
-        link="—"
-    else:
-        r=get_user(uid)
-        link=f"{PUBLIC_URL}/community/{r['sub_token']}"
-    updated=dt(snap["updated_at"]) if snap["updated_at"] else "ещё не обновлялся"
-    send(uid,
-      "<b>🌍 VO1D Community</b>\n\n"
-      "Дополнительные страны из публичных сторонних узлов. Они <b>не управляются VO1D</b> и не дают тех же гарантий приватности, что собственный London-узел. "
-      "Не используй Community для банков, важных логинов и чувствительных данных.\n\n"
-      f"Сейчас отобрано: <b>{total}</b>\nСтраны: <b>{esc(countries)}</b>\nОбновлено: <b>{updated}</b>\n\n"
-      f"Отдельная ссылка для Happ:\n<code>{esc(link)}</code>",
-      [[button("🔄 Обновить","community")],[button("◀️ Ещё","more")]])
 
 def gift_code_value():
     alphabet="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -1097,9 +1075,14 @@ def connect(uid):
     if not PUBLIC_URL:
         return send(uid,"Подписка активна, но публичный URL бота ещё не указан в Railway Variables: <code>PUBLIC_URL</code>.")
     sub=f"{PUBLIC_URL}/sub/{r['sub_token']}"
+    extra_note=""
+    if COMMUNITY_POOL.enabled:
+        extra_note=("\n\nВ этой же подписке находятся London и дополнительные публичные сторонние узлы. "
+                    "Имена <b>VO1D · XX · NN</b> — это метки списка, а не указание, что эти серверы принадлежат VO1D.")
     send(uid,
       f"<b>⚡ Подключение VO1D_VPN</b>\n\n"
-      f"Твоя персональная ссылка для Happ:\n<code>{esc(sub)}</code>\n\n"
+      f"Твоя персональная ссылка для Happ:\n<code>{esc(sub)}</code>"
+      f"{extra_note}\n\n"
       "Не передавай её другим: ссылка привязана к твоей подписке.",
       [[button("📖 Как добавить в Happ","guide")],[button("◀️ Меню","menu")]])
 
@@ -1258,7 +1241,6 @@ def handle_callback(q):
     if data=="referral":return referral_screen(uid)
     if data=="diagnostics":return diagnostics(uid)
     if data=="gifts":return gifts_screen(uid)
-    if data=="community":return community_screen(uid)
     if data=="gift_direct":return gift_plan_menu(uid,"giftplan")
     if data=="gift_code":return gift_plan_menu(uid,"gcodeplan")
     if data=="notifications":
@@ -1617,8 +1599,10 @@ def personalize_node(node,row):
     except Exception:return node
 
 def subscription_nodes(row):
-    if not VPN_NODES:return []
-    return [personalize_node(node,row) for node in VPN_NODES]
+    nodes=[personalize_node(node,row) for node in VPN_NODES]
+    if COMMUNITY_POOL.enabled:
+        nodes.extend(COMMUNITY_POOL.flattened())
+    return nodes
 
 def xray_clients_payload():
     with db() as c:
@@ -1843,30 +1827,13 @@ class Web(BaseHTTPRequestHandler):
         if self.serve_app_asset(path):
             return
 
-        if path.startswith("/community/"):
-            if not COMMUNITY_POOL.enabled:return self.reply(404,"community disabled")
-            token=urllib.parse.unquote(path[len("/community/"):])
-            with db() as cc:r=cc.execute("SELECT * FROM users WHERE sub_token=?",(token,)).fetchone()
-            if not r:return self.reply(404,"subscription not found")
-            if r["banned"]:return self.reply(403,"subscription blocked")
-            if r["sub_until"]<=now():return self.reply(403,"subscription expired")
-            nodes=COMMUNITY_POOL.flattened()
-            if not nodes:return self.reply(503,"community nodes are refreshing")
-            body=[
-              "#announce: VO1D Community uses public third-party relays; not for sensitive traffic",
-              "#profile-web-page-url: "+SITE_URL if SITE_URL else "# VO1D Community"
-            ]
-            body.extend(nodes)
-            return self.reply(200,"\n".join(body)+"\n","text/plain; charset=utf-8",
-              {"Content-Disposition":'inline; filename="vo1d-community.txt"'})
-
         if path.startswith("/sub/"):
             token=urllib.parse.unquote(path[5:])
             with db() as c:r=c.execute("SELECT * FROM users WHERE sub_token=?",(token,)).fetchone()
             if not r:return self.reply(404,"subscription not found")
             if r["banned"]:return self.reply(403,"subscription blocked")
             if r["sub_until"]<=now():return self.reply(403,"subscription expired")
-            if not VPN_NODES:return self.reply(503,"VPN_NODES is not configured")
+            if not subscription_nodes(r):return self.reply(503,"VPN nodes are not ready")
             body=[]
             if SITE_URL:body.append("#profile-web-page-url: "+SITE_URL)
             body.append("#announce: VO1D_VPN active until "+dt(r["sub_until"]))
