@@ -22,21 +22,30 @@ def source_ms(uri):
     except Exception:
         return 999999
 
-def endpoint_country(host):
+def endpoint_geo(host):
+    ips=[]
     try:
         socket.inet_aton(host)
+        ips=[host]
     except OSError:
-        return ""
-    try:
-        req=urllib.request.Request(
-            "https://ipwho.is/"+urllib.parse.quote(host,safe="")+"?fields=success,country_code",
-            headers={"User-Agent":"VO1D-RU-E2E/1.0"},
-        )
-        with urllib.request.urlopen(req,timeout=7) as r:
-            data=json.loads(r.read(4096).decode())
-        return str(data.get("country_code") or "").upper() if data.get("success",True) else ""
-    except Exception:
-        return ""
+        try:
+            ips=list(dict.fromkeys(x[4][0] for x in socket.getaddrinfo(host,None,socket.AF_INET,socket.SOCK_STREAM)))
+        except Exception:
+            ips=[]
+    for ip in ips[:4]:
+        try:
+            req=urllib.request.Request(
+                "https://ipwho.is/"+urllib.parse.quote(ip,safe="")+"?fields=success,country_code,ip",
+                headers={"User-Agent":"VO1D-RU-E2E/1.0"},
+            )
+            with urllib.request.urlopen(req,timeout=7) as r:
+                data=json.loads(r.read(4096).decode())
+            code=str(data.get("country_code") or "").upper() if data.get("success",True) else ""
+            if code:
+                return code,ip
+        except Exception:
+            pass
+    return "",""
 
 def parse(uri):
     if not uri.startswith("vless://"):return None
@@ -45,21 +54,27 @@ def parse(uri):
         q=urllib.parse.parse_qs(p.query,keep_blank_values=True)
         host=p.hostname;port=p.port;uuid=urllib.parse.unquote(p.username or "")
         if not host or not port or not uuid:return None
-        security=(q.get("security") or [""])[0].lower()
+        security=(q.get("security") or ["none"])[0].lower() or "none"
         network=(q.get("type") or ["tcp"])[0].lower() or "tcp"
-        if security!="reality" or network not in ("tcp","raw"):return None
-        if port not in (443,8443):return None
+        if network not in ("tcp","raw","grpc","xhttp","ws"):return None
+        if security not in ("reality","tls","none"):return None
+        if port not in (80,443,2053,2083,2087,2096,8443):return None
         sni=(q.get("sni") or [""])[0]
         pbk=(q.get("pbk") or [""])[0]
-        if not sni or not pbk:return None
+        if security=="reality" and (not sni or not pbk):return None
         return {
             "uri":uri,"host":host,"port":port,"uuid":uuid,
             "flow":(q.get("flow") or [""])[0],
-            "network":network,
+            "network":network,"security":security,
             "sni":sni,"pbk":pbk,
             "sid":(q.get("sid") or [""])[0],
             "fp":(q.get("fp") or ["chrome"])[0] or "chrome",
             "spx":(q.get("spx") or ["/"])[0] or "/",
+            "path":(q.get("path") or ["/"])[0] or "/",
+            "host_header":(q.get("host") or [""])[0],
+            "service_name":(q.get("serviceName") or [""])[0],
+            "mode":(q.get("mode") or [""])[0],
+            "allow_insecure":str((q.get("allowInsecure") or q.get("insecure") or ["0"])[0]).lower() in ("1","true","yes"),
             "source_ms":source_ms(uri),
         }
     except Exception:
@@ -73,17 +88,34 @@ def tcp_ms(host,port):
     except Exception:return None
 
 def xray_config(c,socks_port):
-    reality={"serverName":c["sni"],"fingerprint":c["fp"],"publicKey":c["pbk"],"spiderX":c["spx"]}
-    if c["sid"]:reality["shortId"]=c["sid"]
     client={"id":c["uuid"],"encryption":"none"}
-    if c["flow"]:client["flow"]=c["flow"]
+    if c["flow"] and c["network"] in ("tcp","raw"):
+        client["flow"]=c["flow"]
+    stream={"network":c["network"],"security":c["security"]}
+    if c["security"]=="reality":
+        reality={"serverName":c["sni"],"fingerprint":c["fp"],"publicKey":c["pbk"],"spiderX":c["spx"]}
+        if c["sid"]:reality["shortId"]=c["sid"]
+        stream["realitySettings"]=reality
+    elif c["security"]=="tls":
+        tls={"serverName":c["sni"],"fingerprint":c["fp"],"allowInsecure":c["allow_insecure"]}
+        stream["tlsSettings"]=tls
+    if c["network"]=="grpc":
+        stream["grpcSettings"]={"serviceName":c["service_name"],"multiMode":c["mode"]=="multi"}
+    elif c["network"]=="ws":
+        ws={"path":c["path"]}
+        if c["host_header"]:ws["headers"]={"Host":c["host_header"]}
+        stream["wsSettings"]=ws
+    elif c["network"]=="xhttp":
+        xh={"path":c["path"],"mode":c["mode"] or "auto"}
+        if c["host_header"]:xh["host"]=c["host_header"]
+        stream["xhttpSettings"]=xh
     return {
       "log":{"loglevel":"warning"},
       "inbounds":[{"listen":"127.0.0.1","port":socks_port,"protocol":"socks","settings":{"udp":False}}],
       "outbounds":[{
         "tag":"proxy","protocol":"vless",
         "settings":{"vnext":[{"address":c["host"],"port":c["port"],"users":[client]}]},
-        "streamSettings":{"network":c["network"],"security":"reality","realitySettings":reality}
+        "streamSettings":stream
       }]
     }
 
@@ -140,18 +172,20 @@ def main():
         c=parse(line)
         if not c:continue
         if c["host"] in seen:continue
-        if endpoint_country(c["host"])!="RU":continue
+        country,endpoint_ip=endpoint_geo(c["host"])
+        if country!="RU":continue
         t=tcp_ms(c["host"],c["port"])
         if t is None:continue
+        c["endpoint_ip"]=endpoint_ip
         c["tcp_ms"]=t
         seen.add(c["host"]);candidates.append(c)
     candidates.sort(key=lambda x:(x["source_ms"],x["tcp_ms"]))
     candidates=candidates[:MAX_CANDIDATES]
-    print("RU E2E candidates:",[(x["host"],x["port"],x["source_ms"],x["tcp_ms"]) for x in candidates],flush=True)
+    print("RU E2E candidates:",[(x["host"],x.get("endpoint_ip"),x["port"],x["network"],x["security"],x["source_ms"],x["tcp_ms"]) for x in candidates],flush=True)
     results=[]
     for i,c in enumerate(candidates):
         result=test(c,i)
-        row={"host":c["host"],"port":c["port"],"source_ms":c["source_ms"],"tcp_ms":c["tcp_ms"],**result}
+        row={"host":c["host"],"endpoint_ip":c.get("endpoint_ip"),"port":c["port"],"network":c["network"],"security":c["security"],"source_ms":c["source_ms"],"tcp_ms":c["tcp_ms"],**result}
         results.append(row)
         print("RU E2E result:",json.dumps(row,ensure_ascii=False),flush=True)
     winners=[(c,r) for c,r in zip(candidates,results) if r.get("ok")]
