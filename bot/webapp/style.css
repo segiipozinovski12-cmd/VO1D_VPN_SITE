@@ -67,6 +67,11 @@ code,b,p,h1,h2,h3,span,small{overflow-wrap:anywhere}
 @media(max-width:390px){.main{padding:0 9px}.topbar{padding-left:10px;padding-right:10px}.profile-chip{max-width:44%;padding-right:6px}.button-row{grid-template-columns:1fr}.protocol-strip{display:grid;grid-template-columns:1fr 12px 1fr}.protocol-strip span:nth-of-type(4),.protocol-strip i:nth-of-type(3){display:none}.route-card{grid-template-columns:repeat(2,minmax(0,1fr));min-height:210px}.route-node{border-bottom:1px solid var(--line2)}.route-node:nth-child(3){border-right:0}.route-node:nth-last-child(-n+2){border-bottom:0}.route-line{display:none}.hero-center{padding-left:10px;padding-right:10px}.hero-card{min-height:475px}.hero-top{padding:15px}.status-pill{max-width:46%}.account-grid{grid-template-columns:1fr}.info-card{min-height:88px}}
 @media(max-width:340px){.profile-copy{display:none}.profile-chip{max-width:none;padding-right:4px}.brand b{font-size:12px}.hero-center h1{font-size:32px}.hero-bottom div{padding-left:5px;padding-right:5px}.hero-bottom b{font-size:5.7px}.hero-bottom span{font-size:5.3px}.quick-grid{grid-template-columns:1fr}.nav-item span{font-size:4.9px}.page-head h1{font-size:32px}}
 
+
+.soundcloud-player{
+  position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;border:0;opacity:0;pointer-events:none;
+}
+
 .music-toggle{
   position:fixed;z-index:70;left:10px;bottom:calc(82px + var(--safe-bottom));
   max-width:min(248px,calc(100vw - 20px));height:46px;display:flex;align-items:center;gap:10px;
