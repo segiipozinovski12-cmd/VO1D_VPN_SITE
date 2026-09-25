@@ -870,15 +870,15 @@ def payment_methods(uid,days):
        [button("₿ Криптовалюта",f"pay:{days}:crypto"),button("💳 Банковская карта",f"pay:{days}:card")],
        [button("◀️ Назад","plans")]])
 
-def record_payment(uid,method,days=0,amount_stars=0,amount_cents=0,status="pending",charge=""):
+def record_payment(uid,method,days=0,amount_stars=0,amount_cents=0,status="pending",charge="",reference=""):
     with db() as c:
-        cur=c.execute("""INSERT INTO payments(user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id)
-          VALUES(?,?,?,?,?,?,?,?,?)""",(uid,method,int(days),int(amount_stars),int(amount_cents),status,now(),now() if status=="paid" else 0,charge))
+        cur=c.execute("""INSERT INTO payments(user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id,reference)
+          VALUES(?,?,?,?,?,?,?,?,?,?)""",(uid,method,int(days),int(amount_stars),int(amount_cents),status,now(),now() if status=="paid" else 0,charge,str(reference or "")))
         return cur.lastrowid
 
-def make_payment(uid,method,days,status="pending",charge=""):
+def make_payment(uid,method,days,status="pending",charge="",reference=""):
     p=PLANS[days]
-    return record_payment(uid,method,days,p["stars"] if method=="stars" else 0,p["usd"],status,charge)
+    return record_payment(uid,method,days,p["stars"] if method=="stars" else 0,p["usd"],status,charge,reference)
 
 def star_invoice(uid,days):
     p=PLANS[days]
@@ -889,6 +889,70 @@ def star_invoice(uid,days):
       "payload":payload,"currency":"XTR",
       "prices":[{"label":p["title"],"amount":p["stars"]}]
     },30)
+
+def gift_star_invoice(uid,target,days):
+    p=PLANS[days]
+    payload=f"gift:{uid}:{int(target)}:{days}:{secrets.token_hex(5)}"
+    api("sendInvoice",{
+      "chat_id":uid,
+      "title":f"Подарок VO1D — {p['title']}",
+      "description":f"Подписка VO1D_VPN для Telegram ID {int(target)}",
+      "payload":payload,"currency":"XTR",
+      "prices":[{"label":p["title"],"amount":p["stars"]}]
+    },30)
+
+def giftcode_star_invoice(uid,days):
+    p=PLANS[days]
+    payload=f"gcode:{uid}:{days}:{secrets.token_hex(5)}"
+    api("sendInvoice",{
+      "chat_id":uid,
+      "title":f"Подарочный код VO1D — {p['title']}",
+      "description":"После оплаты бот выдаст одноразовый подарочный код.",
+      "payload":payload,"currency":"XTR",
+      "prices":[{"label":p["title"],"amount":p["stars"]}]
+    },30)
+
+def gift_with_balance(uid,target,days):
+    uid=int(uid);target=int(target);days=int(days);p=PLANS[days]
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        buyer=c.execute("SELECT balance_cents FROM users WHERE id=?",(uid,)).fetchone()
+        recipient=c.execute("SELECT sub_until,banned FROM users WHERE id=?",(target,)).fetchone()
+        if not buyer:return None,"buyer_missing"
+        if not recipient:return None,"recipient_missing"
+        if recipient["banned"]:return None,"recipient_blocked"
+        price=int(p["usd"]); bal=int(buyer["balance_cents"])
+        if bal<price:return bal,"insufficient"
+        end=max(now(),int(recipient["sub_until"]))+days*86400
+        new_balance=bal-price
+        cur=c.execute("""INSERT INTO payments(user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id,reference)
+          VALUES(?,?,?,?,?,?,?,?,?,?)""",(uid,"gift_balance",days,0,price,"paid",now(),now(),"",f"target:{target}"))
+        pid=cur.lastrowid
+        c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,uid))
+        c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,target))
+        c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
+                  (uid,"gift",-price,f"payment:{pid}",now()))
+        c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                  (target,days,f"gift_from:{uid}",now(),end))
+        return {"balance":new_balance,"end":end},"ok"
+
+def giftcode_with_balance(uid,days):
+    uid=int(uid);days=int(days);p=PLANS[days]
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        buyer=c.execute("SELECT balance_cents FROM users WHERE id=?",(uid,)).fetchone()
+        if not buyer:return None,"missing"
+        price=int(p["usd"]);bal=int(buyer["balance_cents"])
+        if bal<price:return bal,"insufficient"
+        new_balance=bal-price
+        c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,uid))
+        cur=c.execute("""INSERT INTO payments(user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id,reference)
+          VALUES(?,?,?,?,?,?,?,?,?,?)""",(uid,"giftcode_balance",days,0,price,"paid",now(),now(),"","giftcode"))
+        pid=cur.lastrowid
+        c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
+                  (uid,"gift",-price,f"payment:{pid}",now()))
+    code=create_gift_code(uid,days)
+    return {"balance":new_balance,"code":code},"ok"
 
 def topup_star_invoice(uid,cents):
     cents=int(cents)
