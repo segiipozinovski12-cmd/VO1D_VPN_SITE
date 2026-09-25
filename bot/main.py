@@ -1689,12 +1689,122 @@ class Web(BaseHTTPRequestHandler):
                 print("invoice link error",repr(e),flush=True)
                 return self.reply_json(502,{"ok":False,"error":"invoice_failed","message":"Не удалось создать счёт Telegram Stars."})
 
+def backup_db(label="auto"):
+    try:
+        os.makedirs(BACKUP_DIR,exist_ok=True)
+        stamp=datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        path=os.path.join(BACKUP_DIR,f"vo1d-{stamp}-{label}.db")
+        src=sqlite3.connect(DB_PATH,timeout=30)
+        dst=sqlite3.connect(path)
+        try:src.backup(dst)
+        finally:
+            dst.close();src.close()
+        backups=sorted(glob.glob(os.path.join(BACKUP_DIR,"vo1d-*.db")),key=os.path.getmtime,reverse=True)
+        for old in backups[12:]:
+            try:os.remove(old)
+            except Exception:pass
+        print("database backup:",path,flush=True)
+        return path
+    except Exception as e:
+        print("backup error",repr(e),flush=True)
+        return ""
+
+def reminder_sent(uid,key):
+    with db() as c:return bool(c.execute("SELECT 1 FROM reminders WHERE user_id=? AND event_key=?",(uid,key)).fetchone())
+
+def mark_reminder(uid,key):
+    with db() as c:c.execute("INSERT OR IGNORE INTO reminders(user_id,event_key,sent_at) VALUES(?,?,?)",(uid,key,now()))
+
+def send_once(uid,key,text,kb=None):
+    if reminder_sent(uid,key):return False
+    try:
+        send(uid,text,kb)
+        mark_reminder(uid,key)
+        return True
+    except Exception:return False
+
+def refresh_node_statuses(notify_changes=True):
+    transitions=[]
+    for i,node in enumerate(VPN_NODES):
+        online,lat=probe_node(i)
+        current={"online":online,"latency":lat,"checked_at":now()}
+        with NODE_STATUS_LOCK:
+            previous=NODE_STATUS.get(i)
+            NODE_STATUS[i]=current
+        if notify_changes and previous is not None and previous.get("online")!=online:
+            transitions.append((i,online,lat))
+    for i,online,lat in transitions:
+        with db() as c:
+            users=c.execute("""SELECT id FROM users
+              WHERE banned=0 AND notifications=1 AND sub_until>? AND preferred_node=?""",(now(),i)).fetchall()
+        status="снова доступен ✅" if online else "временно недоступен ⚠️"
+        latency=f" · {lat} ms" if lat is not None else ""
+        for u in users:
+            try:
+                send(u["id"],f"<b>🌐 {esc(node_name(i))}</b> {status}{latency}")
+                time.sleep(.03)
+            except Exception:pass
+
+def maintenance_once():
+    refresh_node_statuses(True)
+    with db() as c:
+        users=c.execute("""SELECT * FROM users
+          WHERE banned=0 AND (sub_until>? OR auto_renew=1)""",(now()-86400,)).fetchall()
+    for u in users:
+        uid=int(u["id"]); end=int(u["sub_until"]); left=end-now()
+        if 0<left<=86400 and u["auto_renew"]:
+            days=int(u["auto_renew_days"] or 30)
+            if days not in PLANS:days=30
+            result,status=buy_with_balance(uid,days)
+            if status=="ok":
+                notify_referral_reward(uid)
+                send_once(uid,f"autorenew:{end}",
+                  f"♻️ <b>Автопродление выполнено.</b>\n"
+                  f"Списано: <b>{money(PLANS[days]['usd'])}</b>\n"
+                  f"Новый срок: <b>{dt(result['end'])}</b>\n"
+                  f"Баланс: <b>{money(result['balance'])}</b>.")
+                continue
+            if status=="insufficient":
+                missing=max(0,int(PLANS[days]["usd"])-int(result or 0))
+                send_once(uid,f"autorenew_fail:{end}",
+                  f"⚠️ <b>Не хватает средств для автопродления.</b>\n"
+                  f"Не хватает: <b>{money(missing)}</b>.",
+                  [[button("➕ Пополнить баланс","topup")]])
+
+        if not u["notifications"] or left<=0:continue
+        if left<=3600:
+            key,label="1h","1 часа"
+        elif left<=86400:
+            key,label="1d","24 часов"
+        elif left<=259200:
+            key,label="3d","3 дней"
+        else:
+            continue
+        send_once(uid,f"expiry:{end}:{key}",
+          f"⏳ <b>Подписка VO1D скоро закончится.</b>\nОсталось меньше {label}.\n"
+          f"Активна до: <b>{dt(end)}</b>.",
+          [[button("💎 Продлить","plans")],[button("♻️ Автопродление","autorenew")]])
+
+def maintenance_worker():
+    last_backup=0
+    time.sleep(8)
+    while True:
+        try:
+            if now()-last_backup>=21600:
+                backup_db("scheduled")
+                last_backup=now()
+            maintenance_once()
+        except Exception as e:
+            print("maintenance error",repr(e),flush=True)
+        time.sleep(300)
+
 def web_thread():
     ThreadingHTTPServer(("0.0.0.0",PORT),Web).serve_forever()
 
 def run():
     if not TOKEN: raise SystemExit("Set BOT_TOKEN in Railway Variables")
     threading.Thread(target=web_thread,daemon=True).start()
+    threading.Thread(target=maintenance_worker,daemon=True).start()
     if MINI_APP_URL:
         try:
             api("setChatMenuButton",{
