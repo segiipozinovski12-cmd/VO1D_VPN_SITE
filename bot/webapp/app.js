@@ -357,6 +357,40 @@ function renderPlans(plans){
   if(state.tab==='plans')refreshReveal();
 }
 
+function renderServers(network={}){
+  const box=$('#serverList'),counter=$('#serverCount');
+  if(!box)return;
+  const countries=Array.isArray(network.countries)?network.countries:[];
+  const totalNodes=Number(network.total_nodes||0);
+  if(counter)counter.textContent=countries.length?(`${countries.length} COUNTRIES · ${totalNodes} NODES`):'0 COUNTRIES';
+  if(!countries.length){
+    box.innerHTML='<div class="server-empty">СЕРВЕРЫ ОБНОВЛЯЮТСЯ…</div>';
+    return;
+  }
+  box.innerHTML=countries.map((s,i)=>{
+    const code=String(s.code||'--').replace(/[^A-Z]/g,'').slice(0,3);
+    const name=String(s.name||code).replace(/[<>&]/g,'');
+    const flag=String(s.flag||'◌').replace(/[<>&]/g,'');
+    const where=s.location?(' · '+String(s.location).replace(/[<>&]/g,'')):'';
+    const nodes=Math.max(1,Number(s.nodes||1));
+    return `<article class="server-row">
+      <div class="server-index">${String(i+1).padStart(2,'0')}</div>
+      <div class="server-flag">${flag}</div>
+      <div class="server-copy"><span>${code}${where}</span><b>${name}</b><small>${nodes} ${nodes===1?'NODE':'NODES'} В ПОДПИСКЕ</small></div>
+      <div class="server-state"><i></i>READY</div>
+    </article>`;
+  }).join('');
+}
+
+async function loadServers(){
+  try{
+    const data=await api('/api/servers',{timeout:6000});
+    renderServers(data);
+  }catch(e){
+    console.warn('server list refresh failed',e);
+  }
+}
+
 function render(me){
   state.me=me;
   const u=me.user||{},s=me.subscription||{},infra=me.infrastructure||{};
@@ -390,6 +424,7 @@ function render(me){
   $('#copySub').disabled=!s.subscription_url;
   $('#trialCard').classList.toggle('used',!!s.trial_claimed);
 
+  renderServers(infra.servers||{});
   renderPlans(me.plans||[]);
 }
 
@@ -411,6 +446,7 @@ async function loadMe(manual=false){
     maybeFinishBoot();
     measurePing();
     setTimeout(()=>runPrivacyTest(false),550);
+    setTimeout(loadServers,4200);
   }catch(e){
     console.error(e);setLoadingError(e.data?.message||'Не удалось получить данные. Нажми сюда, чтобы повторить.');
   }finally{
