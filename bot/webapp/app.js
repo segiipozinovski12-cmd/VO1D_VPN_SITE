@@ -261,7 +261,7 @@ function notify(msg){
   notify._t=setTimeout(()=>t.classList.remove('show'),1800);
 }
 function safeText(v,fallback='—'){return v===null||v===undefined||v===''?fallback:String(v)}
-function fmtMoney(cents){return 'async function api(path,opts={}){
+function fmtMoney(cents){return '
   const timeout=Number(opts.timeout||8000);
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),timeout);
