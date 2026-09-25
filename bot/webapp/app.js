@@ -262,6 +262,7 @@ function notify(msg){
 }
 function safeText(v,fallback='—'){return v===null||v===undefined||v===''?fallback:String(v)}
 function fmtMoney(cents){return '
+async function api(path,opts={}){
   const timeout=Number(opts.timeout||8000);
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),timeout);
@@ -363,12 +364,8 @@ function render(me){
   $('#trialState').textContent=s.trial_claimed?'CLAIMED':'AVAILABLE';
   if($('#adminOpen'))$('#adminOpen').hidden=!u.is_admin;
 
-  const nodeKnown=typeof infra.node_online==='boolean';
-  const nodeUp=infra.node_online===true;
-  $('#nodeStatus').classList.toggle('active',nodeUp);
-  const nodeLabel=!infra.node_configured?'NODE NOT CONFIGURED':(nodeKnown?(nodeUp?'NODE ONLINE':'NODE OFFLINE'):'NODE CHECKING');
-  const nodeLatency=nodeUp&&Number.isFinite(Number(infra.node_latency_ms))?` · ${infra.node_latency_ms}MS`:'';
-  $('#nodeStatus').innerHTML=`<i></i>${nodeLabel}${nodeLatency}`;
+  $('#nodeStatus').classList.toggle('active',!!infra.node_configured);
+  $('#nodeStatus').innerHTML=`<i></i>${infra.node_configured?'NODE READY':'NODE OFFLINE'}`;
   $('#privacyValue').textContent=s.active?'READY':'OFF';
   $('#heroHint').textContent=s.active?'Доступ активен. Подключись через Happ и проверь внешний IP ниже.':'Подписка неактивна. Активируй пробный доступ или выбери тариф.';
   $('#daysLeft').textContent=s.active?(s.remaining_short||'ACTIVE'):'0';
@@ -600,15 +597,7 @@ document.documentElement.dataset.vo1dJs='ready';
 bindPressEffects();
 setupReveal();
 loadMe();
-+(Number(cents||0)/100).toFixed(2)}
-function formatLocalUnix(ts){
-  const n=Number(ts||0);if(!n)return '—';
-  try{
-    return new Intl.DateTimeFormat('ru-RU',{
-      day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'
-    }).format(new Date(n*1000));
-  }catch(e){return new Date(n*1000).toLocaleString()}
-}
++(Number(cents||0)/100).toFixed(2)}\nfunction formatLocalUnix(ts){\n  const n=Number(ts||0);if(!n)return '—';\n  try{\n    return new Intl.DateTimeFormat('ru-RU',{\n      day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'\n    }).format(new Date(n*1000));\n  }catch(e){return new Date(n*1000).toLocaleString()}\n}
 async function api(path,opts={}){
   const timeout=Number(opts.timeout||8000);
   const controller=new AbortController();
