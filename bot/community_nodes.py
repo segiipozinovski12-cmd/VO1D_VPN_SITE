@@ -17,11 +17,17 @@ COUNTRY_NAMES={
 }
 ALLOWED_SCHEMES={"vless","vmess","trojan","ss","hy2","hysteria2"}
 # These RU endpoints were confirmed by the client as unusable/N/A, so never publish them again.
-RU_BLOCKED_HOSTS={"91.240.86.70","45.12.75.242","83.222.26.101"}
+RU_BLOCKED_HOSTS={
+    "91.240.86.70",   # Hysteria2: connects but no usable traffic on the client network
+    "104.21.70.21",   # RU test candidate: unusable on the client network
+    "8.6.112.30",     # RU test candidate: unusable on the client network
+    "176.32.35.2",    # Shadowsocks: tunnel comes up but traffic does not pass
+    "185.22.154.239", # Shadowsocks: tunnel comes up but traffic does not pass
+}
 RU_ALLOWED_HOSTS={
     x.strip() for x in os.getenv(
         "COMMUNITY_RU_ALLOWED_HOSTS",
-        "176.32.35.2,185.22.154.239"
+        "83.222.26.101,45.12.75.242"
     ).split(",") if x.strip()
 }
 
@@ -94,16 +100,23 @@ def _candidate_score(uri,cc=""):
             transport=(q.get("type") or [""])[0].lower()
             flow=(q.get("flow") or [""])[0].lower()
             if cc=="RU":
-                # On the user's network, the previously chosen RU Reality endpoints returned N/A.
-                # Prefer ordinary TCP-friendly WS VLESS first, then Shadowsocks.
-                if transport=="ws":score+=80
-                if security=="reality":score-=45
+                # Match the protocol that already works reliably for the owned London node:
+                # direct VLESS + Reality + TCP. Prefer 443/Vision and Chrome fingerprint.
+                if security=="reality":score+=120
+                if transport in ("tcp",""):score+=60
+                if "vision" in flow:score+=30
+                fp=(q.get("fp") or [""])[0].lower()
+                if fp=="chrome":score+=20
+                try:
+                    if p.port==443:score+=25
+                except Exception:
+                    pass
             else:
                 if security=="reality":score+=35
                 if transport in ("tcp",""):score+=15
                 if "vision" in flow:score+=10
         if cc=="RU" and scheme=="ss":
-            score+=90
+            score-=500
         if cc=="RU" and scheme in ("hy2","hysteria2"):
             score-=1000
         return score
@@ -225,12 +238,19 @@ class CommunityPool:
             scheme=uri.split("://",1)[0].lower()
             if scheme not in ALLOWED_SCHEMES:continue
             if cc=="RU":
-                # RU must be a direct exit, not CDN/WS. Only keep the two current
-                # direct Shadowsocks endpoints whose network ranges are RU.
+                # Strict RU mode: only direct VLESS Reality over TCP on the two
+                # current RU endpoints. This avoids UDP/Hysteria2, CDN/WS relays,
+                # and the Shadowsocks endpoints that connected without passing traffic.
                 ep=_endpoint(uri)
-                if scheme!="ss" or not ep:
+                if scheme!="vless" or not ep:
                     continue
                 if ep[0] in RU_BLOCKED_HOSTS or ep[0] not in RU_ALLOWED_HOSTS:
+                    continue
+                p=urllib.parse.urlsplit(uri)
+                q=urllib.parse.parse_qs(p.query)
+                security=(q.get("security") or [""])[0].lower()
+                transport=(q.get("type") or [""])[0].lower()
+                if security!="reality" or transport not in ("","tcp"):
                     continue
             key=uri.split("#",1)[0]
             if key in seen:continue
