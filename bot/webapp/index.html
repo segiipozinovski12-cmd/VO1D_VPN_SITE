@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#050505">
   <title>VO1D_VPN</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="/app/style.css?v=11">
+  <link rel="stylesheet" href="/app/style.css?v=14">
 </head>
 <body>
   <div class="ambient" aria-hidden="true">
@@ -152,6 +152,16 @@
           <div><span>PORT</span><b>443/TCP</b></div>
         </div>
 
+        <div class="server-panel reveal">
+          <div class="server-head">
+            <div><span>// SERVER NETWORK</span><h2>СТРАНЫ</h2></div>
+            <b id="serverCount">—</b>
+          </div>
+          <div id="serverList" class="server-list">
+            <div class="server-empty">ЗАГРУЗКА СЕРВЕРОВ…</div>
+          </div>
+        </div>
+
         <div id="trialCard" class="trial-card reveal">
           <span>// FIRST ACCESS</span><h2>24 ЧАСА<br>ПРОБНОГО ДОСТУПА</h2><p>Если пробный период ещё не использован, активируй его одним нажатием.</p>
           <button id="trialBtn" class="primary-btn">АКТИВИРОВАТЬ</button>
@@ -261,6 +271,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="/app/app.js?v=13"></script>
+  <script src="/app/app.js?v=14"></script>
 </body>
 </html>
