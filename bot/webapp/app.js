@@ -158,7 +158,7 @@ musicDrag?.addEventListener('pointerup',endMusicDrag);
 musicDrag?.addEventListener('pointercancel',endMusicDrag);
 musicDrag?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&musicPlayer?.classList.contains('collapsed')){e.preventDefault();setMusicCollapsed(false)}});
 addEventListener('resize',()=>requestAnimationFrame(clampMusicPlayer),{passive:true});
-visualViewport?.addEventListener('resize',()=>requestAnimationFrame(clampMusicPlayer),{passive:true});
+window.visualViewport?.addEventListener('resize',()=>requestAnimationFrame(clampMusicPlayer),{passive:true});
 
 restoreMusicPlayer();
 syncMusicUI('SLOWED · LOADING');
@@ -174,13 +174,22 @@ function telegramInit(){
     tg.setHeaderColor?.('#050505');
     tg.setBackgroundColor?.('#050505');
     tg.setBottomBarColor?.('#050505');
-    tg.disableVerticalSwipes?.();
   }catch(e){}
 }
 telegramInit();
 
 const boot=$('#boot'),bootFill=$('#bootFill'),bootPct=$('#bootPct'),bootText=$('#bootText'),shell=$('#shell'),
       bootPulse=$('#bootPulse'),bootS1=$('#bootS1'),bootS2=$('#bootS2'),bootS3=$('#bootS3');
+
+function forceShellReady(){
+  boot?.classList.add('hide');
+  shell?.classList.add('ready');
+}
+setTimeout(forceShellReady,3200);
+window.addEventListener('error',e=>{
+  console.error('VO1D UI error',e.error||e.message);
+  forceShellReady();
+});
 const bootSteps=[
   [0,'INITIALIZING'],
   [15,'VERIFYING TELEGRAM'],
@@ -246,9 +255,9 @@ async function api(path,opts={}){
 
 let observer;
 function setupReveal(){
-  observer?.disconnect();
-  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if(reduce){$$('.reveal').forEach(el=>el.classList.add('seen'));return}
+  observer?.disconnect?.();
+  const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  if(reduce||!('IntersectionObserver' in window)){$('.reveal').forEach(el=>el.classList.add('seen'));return}
   observer=new IntersectionObserver(entries=>{
     entries.forEach((entry,i)=>{
       if(entry.isIntersecting){
@@ -270,7 +279,7 @@ function switchTab(name){
   state.tab=name;
   $$('.tab').forEach(x=>x.classList.toggle('active',x.id==='tab-'+name));
   $$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));
-  window.scrollTo({top:0,behavior:'smooth'});
+  window.scrollTo(0,0);
   try{
     if(tg?.BackButton){if(name==='home')tg.BackButton.hide();else tg.BackButton.show()}
     tg?.HapticFeedback?.selectionChanged?.();
@@ -282,8 +291,12 @@ $('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.data
 try{tg?.BackButton?.onClick(()=>switchTab('home'))}catch(e){}
 
 function setLoadingError(){
-  $('.main').innerHTML=`<div class="error-screen"><span class="eyebrow">// AUTH ERROR</span><h1>ОТКРОЙ<br>В TELEGRAM</h1><p>Приложение получает подтверждённые данные пользователя только при запуске из @VO1D_VPNbot.</p><button class="primary-btn" id="retryApp">ПОВТОРИТЬ</button></div>`;
-  $('#retryApp')?.addEventListener('click',()=>location.reload());
+  forceShellReady();
+  notify('НЕ УДАЛОСЬ ЗАГРУЗИТЬ ДАННЫЕ');
+  const hint=$('#heroHint');
+  if(hint)hint.textContent='Не удалось получить данные. Закрой Mini App и открой его снова из бота.';
+  const chip=$('#chipStatus');
+  if(chip)chip.textContent='reconnect needed';
 }
 
 function renderPlans(plans){
