@@ -281,6 +281,91 @@ def init_db():
                       (json.dumps(generated),))
 init_db()
 
+PINNED_RU_URI=""
+PINNED_RU_META={}
+
+def _meta_get(key,default=""):
+    with db() as c:
+        r=c.execute("SELECT value FROM meta WHERE key=?",(str(key),)).fetchone()
+    return r["value"] if r else default
+
+def _meta_set(key,value):
+    with db() as c:
+        c.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",(str(key),str(value)))
+
+def _refresh_node_ips():
+    global VO1D_NODE_IPS
+    nodes=list(VPN_NODES)+list(RU_VPN_NODES)
+    if PINNED_RU_URI:nodes.append(PINNED_RU_URI)
+    out=[]
+    for node in nodes:
+        try:
+            host=urllib.parse.urlparse(node).hostname
+            if not host:continue
+            ipaddress.ip_address(host)
+            if host not in out:out.append(host)
+        except Exception:
+            pass
+    VO1D_NODE_IPS=out
+
+def set_pinned_ru_from_json(raw_json,persist=True):
+    global PINNED_RU_URI,PINNED_RU_META
+    uri,meta=build_pinned_ru_uri(raw_json,"VO1D · RU · 01")
+    PINNED_RU_URI=uri
+    PINNED_RU_META=meta
+    if persist:
+        _meta_set("pinned_ru_uri",uri)
+        _meta_set("pinned_ru_meta",json.dumps(meta,ensure_ascii=False,separators=(",",":")))
+        _meta_set("pinned_ru_updated_at",str(now()))
+    _refresh_node_ips()
+    return meta
+
+def clear_pinned_ru():
+    global PINNED_RU_URI,PINNED_RU_META
+    PINNED_RU_URI=""
+    PINNED_RU_META={}
+    with db() as c:
+        c.execute("DELETE FROM meta WHERE key IN ('pinned_ru_uri','pinned_ru_meta','pinned_ru_updated_at')")
+    _refresh_node_ips()
+
+def load_pinned_ru():
+    global PINNED_RU_URI,PINNED_RU_META
+    raw=RU_PINNED_XRAY_JSON
+    if not raw and RU_PINNED_XRAY_JSON_B64:
+        try:raw=base64.b64decode(RU_PINNED_XRAY_JSON_B64).decode("utf-8")
+        except Exception as e:print("pinned RU b64 decode error",repr(e),flush=True)
+    if raw:
+        try:
+            meta=set_pinned_ru_from_json(raw,True)
+            print("pinned RU loaded from env:",meta.get("address"),meta.get("port"),meta.get("network"),flush=True)
+            return
+        except Exception as e:
+            print("pinned RU env parse error",repr(e),flush=True)
+    uri=_meta_get("pinned_ru_uri","").strip()
+    if uri:
+        PINNED_RU_URI=uri
+        try:PINNED_RU_META=json.loads(_meta_get("pinned_ru_meta","{}") or "{}")
+        except Exception:PINNED_RU_META={}
+        _refresh_node_ips()
+        print("pinned RU restored from database:",PINNED_RU_META.get("address","?"),flush=True)
+
+def pinned_ru_health(timeout=3.0):
+    meta=PINNED_RU_META or {}
+    host=str(meta.get("address") or "").strip()
+    port=int(meta.get("port") or 0)
+    if not PINNED_RU_URI or not host or not port:
+        return {"configured":False,"online":False}
+    started=time.monotonic()
+    try:
+        with socket.create_connection((host,port),timeout=timeout):pass
+        return {"configured":True,"online":True,"latency_ms":int((time.monotonic()-started)*1000),
+                "address":host,"port":port,"network":meta.get("network",""),"security":meta.get("security","")}
+    except Exception:
+        return {"configured":True,"online":False,"latency_ms":None,
+                "address":host,"port":port,"network":meta.get("network",""),"security":meta.get("security","")}
+
+load_pinned_ru()
+
 def api(method, payload=None, timeout=70):
     if not TOKEN: raise RuntimeError("BOT_TOKEN is not set")
     data=json.dumps(payload or {}).encode()
