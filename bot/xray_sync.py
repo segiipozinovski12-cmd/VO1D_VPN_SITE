@@ -8,6 +8,7 @@ XRAY_BIN=os.getenv("XRAY_BIN","/usr/local/bin/xray")
 INBOUND_TAG=os.getenv("XRAY_INBOUND_TAG","")
 FLOW=os.getenv("XRAY_FLOW","xtls-rprx-vision")
 INTERVAL=max(15,int(os.getenv("XRAY_SYNC_INTERVAL","60")))
+PRESERVE_UNMANAGED=os.getenv("XRAY_PRESERVE_UNMANAGED","1").strip().lower() in ("1","true","yes","on")
 
 def fetch_clients():
     if not API_URL or not SYNC_SECRET:
@@ -56,13 +57,20 @@ def apply_clients(rows):
     settings=inbound.setdefault("settings",{})
     wanted=desired_clients(rows)
     current=settings.get("clients") or []
+    unmanaged=[]
+    if PRESERVE_UNMANAGED:
+        unmanaged=[
+            dict(x) for x in current
+            if not str(x.get("email","")).startswith("vo1d_")
+        ]
+    merged=unmanaged+wanted
     cur_key=[(x.get("id"),x.get("email"),x.get("flow")) for x in current]
-    new_key=[(x.get("id"),x.get("email"),x.get("flow")) for x in wanted]
+    new_key=[(x.get("id"),x.get("email"),x.get("flow")) for x in merged]
     if cur_key==new_key:return False
 
     backup=CONFIG_PATH+".vo1d-backup"
     shutil.copy2(CONFIG_PATH,backup)
-    settings["clients"]=wanted
+    settings["clients"]=merged
     directory=os.path.dirname(CONFIG_PATH) or "."
     fd,tmp=tempfile.mkstemp(prefix=".vo1d-xray-",suffix=".json",dir=directory)
     try:
