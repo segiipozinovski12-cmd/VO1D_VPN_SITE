@@ -1,8 +1,9 @@
-import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress, uuid, socket, shutil, glob
+import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress, uuid, socket, shutil, glob, base64
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from community_nodes import COMMUNITY_POOL, community_worker
+from pinned_ru import build_pinned_ru_uri
 
 TOKEN=os.getenv("BOT_TOKEN","").strip()
 ADMIN_ID=int(os.getenv("ADMIN_ID","8632158680"))
@@ -20,6 +21,8 @@ TRIAL_HOURS=int(os.getenv("TRIAL_HOURS","24"))
 PORT=int(os.getenv("PORT","8080"))
 VPN_NODES=[x.strip() for x in os.getenv("VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
 RU_VPN_NODES=[x.strip() for x in os.getenv("RU_VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
+RU_PINNED_XRAY_JSON=os.getenv("RU_PINNED_XRAY_JSON","").strip()
+RU_PINNED_XRAY_JSON_B64=os.getenv("RU_PINNED_XRAY_JSON_B64","").strip()
 BOT_USERNAME=os.getenv("BOT_USERNAME","VO1D_VPNbot").lstrip("@")
 DEVICE_LIMIT=max(1,int(os.getenv("DEVICE_LIMIT","3")))
 REFERRAL_REWARD_CENTS=max(0,int(os.getenv("REFERRAL_REWARD_CENTS","100")))
