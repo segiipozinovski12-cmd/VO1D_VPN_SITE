@@ -341,8 +341,10 @@ function setLoadingError(message='Не удалось получить данн�
   if(chip)chip.textContent='reconnect needed';
 }
 
-function renderPlans(plans){
+function renderPlans(plans,infra={}){
   const box=$('#plansList');if(!box)return;
+  const regions=Math.max(0,Number(infra?.servers?.total_countries||0));
+  const regionLabel=regions?(`${regions} ${regions===1?'REGION':'REGIONS'}`):'VO1D NETWORK';
   box.innerHTML=(plans||[]).map((p,i)=>`
     <article class="plan reveal ${i===1?'popular':''}">
       <div class="plan-top">
@@ -350,7 +352,7 @@ function renderPlans(plans){
         <div class="plan-price"><b>${p.stars} ⭐</b><small>${p.usd}</small></div>
       </div>
       ${i===1?'<div class="plan-badge">POPULAR</div>':''}
-      <div class="plan-meta"><span>${p.days} DAYS</span><span>VLESS + REALITY</span><span>LONDON</span></div>
+      <div class="plan-meta"><span>${p.days} DAYS</span><span>VLESS + REALITY</span><span>${regionLabel}</span></div>
       <button class="primary-btn buy-stars" data-days="${p.days}">КУПИТЬ ЗА ${p.stars} ⭐</button>
     </article>`).join('');
   $$('.buy-stars').forEach(b=>b.addEventListener('click',()=>buyStars(Number(b.dataset.days),b)));
@@ -424,8 +426,24 @@ function render(me){
   $('#copySub').disabled=!s.subscription_url;
   $('#trialCard').classList.toggle('used',!!s.trial_claimed);
 
-  renderServers(infra.servers||{});
-  renderPlans(me.plans||[]);
+  const network=infra.servers||{};
+  const countries=Math.max(0,Number(network.total_countries||0));
+  $('#networkLocation').textContent=countries>1?`${countries} REGIONS`:(countries===1?'1 REGION':'VO1D CORE');
+  $('#networkSecurity').textContent=infra.protocol?.includes('REALITY')?'REALITY':safeText(infra.protocol,'VLESS');
+  $('#networkFlow').textContent='VISION';
+  $('#networkTransport').textContent=safeText(infra.transport,'TCP / 443');
+
+  const manual=me.manual_payment||{};
+  const manualHint=$('#manualPayHint'),manualBtn=$('#supportPayBtn');
+  if(manualHint){
+    manualHint.textContent=manual.open
+      ?`Прямая оплата доступна до ${String(manual.end_hour).padStart(2,'0')}:00 · +${manual.bonus_days||0} дней к подписке.`
+      :`Прямая оплата: ${String(manual.start_hour??9).padStart(2,'0')}:00–${String(manual.end_hour??20).padStart(2,'0')}:00. Telegram Stars работают 24/7.`;
+  }
+  if(manualBtn)manualBtn.textContent=manual.open?'ОПЛАТА НАПРЯМУЮ · BONUS ↗':'ОТКРЫТЬ ОПЛАТУ В БОТЕ ↗';
+
+  renderServers(network);
+  renderPlans(me.plans||[],infra);
 }
 
 async function loadMe(manual=false){
@@ -512,20 +530,13 @@ async function measurePing(){
   out.textContent=ms+' ms';
 }
 
-function animateScore(target){
+function renderRouteRing(verified){
   const text=$('#privacyScore'),ring=$('#scoreRing');
   if(!text||!ring)return;
-  const start=performance.now(),duration=950;
-  const from=Number((text.textContent||'0').replace(',','.'))||0;
-  function frame(now){
-    const p=Math.min(1,(now-start)/duration);
-    const e=1-Math.pow(1-p,4);
-    const value=from+(target-from)*e;
-    text.textContent=value.toFixed(2).replace('.',',');
-    ring.style.background=`conic-gradient(#f4f4f0 ${value}%,rgba(255,255,255,.07) 0)`;
-    if(p<1)requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
+  text.textContent=verified?'ON':'OFF';
+  ring.style.background=verified
+    ?'conic-gradient(#f4f4f0 100%,rgba(255,255,255,.07) 0)'
+    :'conic-gradient(#f4f4f0 0%,rgba(255,255,255,.07) 0)';
 }
 
 async function runPrivacyTest(manual=true){
@@ -543,7 +554,7 @@ async function runPrivacyTest(manual=true){
     $('#routeCheck').textContent=result.vo1d_route?'CONFIRMED':'NOT DETECTED';
     $('#privacyLevel').textContent=result.level||'CHECKED';
     $('#privacyBadge').textContent=result.vo1d_route?'VO1D ROUTE':'DIRECT ROUTE';
-    animateScore(Number(result.score||0));
+    renderRouteRing(!!result.vo1d_route);
     if(manual){
       try{tg?.HapticFeedback?.notificationOccurred?.(result.vo1d_route?'success':'warning')}catch(e){}
       notify(result.vo1d_route?'VO1D МАРШРУТ ПОДТВЕРЖДЁН':'IP УЗЛА VO1D НЕ ОБНАРУЖЕН');
@@ -553,6 +564,7 @@ async function runPrivacyTest(manual=true){
     $('#routeCheck').textContent='ERROR';
     $('#privacyLevel').textContent='НЕТ ДАННЫХ';
     $('#privacyBadge').textContent='ERROR';
+    renderRouteRing(false);
     if(manual)notify('НЕ УДАЛОСЬ ПРОВЕРИТЬ IP');
   }finally{
     setTimeout(()=>card.classList.remove('testing'),260);
@@ -601,9 +613,10 @@ async function copySubscription(){
   }
 }
 
-function openTelegramUser(username){
-  const url='https://t.me/'+username.replace('@','');
-  if(tg?.openTelegramLink)tg.openTelegramLink(url);else location.href=url;
+function openTelegramUrl(url){
+  const target=String(url||'').trim();
+  if(!target)return;
+  if(tg?.openTelegramLink)tg.openTelegramLink(target);else location.href=target;
 }
 
 function bindPressEffects(){
@@ -635,9 +648,9 @@ $('#refreshBtn')?.addEventListener('click',async()=>{
   await loadMe();setTimeout(()=>b.style.transform='',250);notify('ДАННЫЕ ОБНОВЛЕНЫ');
 });
 $('#pingCard')?.addEventListener('click',()=>{haptic('light');measurePing()});
-$('#supportBtn')?.addEventListener('click',()=>openTelegramUser('vo1d_root'));
-$('#supportPayBtn')?.addEventListener('click',()=>openTelegramUser('vo1d_root'));
-$('#openBotBtn')?.addEventListener('click',()=>openTelegramUser('VO1D_VPNbot'));
+$('#supportBtn')?.addEventListener('click',()=>openTelegramUrl(state.me?.links?.support||'https://t.me/vo1d_root'));
+$('#supportPayBtn')?.addEventListener('click',()=>openTelegramUrl(state.me?.links?.payment||state.me?.links?.bot||'https://t.me/VO1D_VPNbot?start=plans'));
+$('#openBotBtn')?.addEventListener('click',()=>openTelegramUrl(state.me?.links?.bot||'https://t.me/VO1D_VPNbot'));
 $('#createPromoBtn')?.addEventListener('click',createAdminPromo);
 $('#grantBtn')?.addEventListener('click',adminGrant);
 

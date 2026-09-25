@@ -18,6 +18,11 @@ Deploy this folder as a second Railway service.
    TRIAL_HOURS=24
    DB_PATH=/data/vo1d.db
    VPN_NODES=<one permitted VPN config URI per line>
+   MANUAL_PAYMENT_TIMEZONE=Europe/Moscow
+   MANUAL_PAYMENT_START_HOUR=9
+   MANUAL_PAYMENT_END_HOUR=20
+   MANUAL_PAYMENT_BONUS_DAYS=7
+   MANUAL_PAYMENT_TTL_HOURS=24
 
 4. Add a Railway Volume mounted at /data so users/subscriptions survive redeploys.
 5. Generate a public domain for this bot service, then put that full HTTPS URL into PUBLIC_URL.
@@ -54,3 +59,13 @@ Variables:
 - COMMUNITY_FORCE_COUNTRIES=RU
 
 The main /sub/<token> feed always places configured VPN_NODES first, then the surviving country nodes. Node labels are rewritten as `VO1D · CC · NN`.
+
+
+## Payment behavior
+
+- Telegram Stars work 24/7.
+- Direct card/crypto requests are shown only during the configured manual-payment window.
+- A direct subscription request created inside that window stores its bonus in the payment record, so confirming it later with `/paid PAYMENT_ID` keeps the promised bonus.
+- Pending manual requests expire automatically after `MANUAL_PAYMENT_TTL_HOURS`.
+- Auto-renewal uses the user's internal VO1D balance and runs when less than 24 hours remain.
+

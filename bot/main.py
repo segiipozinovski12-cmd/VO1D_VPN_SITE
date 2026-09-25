@@ -1,5 +1,6 @@
 import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress, uuid, socket, shutil, glob, base64
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from community_nodes import COMMUNITY_POOL, community_worker
@@ -24,10 +25,20 @@ RU_VPN_NODES=[x.strip() for x in os.getenv("RU_VPN_NODES","").replace("\\n","\n"
 RU_PINNED_XRAY_JSON=os.getenv("RU_PINNED_XRAY_JSON","").strip()
 RU_PINNED_XRAY_JSON_B64=os.getenv("RU_PINNED_XRAY_JSON_B64","").strip()
 BOT_USERNAME=os.getenv("BOT_USERNAME","VO1D_VPNbot").lstrip("@")
-DEVICE_LIMIT=max(1,int(os.getenv("DEVICE_LIMIT","3")))
 REFERRAL_REWARD_CENTS=max(0,int(os.getenv("REFERRAL_REWARD_CENTS","100")))
 PER_USER_KEYS=os.getenv("PER_USER_KEYS","0").strip().lower() in ("1","true","yes","on")
 XRAY_SYNC_SECRET=os.getenv("XRAY_SYNC_SECRET","").strip()
+
+MANUAL_PAYMENT_TIMEZONE=os.getenv("MANUAL_PAYMENT_TIMEZONE","Europe/Moscow").strip() or "Europe/Moscow"
+MANUAL_PAYMENT_START_HOUR=max(0,min(23,int(os.getenv("MANUAL_PAYMENT_START_HOUR","9"))))
+MANUAL_PAYMENT_END_HOUR=max(1,min(24,int(os.getenv("MANUAL_PAYMENT_END_HOUR","20"))))
+MANUAL_PAYMENT_BONUS_DAYS=max(0,min(90,int(os.getenv("MANUAL_PAYMENT_BONUS_DAYS","7"))))
+MANUAL_PAYMENT_TTL_HOURS=max(1,min(168,int(os.getenv("MANUAL_PAYMENT_TTL_HOURS","24"))))
+try:
+    MANUAL_PAYMENT_ZONE=ZoneInfo(MANUAL_PAYMENT_TIMEZONE)
+except Exception:
+    MANUAL_PAYMENT_TIMEZONE="UTC"
+    MANUAL_PAYMENT_ZONE=timezone.utc
 
 mount=os.getenv("RAILWAY_VOLUME_MOUNT_PATH","").strip()
 DB_PATH=os.getenv("DB_PATH",(mount.rstrip("/")+"/vo1d.db") if mount else "vo1d.db")
@@ -63,6 +74,30 @@ def dt(ts):
     return datetime.fromtimestamp(ts,timezone.utc).strftime("%d.%m.%Y %H:%M UTC") if ts else "—"
 def money(c): return "$"+f"{c/100:.2f}"
 def esc(s): return html.escape(str(s or ""))
+
+def manual_payment_status(ts=None):
+    local=datetime.fromtimestamp(int(ts or now()),MANUAL_PAYMENT_ZONE)
+    hour=local.hour
+    start=MANUAL_PAYMENT_START_HOUR
+    end=MANUAL_PAYMENT_END_HOUR
+    if start<end:
+        opened=start<=hour<end
+    else:
+        opened=hour>=start or hour<end
+    return {
+      "open":opened,
+      "bonus_days":MANUAL_PAYMENT_BONUS_DAYS if opened else 0,
+      "start_hour":start,
+      "end_hour":end,
+      "timezone":MANUAL_PAYMENT_TIMEZONE,
+      "local_time":local.strftime("%H:%M"),
+    }
+
+def manual_bonus_from_reference(reference):
+    raw=str(reference or "")
+    if not raw.startswith("manual_bonus:"):return 0
+    try:return max(0,min(90,int(raw.split(":",1)[1])))
+    except Exception:return 0
 
 def valid_topup_cents(cents):
     try:cents=int(cents)
@@ -247,7 +282,6 @@ def init_db():
         ensure_column(c,"users","notifications","INTEGER NOT NULL DEFAULT 1")
         ensure_column(c,"users","welcome_done","INTEGER NOT NULL DEFAULT 0")
         ensure_column(c,"payments","reference","TEXT NOT NULL DEFAULT ''")
-        c.execute("UPDATE users SET auto_renew=0")
         rows=c.execute("SELECT id FROM users WHERE vpn_uuid='' OR vpn_uuid IS NULL").fetchall()
         for r in rows:
             c.execute("UPDATE users SET vpn_uuid=? WHERE id=?",(str(uuid.uuid4()),r["id"]))
@@ -461,9 +495,11 @@ def webapp_user_payload(tg_user,row):
         {"days":days,"title":p["title"],"stars":p["stars"],"usd":money(p["usd"])}
         for days,p in PLANS.items()
       ],
+      "manual_payment":manual_payment_status(),
       "links":{
         "support":SUPPORT_URL,
-        "bot":"https://t.me/VO1D_VPNbot",
+        "bot":"https://t.me/"+BOT_USERNAME,
+        "payment":"https://t.me/"+BOT_USERNAME+"?start=plans",
         "channel":CHANNEL_URL,
         "site":SITE_URL,
       }
@@ -736,20 +772,6 @@ def probe_node(index,timeout=2.5):
         return True,int((time.monotonic()-started)*1000)
     except Exception:return False,None
 
-def servers_screen(uid):
-    r=get_user(uid); preferred=int(r["preferred_node"] or 0)
-    kb=[]
-    for i,node in enumerate(VPN_NODES):
-        with NODE_STATUS_LOCK: st=NODE_STATUS.get(i,{})
-        online=st.get("online")
-        icon="🟢" if online is True else ("🔴" if online is False else "⚪")
-        chosen="✓ " if i==preferred else ""
-        kb.append([button(f"{chosen}{icon} {node_name(i,node)}",f"server:{i}")])
-    kb.append([button("◀️ Ещё","more")])
-    send(uid,
-      "<b>🌐 Серверы VO1D</b>\n\nВыбранный сервер ставится первым в подписке Happ. "
-      "Статус проверяется реальным TCP-соединением.",kb)
-
 def diagnostics(uid):
     r=get_user(uid); idx=0
     online,lat=probe_node(idx)
@@ -767,28 +789,6 @@ def diagnostics(uid):
     if MINI_APP_URL:kb.append([button("🔎 Проверить внешний IP",web_app=MINI_APP_URL)])
     kb.append([button("◀️ Ещё","more")])
     send(uid,text,kb)
-
-def devices_screen(uid):
-    with db() as c:rows=c.execute("SELECT * FROM devices WHERE user_id=? ORDER BY id",(uid,)).fetchall()
-    kb=[]
-    for r in rows:kb.append([button(f"📱 {r['name']} · удалить",f"device_del:{r['id']}")])
-    if len(rows)<DEVICE_LIMIT:kb.append([button("➕ Добавить устройство","device_add")])
-    kb.append([button("◀️ Ещё","more")])
-    text=f"<b>📱 Мои устройства</b>\n\nДобавлено: <b>{len(rows)}/{DEVICE_LIMIT}</b>."
-    if not PER_USER_KEYS:text+="\n\nСейчас список используется для управления аккаунтом; жёсткое отключение отдельных устройств включится после синхронизации персональных ключей с Xray."
-    send(uid,text,kb)
-
-def add_device(uid,name):
-    name=" ".join(str(name or "").strip().split())[:32]
-    if len(name)<2:return False,"Название слишком короткое."
-    with db() as c:
-        count=c.execute("SELECT COUNT(*) n FROM devices WHERE user_id=?",(uid,)).fetchone()["n"]
-        if count>=DEVICE_LIMIT:return False,f"Лимит устройств: {DEVICE_LIMIT}."
-        try:
-            c.execute("INSERT INTO devices(user_id,name,vpn_uuid,created_at) VALUES(?,?,?,?)",
-                      (uid,name,str(uuid.uuid4()),now()))
-        except sqlite3.IntegrityError:return False,"Устройство с таким названием уже есть."
-    return True,"Устройство добавлено."
 
 def reset_access(uid):
     token=secrets.token_urlsafe(24); new_uuid=str(uuid.uuid4())
@@ -821,7 +821,7 @@ def more_menu(uid):
       [button("🕘 История подписки","sub_history")],
     ]
     kb += [
-      [button("🔔 Уведомления: "+("ON" if r["notifications"] else "OFF"),"notifications")],
+      [button("♻️ Автопродление","autorenew"),button("🔔 Уведомления: "+("ON" if r["notifications"] else "OFF"),"notifications")],
       [button("🔐 Сбросить доступ","reset_access")],
       [button("◀️ Меню","menu")]
     ]
@@ -877,21 +877,6 @@ def gift_code_payment(uid,days):
       [[button(f"💰 С баланса · {money(p['usd'])}",f"gcodepay:{days}:balance")],
        [button(f"⭐ Telegram Stars · {p['stars']} ⭐",f"gcodepay:{days}:stars")],
        [button("◀️ Подарки","gifts")]])
-
-def welcome_screen(uid,step=1):
-    if step==1:
-        return send(uid,
-          "<b>VO1D_VPN // WELCOME</b>\n\nVO1D выдаёт персональную subscription-ссылку для Happ и управляет сроком доступа из Telegram.",
-          [[button("ДАЛЬШЕ →","welcome:2")]])
-    if step==2:
-        return send(uid,
-          "<b>02 // БЫСТРЫЙ СТАРТ</b>\n\nАктивируй пробный доступ, добавь ссылку в Happ и затем проверь внешний IP в Mini App.",
-          [[button("ДАЛЬШЕ →","welcome:3")]])
-    with db() as c:c.execute("UPDATE users SET welcome_done=1 WHERE id=?",(uid,))
-    send(uid,
-      "<b>03 // ГОТОВО</b>\n\nБаланс, серверы, подарки, промокоды и диагностика находятся в разделе «Ещё».",
-      [[button("🎁 Пробный доступ","activate_trial")],[button("⚫ Открыть VO1D",web_app=MINI_APP_URL)] if MINI_APP_URL else [button("⚙️ Открыть меню","menu")],
-       [button("⚙️ Меню","menu")]])
 
 def main_kb(uid):
     rows=[]
@@ -977,16 +962,20 @@ def topup_methods(uid,cents):
         return send(uid,"Некорректная сумма пополнения.",[[button("↩️ Ввести другую сумму","topup")]])
     stars=topup_stars(cents)
     clear_pending(uid)
+    manual=manual_payment_status()
+    kb=[[button(f"⭐ Оплатить {stars} Stars",f"topup_pay:{cents}:stars")]]
+    if manual["open"]:
+        kb.append([button("₿ Криптовалюта",f"topup_pay:{cents}:crypto"),button("💳 Карта",f"topup_pay:{cents}:card")])
+    kb += [[button("✍️ Другая сумма","topup")],[button("◀️ Баланс","balance")]]
+    manual_note=(f"\nПрямая оплата доступна сейчас до <b>{manual['end_hour']:02d}:00</b>."
+                 if manual["open"] else
+                 f"\nПрямая оплата доступна <b>{manual['start_hour']:02d}:00–{manual['end_hour']:02d}:00</b> ({esc(manual['timezone'])}).")
     send(uid,
       f"<b>Пополнение баланса</b>\n\n"
       f"На баланс: <b>{money(cents)}</b>\n"
       f"Итог через Telegram Stars: <b>{stars} ⭐</b>\n"
-      f"Карта / криптовалюта: <b>{money(cents)}</b>\n\n"
-      "Выбери способ оплаты:",
-      [[button(f"⭐ Оплатить {stars} Stars",f"topup_pay:{cents}:stars")],
-       [button("₿ Криптовалюта",f"topup_pay:{cents}:crypto"),button("💳 Карта",f"topup_pay:{cents}:card")],
-       [button("✍️ Другая сумма","topup")],
-       [button("◀️ Баланс","balance")]])
+      f"{manual_note}\n\n"
+      "Выбери способ оплаты:",kb)
 
 def plans(uid):
     kb=[]
@@ -1002,14 +991,23 @@ def plans(uid):
 def payment_methods(uid,days):
     p=PLANS.get(days)
     if not p:return
+    manual=manual_payment_status()
+    kb=[
+      [button(f"💰 С баланса · {money(p['usd'])}",f"pay:{days}:balance")],
+      [button("⭐ Telegram Stars · 24/7",f"pay:{days}:stars")],
+    ]
+    if manual["open"]:
+        bonus=f" +{manual['bonus_days']} дн." if manual["bonus_days"] else ""
+        kb.append([button("₿ Криптовалюта"+bonus,f"pay:{days}:crypto"),button("💳 Карта"+bonus,f"pay:{days}:card")])
+        note=(f"\n🔥 Прямая оплата сейчас доступна до <b>{manual['end_hour']:02d}:00</b>. "
+              f"При подтверждении заявки: <b>+{manual['bonus_days']} дней</b> к тарифу." if manual["bonus_days"] else "")
+    else:
+        note=(f"\nПрямая оплата администратору доступна <b>{manual['start_hour']:02d}:00–{manual['end_hour']:02d}:00</b> "
+              f"({esc(manual['timezone'])}). Автоматическая оплата Stars работает 24/7.")
     send(uid,
       f"<b>{p['title']}</b>\nЦена: <b>{money(p['usd'])}</b> или <b>{p['stars']} ⭐</b>\n\n"
-      f"Баланс: <b>{money(get_user(uid)['balance_cents'])}</b>\n\n"
-      "Выбери способ оплаты:",
-      [[button(f"💰 С баланса · {money(p['usd'])}",f"pay:{days}:balance")],
-       [button("⭐ Telegram Stars",f"pay:{days}:stars")],
-       [button("₿ Криптовалюта",f"pay:{days}:crypto"),button("💳 Банковская карта",f"pay:{days}:card")],
-       [button("◀️ Назад","plans")]])
+      f"Баланс: <b>{money(get_user(uid)['balance_cents'])}</b>{note}\n\n"
+      "Выбери способ оплаты:",kb+[[button("◀️ Назад","plans")]])
 
 def record_payment(uid,method,days=0,amount_stars=0,amount_cents=0,status="pending",charge="",reference=""):
     with db() as c:
@@ -1112,6 +1110,11 @@ def topup_star_invoice(uid,cents):
 def manual_topup(uid,cents,method):
     cents=int(cents)
     if not valid_topup_cents(cents):return
+    if not manual_payment_status()["open"]:
+        return send(uid,
+          f"Прямая оплата сейчас закрыта. Доступна с <b>{MANUAL_PAYMENT_START_HOUR:02d}:00</b> до <b>{MANUAL_PAYMENT_END_HOUR:02d}:00</b> "
+          f"({esc(MANUAL_PAYMENT_TIMEZONE)}). Telegram Stars работают 24/7.",
+          [[button("⭐ Оплатить Stars",f"topup_pay:{cents}:stars")],[button("◀️ Баланс","balance")]])
     method_name="topup_crypto" if method=="crypto" else "topup_card"
     pid=record_payment(uid,method_name,0,0,cents,"pending","")
     label="криптовалютой" if method=="crypto" else "банковской картой"
@@ -1128,19 +1131,29 @@ def manual_topup(uid,cents,method):
       f"Подтвердить: <code>/paid {pid}</code>")
 
 def manual_payment(uid,days,method):
-    pid=make_payment(uid,method,days)
+    window=manual_payment_status()
+    if not window["open"]:
+        return send(uid,
+          f"Прямая оплата доступна <b>{window['start_hour']:02d}:00–{window['end_hour']:02d}:00</b> "
+          f"({esc(window['timezone'])}).\nАвтоматическая оплата Telegram Stars работает 24/7.",
+          [[button("⭐ Telegram Stars",f"pay:{days}:stars")],[button("◀️ Тарифы","plans")]])
+    bonus=int(window["bonus_days"])
+    pid=make_payment(uid,method,days,reference=f"manual_bonus:{bonus}")
     p=PLANS[days]
     label="криптовалютой" if method=="crypto" else "банковской картой"
-    draft=f"VO1D_VPN | Заявка #{pid}\nХочу купить {p['title']} ({days} дней) {label}.\nTelegram ID: {uid}\nЦена: {money(p['usd'])}"
+    bonus_text=f" + {bonus} бонусных дней" if bonus else ""
+    draft=f"VO1D_VPN | Заявка #{pid}\nХочу купить {p['title']} ({days} дней){bonus_text} {label}.\nTelegram ID: {uid}\nЦена: {money(p['usd'])}"
     url=f"https://t.me/{ADMIN_USERNAME}?text="+urllib.parse.quote(draft)
     send(uid,
       f"<b>Заявка #{pid} создана</b>\n\n"
-      f"Тариф: {p['title']}\nЦена: {money(p['usd'])}\nСпособ: {label}\n\n"
-      "Нажми кнопку ниже — сообщение администратору уже подготовлено.",
+      f"Тариф: {p['title']}\nЦена: {money(p['usd'])}\nСпособ: {label}\n"
+      f"{('Бонус: <b>+'+str(bonus)+' дней</b>\n') if bonus else ''}\n"
+      "Бонус закреплён за этой заявкой. Нажми кнопку ниже — сообщение администратору уже подготовлено.",
       [[button("💬 Открыть @"+ADMIN_USERNAME,url=url)],[button("◀️ Меню","menu")]])
     send(ADMIN_ID,
       f"<b>💳 Новая заявка #{pid}</b>\nUser: <code>{uid}</code>\n"
       f"Тариф: {p['title']}\nМетод: {label}\nЦена: {money(p['usd'])}\n"
+      f"{('Бонус: +'+str(bonus)+' дней\n') if bonus else ''}"
       f"Подтвердить: <code>/paid {pid}</code>")
 
 def fulfill_manual_payment(pid):
@@ -1155,13 +1168,17 @@ def fulfill_manual_payment(pid):
         if not u:return {"status":"user_missing"}
         paid_at=now()
         if int(p["plan_days"])>0:
-            days=int(p["plan_days"])
-            end=max(now(),int(u["sub_until"]))+days*86400
+            base_days=int(p["plan_days"])
+            bonus_days=manual_bonus_from_reference(p["reference"])
+            total_days=base_days+bonus_days
+            end=max(now(),int(u["sub_until"]))+total_days*86400
             c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,p["user_id"]))
             c.execute("UPDATE payments SET status='paid',paid_at=? WHERE id=?",(paid_at,pid))
+            source=f"manual:{p['method']}" + (f":bonus{bonus_days}" if bonus_days else "")
             c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
-                      (p["user_id"],days,f"manual:{p['method']}",paid_at,end))
-            return {"status":"ok","kind":"subscription","user_id":int(p["user_id"]),"days":days,"end":end}
+                      (p["user_id"],total_days,source,paid_at,end))
+            return {"status":"ok","kind":"subscription","user_id":int(p["user_id"]),
+                    "days":total_days,"base_days":base_days,"bonus_days":bonus_days,"end":end}
         cents=int(p["amount_usd_cents"])
         new_balance=int(u["balance_cents"])+cents
         c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,p["user_id"]))
@@ -1250,7 +1267,10 @@ def admin_payments():
     with db() as c: rows=c.execute("SELECT * FROM payments ORDER BY id DESC LIMIT 15").fetchall()
     text="<b>💳 Последние оплаты</b>\n\n"
     for r in rows:
-        text+=f"#{r['id']} · <code>{r['user_id']}</code> · {r['method']} · {r['plan_days']}d · {r['status']}\n"
+        bonus=manual_bonus_from_reference(r["reference"])
+        duration=(f"{r['plan_days']}d"+(f"+{bonus}" if bonus else "")) if int(r["plan_days"]) else "balance"
+        amount=money(r["amount_usd_cents"]) if int(r["amount_usd_cents"]) else (f"{r['amount_stars']}⭐" if int(r["amount_stars"]) else "—")
+        text+=f"#{r['id']} · <code>{r['user_id']}</code> · {esc(r['method'])} · {duration} · {amount} · <b>{esc(r['status'])}</b>\n"
     text+="\nПодтвердить manual: <code>/paid PAYMENT_ID</code>"
     send(ADMIN_ID,text)
 
@@ -1272,11 +1292,14 @@ def handle_command(uid,text):
     parts=text.strip().split(maxsplit=2); cmd=parts[0].split("@")[0].lower()
     if cmd=="/start":
         all_parts=text.strip().split(maxsplit=1)
-        if len(all_parts)>1 and all_parts[1].startswith("ref_"):
-            try:assign_referrer(uid,int(all_parts[1][4:]))
+        start_arg=all_parts[1].strip() if len(all_parts)>1 else ""
+        if start_arg.startswith("ref_"):
+            try:assign_referrer(uid,int(start_arg[4:]))
             except Exception:pass
         r=get_user(uid)
         if r and r["banned"]: return send(uid,"⛔ Доступ к VO1D_VPN заблокирован.",[[button("🛟 Поддержка",url=SUPPORT_URL)]])
+        if start_arg=="plans" and (not CHANNEL_ID or is_member(uid)):
+            return plans(uid)
         return start_screen(uid,r["first_name"] if r else "")
     if cmd=="/admin" and uid==ADMIN_ID:return admin_panel()
     if cmd=="/stats" and uid==ADMIN_ID:return admin_panel()
@@ -1344,8 +1367,10 @@ def handle_command(uid,text):
             target=result["user_id"]
             if result["kind"]=="subscription":
                 notify_referral_reward(target)
-                send(uid,f"✅ Заявка #{pid} подтверждена. Доступ до {dt(result['end'])}.")
-                send(target,f"✅ <b>Оплата подтверждена.</b>\nНачислено {result['days']} дней.\nАктивно до {dt(result['end'])}.",main_kb(target))
+                bonus=int(result.get("bonus_days",0))
+                bonus_note=f" (+{bonus} бонусных)" if bonus else ""
+                send(uid,f"✅ Заявка #{pid} подтверждена. Начислено {result['days']} дней{bonus_note}. Доступ до {dt(result['end'])}.")
+                send(target,f"✅ <b>Оплата подтверждена.</b>\nНачислено {result['days']} дней{bonus_note}.\nАктивно до {dt(result['end'])}.",main_kb(target))
             else:
                 send(uid,f"✅ Пополнение #{pid} подтверждено. Баланс пользователя: <b>{money(result['balance'])}</b>.")
                 send(target,f"✅ <b>Баланс пополнен на {money(result['cents'])}.</b>\nТеперь на балансе: <b>{money(result['balance'])}</b>.",main_kb(target))
@@ -1373,6 +1398,17 @@ def handle_callback(q):
     if data=="sub_history":return subscription_history(uid)
     if data=="promo":return promo_prompt(uid)
     if data=="referral":return referral_screen(uid)
+    if data=="autorenew":return auto_renew_screen(uid)
+    if data=="autorenew:toggle":
+        with db() as cc:cc.execute("UPDATE users SET auto_renew=CASE auto_renew WHEN 1 THEN 0 ELSE 1 END WHERE id=?",(uid,))
+        return auto_renew_screen(uid)
+    if data.startswith("autorenew:"):
+        try:
+            days=int(data.split(":",1)[1])
+            if days in PLANS:
+                with db() as cc:cc.execute("UPDATE users SET auto_renew_days=? WHERE id=?",(days,uid))
+                return auto_renew_screen(uid)
+        except Exception:return
     if data=="diagnostics":return diagnostics(uid)
     if data=="gifts":return gifts_screen(uid)
     if data=="gift_direct":return gift_plan_menu(uid,"giftplan")
@@ -1772,9 +1808,9 @@ def personalize_node(node,row):
     if not PER_USER_KEYS or not row or not row["vpn_uuid"]:return node
     try:
         scheme,rest=node.split("://",1)
-        if "@" not in rest:return node
+        if scheme.lower()!="vless" or "@" not in rest:return node
         rest=rest.split("@",1)[1]
-        return f"{scheme}://{row['vpn_uuid']}@{rest}"
+        return f"vless://{row['vpn_uuid']}@{rest}"
     except Exception:return node
 
 def subscription_nodes(row):
@@ -1871,6 +1907,17 @@ def xray_clients_payload():
       ]
     }
 
+def database_healthy():
+    try:
+        conn=sqlite3.connect(DB_PATH,timeout=1)
+        try:
+            row=conn.execute("SELECT 1").fetchone()
+            return bool(row and row[0]==1)
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
 class Web(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
 
@@ -1879,6 +1926,7 @@ class Web(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options","nosniff")
         self.send_header("Referrer-Policy","no-referrer")
         self.send_header("X-Frame-Options","SAMEORIGIN")
+        self.send_header("Permissions-Policy","camera=(), microphone=(), geolocation=()")
 
     def reply_bytes(self,code,data,ctype="application/octet-stream",cache="no-store",extra=None):
         self.send_response(code)
@@ -1963,11 +2011,16 @@ class Web(BaseHTTPRequestHandler):
         return tg_user,row
 
     def request_ip(self):
+        # Prefer a proxy-provided single client-IP header. For X-Forwarded-For,
+        # use the right-most address because public reverse proxies append the
+        # address they actually connected from; this avoids trusting a client-
+        # supplied first value.
         candidates=[]
-        for key in ("CF-Connecting-IP","X-Real-IP","X-Forwarded-For"):
-            raw=self.headers.get(key,"")
-            if raw:
-                candidates.extend(x.strip() for x in raw.split(",") if x.strip())
+        for key in ("CF-Connecting-IP","X-Real-IP"):
+            raw=self.headers.get(key,"").strip()
+            if raw:candidates.append(raw)
+        forwarded=[x.strip() for x in self.headers.get("X-Forwarded-For","").split(",") if x.strip()]
+        if forwarded:candidates.append(forwarded[-1])
         if self.client_address and self.client_address[0]:
             candidates.append(self.client_address[0])
         valid=[]
@@ -1980,8 +2033,7 @@ class Web(BaseHTTPRequestHandler):
                 ip=ipaddress.ip_address(candidate)
                 text=str(ip)
                 valid.append(text)
-                if ip.is_global:
-                    return text
+                if ip.is_global:return text
             except Exception:
                 continue
         return valid[0] if valid else ""
@@ -2026,7 +2078,8 @@ class Web(BaseHTTPRequestHandler):
         path=parsed.path
 
         if path=="/health":
-            return self.reply_json(200,{"ok":True,"service":"VO1D_VPNbot","mini_app":bool(MINI_APP_URL),"db":DB_PATH,"per_user_keys":PER_USER_KEYS})
+            healthy=database_healthy()
+            return self.reply_json(200 if healthy else 503,{"ok":healthy,"service":"VO1D_VPNbot","database":"ok" if healthy else "error"})
 
         if path=="/api/ping":
             return self.reply_json(200,{"ok":True,"time":now(),"service":"VO1D_VPN"})
@@ -2060,23 +2113,14 @@ class Web(BaseHTTPRequestHandler):
             tg_user,row=auth
             observed=self.request_ip()
             route_match=bool(observed and observed in VO1D_NODE_IPS)
-            if route_match:
-                score=98.70
-                level="VO1D PROTECTED"
-            elif observed:
-                score=41.80
-                level="ROUTE NOT VERIFIED"
-            else:
-                score=0.0
-                level="IP UNAVAILABLE"
+            level=("VO1D ROUTE" if route_match else ("DIRECT / UNKNOWN" if observed else "IP UNAVAILABLE"))
             return self.reply_json(200,{
               "ok":True,
               "ip":observed,
               "vo1d_route":route_match,
-              "score":score,
               "level":level,
               "measurement":"route_indicator",
-              "note":"Score confirms whether this request is seen from a configured VO1D node; it is not a complete anonymity audit."
+              "note":"This only checks whether the request is seen from a configured VO1D node; it is not a complete anonymity audit."
             })
 
         if path=="/internal/xray/clients":
@@ -2096,13 +2140,15 @@ class Web(BaseHTTPRequestHandler):
             if r["sub_until"]<=now():return self.reply(403,"subscription expired")
             if not subscription_nodes(r):return self.reply(503,"VPN nodes are not ready")
             body=[]
-            if SITE_URL:body.append("#profile-web-page-url: "+SITE_URL)
+            body.append("#profile-web-page-url: https://t.me/"+BOT_USERNAME)
             body.append("#announce: VO1D_VPN active until "+dt(r["sub_until"]))
             body.extend(subscription_nodes(r))
             return self.reply(200,"\n".join(body)+"\n","text/plain; charset=utf-8",
               {"Content-Disposition":'inline; filename="vo1d-sub.txt"'})
 
-        return self.reply(200,"VO1D_VPNbot is online\n")
+        if path=="/":
+            return self.reply(200,"VO1D_VPNbot is online\n")
+        return self.reply_json(404,{"ok":False,"error":"not_found"})
 
     def do_POST(self):
         parsed=urllib.parse.urlparse(self.path)
@@ -2242,20 +2288,49 @@ def refresh_node_statuses(notify_changes=True):
         if notify_changes and previous is not None and previous.get("online")!=online:
             transitions.append((i,online,lat))
     for i,online,lat in transitions:
-        with db() as c:
-            users=c.execute("""SELECT id FROM users
-              WHERE banned=0 AND notifications=1 AND sub_until>? AND preferred_node=?""",(now(),i)).fetchall()
         status="снова доступен ✅" if online else "временно недоступен ⚠️"
         latency=f" · {lat} ms" if lat is not None else ""
-        for u in users:
-            try:
-                send(u["id"],f"<b>🌐 {esc(node_name(i))}</b> {status}{latency}")
-                time.sleep(.03)
-            except Exception:pass
+        try:
+            send(ADMIN_ID,f"<b>🌐 {esc(node_name(i))}</b> {status}{latency}")
+        except Exception:pass
+
+def expire_stale_payments():
+    cutoff=now()-MANUAL_PAYMENT_TTL_HOURS*3600
+    with db() as c:
+        c.execute("""UPDATE payments SET status='expired'
+          WHERE status='pending' AND method IN ('crypto','card','topup_crypto','topup_card') AND created_at<?""",(cutoff,))
+
+def process_auto_renewals():
+    horizon=now()+86400
+    with db() as c:
+        rows=c.execute("""SELECT id,sub_until,auto_renew_days FROM users
+          WHERE banned=0 AND auto_renew=1 AND sub_until>? AND sub_until<=?""",(now(),horizon)).fetchall()
+    for row in rows:
+        uid=int(row["id"])
+        days=int(row["auto_renew_days"] or 30)
+        if days not in PLANS:days=30
+        old_end=int(row["sub_until"])
+        result,status=buy_with_balance(uid,days)
+        if status=="ok":
+            notify_referral_reward(uid)
+            send_once(uid,f"autorenew:ok:{old_end}:{days}",
+              f"♻️ <b>Подписка продлена автоматически.</b>\n"
+              f"Тариф: <b>{PLANS[days]['title']}</b> · {money(PLANS[days]['usd'])}\n"
+              f"Новый срок: <b>{dt(result['end'])}</b>.")
+        elif status=="insufficient":
+            missing=max(0,int(PLANS[days]["usd"])-int(result or 0))
+            send_once(uid,f"autorenew:low:{old_end}:{days}",
+              f"⚠️ <b>Не хватает средств для автопродления.</b>\n"
+              f"Нужно ещё <b>{money(missing)}</b>. Подписка активна до {dt(old_end)}.",
+              [[button("➕ Пополнить баланс","topup")],[button("♻️ Автопродление","autorenew")]])
 
 def maintenance_once():
-    try:refresh_node_statuses(False)
+    try:refresh_node_statuses(True)
     except Exception as e:print("node probe error",repr(e),flush=True)
+    try:expire_stale_payments()
+    except Exception as e:print("payment expiry error",repr(e),flush=True)
+    try:process_auto_renewals()
+    except Exception as e:print("auto renew error",repr(e),flush=True)
     with db() as c:
         users=c.execute("""SELECT * FROM users
           WHERE banned=0 AND notifications=1 AND sub_until>?""",(now(),)).fetchall()

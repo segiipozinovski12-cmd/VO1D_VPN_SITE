@@ -97,11 +97,11 @@
             <div class="score-ring" id="scoreRing">
               <div class="score-inner">
                 <strong id="privacyScore">—</strong>
-                <small>%</small>
+                <small>ROUTE</small>
               </div>
             </div>
             <span id="privacyLevel" class="privacy-level">НЕ ПРОВЕРЕНО</span>
-            <p>Уровень приватности</p>
+            <p>Проверка маршрута</p>
           </div>
 
           <div class="test-info">
@@ -115,7 +115,7 @@
               <div><span>HTTPS</span><b>ACTIVE</b></div>
             </div>
             <button id="runPrivacyTest" class="primary-btn scan-btn"><span>ПРОВЕРИТЬ IP И ЗАЩИТУ</span><i>↗</i></button>
-            <p class="test-note">Оценка показывает, видит ли сервис твой запрос с IP узла VO1D. Это индикатор маршрута, а не абсолютная гарантия анонимности.</p>
+            <p class="test-note">Проверка показывает, видит ли сервис запрос с IP узла VO1D. Это индикатор маршрута, а не полная проверка всех возможных утечек.</p>
           </div>
         </section>
 
@@ -124,7 +124,7 @@
           <div class="route-line"><i class="packet p1"></i><i class="packet p2"></i><i class="packet p3"></i></div>
           <div class="route-node"><span>01</span><b>YOU</b><small>Telegram</small></div>
           <div class="route-node"><span>02</span><b>HAPP</b><small>client</small></div>
-          <div class="route-node"><span>03</span><b>VO1D</b><small>London</small></div>
+          <div class="route-node"><span>03</span><b>VO1D</b><small>core node</small></div>
           <div class="route-node"><span>04</span><b>NET</b><small>destination</small></div>
         </div>
 
@@ -146,10 +146,10 @@
         </div>
 
         <div class="access-details reveal">
-          <div><span>LOCATION</span><b>LONDON / UK</b></div>
-          <div><span>SECURITY</span><b>REALITY</b></div>
-          <div><span>FLOW</span><b>VISION</b></div>
-          <div><span>PORT</span><b>443/TCP</b></div>
+          <div><span>NETWORK</span><b id="networkLocation">VO1D CORE</b></div>
+          <div><span>SECURITY</span><b id="networkSecurity">REALITY</b></div>
+          <div><span>FLOW</span><b id="networkFlow">VISION</b></div>
+          <div><span>TRANSPORT</span><b id="networkTransport">TCP / 443</b></div>
         </div>
 
         <div class="server-panel reveal">
@@ -173,8 +173,8 @@
         <div id="plansList" class="plans-list"></div>
         <div class="manual-card reveal">
           <span>ДРУГОЙ СПОСОБ ОПЛАТЫ</span>
-          <p>Карта или криптовалюта остаются доступны через администратора в Telegram.</p>
-          <button id="supportPayBtn" class="ghost-btn">НАПИСАТЬ В ПОДДЕРЖКУ ↗</button>
+          <p id="manualPayHint">Прямая оплата доступна в боте в установленное время. Telegram Stars работают 24/7.</p>
+          <button id="supportPayBtn" class="ghost-btn">ОТКРЫТЬ ОПЛАТУ В БОТЕ ↗</button>
         </div>
       </section>
 
@@ -273,6 +273,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="/app/app.js?v=14"></script>
+  <script src="/app/app.js?v=16"></script>
 </body>
 </html>
