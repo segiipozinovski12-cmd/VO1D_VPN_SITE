@@ -181,7 +181,7 @@ async function runPrivacyTest(manual=true){
   $('#privacyBadge').textContent='SCANNING';
   $('#observedIp').textContent='определяем…';
   $('#routeCheck').textContent='CHECKING';
-  if(manual){haptic('medium');btn.disabled=true}
+  if(manual){state.busy=true;haptic('medium');btn.disabled=true}
   try{
     const result=await api('/api/privacy-test');
     state.privacy=result;
