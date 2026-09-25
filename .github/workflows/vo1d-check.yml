@@ -75,5 +75,6 @@ jobs:
       - name: RU VPN end-to-end probe
         env:
           XRAY_BIN: /tmp/xray/xray
-          RU_E2E_MAX: "16"
+          RU_E2E_MAX: "24"
+          RU_E2E_SOURCE: https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt
         run: python bot/test_ru_e2e.py
