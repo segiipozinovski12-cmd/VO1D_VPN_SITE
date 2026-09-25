@@ -17,7 +17,35 @@ jobs:
           node-version: "22"
 
       - name: Check Python
-        run: python -m py_compile bot/main.py bot/xray_sync.py bot/community_nodes.py bot/test_ru_e2e.py
+        run: python -m py_compile bot/main.py bot/xray_sync.py bot/community_nodes.py bot/test_ru_e2e.py bot/pinned_ru.py
+
+      - name: Pinned RU parser test
+        run: |
+          PYTHONPATH=bot python - <<'PY'
+          import json, urllib.parse
+          from pinned_ru import build_pinned_ru_uri
+          cfg={
+            "outbounds":[{
+              "protocol":"vless","tag":"proxy",
+              "settings":{"vnext":[{"address":"203.0.113.10","port":443,
+                "users":[{"id":"00000000-0000-4000-8000-000000000001","encryption":"none","flow":""}]}]},
+              "streamSettings":{
+                "network":"xhttp","security":"reality",
+                "realitySettings":{"fingerprint":"chrome","publicKey":"PUBKEY","serverName":"example.com","shortId":"abcd1234"},
+                "xhttpSettings":{"path":"/xhttp-proxy","mode":"auto","host":"",
+                  "extra":{"noSSEHeader":True,"scMaxEachPostBytes":1000000}}
+              }
+            }]
+          }
+          uri,meta=build_pinned_ru_uri(json.dumps(cfg))
+          assert uri.startswith("vless://00000000-0000-4000-8000-000000000001@203.0.113.10:443?")
+          q=urllib.parse.parse_qs(urllib.parse.urlsplit(uri).query)
+          assert q["type"]==["xhttp"] and q["security"]==["reality"]
+          assert q["path"]==["/xhttp-proxy"] and q["mode"]==["auto"]
+          assert json.loads(q["extra"][0])["noSSEHeader"] is True
+          assert meta["address"]=="203.0.113.10" and meta["has_extra"] is True
+          print("Pinned RU parser OK")
+          PY
 
       - name: Check JavaScript syntax
         run: |
