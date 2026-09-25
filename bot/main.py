@@ -645,6 +645,18 @@ def web_thread():
 def run():
     if not TOKEN: raise SystemExit("Set BOT_TOKEN in Railway Variables")
     threading.Thread(target=web_thread,daemon=True).start()
+    if MINI_APP_URL:
+        try:
+            api("setChatMenuButton",{
+              "menu_button":{
+                "type":"web_app",
+                "text":"Открыть VO1D",
+                "web_app":{"url":MINI_APP_URL}
+              }
+            },20)
+            print("VO1D Mini App menu:",MINI_APP_URL,flush=True)
+        except Exception as e:
+            print("mini app menu error",repr(e),flush=True)
     print("VO1D_VPNbot started; db:",DB_PATH,"web port:",PORT,flush=True)
     offset=0
     while True:
