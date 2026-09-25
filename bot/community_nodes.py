@@ -71,6 +71,14 @@ class CommunityPool:
         self.per_country=max(1,min(5,int(os.getenv("COMMUNITY_PER_COUNTRY","2"))))
         self.candidate_limit=max(self.per_country,min(40,int(os.getenv("COMMUNITY_CANDIDATE_LIMIT","18"))))
         self.refresh_seconds=max(300,int(os.getenv("COMMUNITY_REFRESH_SECONDS","900")))
+        raw_excluded=os.getenv(
+            "COMMUNITY_EXCLUDE",
+            "PL:01,PL:02,FR:01,US:01,JP:01,JP:02,DE:01,DE:02"
+        )
+        self.excluded={
+            x.strip().upper().replace("-",":")
+            for x in raw_excluded.split(",") if x.strip()
+        }
         self._lock=threading.Lock()
         self._nodes={}
         self._updated_at=0
@@ -114,10 +122,13 @@ class CommunityPool:
         with ThreadPoolExecutor(max_workers=workers) as ex:
             alive=list(ex.map(_tcp_alive,unique))
         selected=[u for u,ok in zip(unique,alive) if ok][:self.per_country]
-        return [
-            _rename(uri,f"VO1D Community · {cc} · {idx:02d}")
-            for idx,uri in enumerate(selected,1)
-        ]
+        out=[]
+        for idx,uri in enumerate(selected,1):
+            slot=f"{cc}:{idx:02d}"
+            if slot in self.excluded:
+                continue
+            out.append(_rename(uri,f"VO1D · {cc} · {idx:02d}"))
+        return out
 
     def refresh(self):
         if not self.enabled:return self.snapshot()
