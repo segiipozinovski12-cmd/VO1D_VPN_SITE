@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#050505">
   <title>VO1D_VPN</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="/app/style.css?v=4">
+  <link rel="stylesheet" href="/app/style.css?v=5">
 </head>
 <body>
   <div class="ambient" aria-hidden="true">
@@ -15,11 +15,31 @@
   <div class="noise" aria-hidden="true"></div>
 
   <div id="boot" class="boot">
+    <div class="boot-bg" aria-hidden="true">
+      <i class="boot-grid"></i>
+      <i class="boot-beam"></i>
+      <i class="boot-vignette"></i>
+    </div>
     <div class="boot-wrap">
-      <div class="boot-mark">VO1D</div>
-      <div class="boot-sub">SECURE ACCESS LAYER</div>
-      <div class="boot-track"><i id="bootFill"></i></div>
+      <div class="boot-kicker"><span></span> VO1D SECURE SYSTEM <span></span></div>
+      <div class="boot-core" aria-hidden="true">
+        <i class="boot-ring r1"></i>
+        <i class="boot-ring r2"></i>
+        <i class="boot-ring r3"></i>
+        <i class="boot-orbit-dot d1"></i>
+        <i class="boot-orbit-dot d2"></i>
+        <div class="boot-core-center">V</div>
+      </div>
+      <div class="boot-mark"><span>VO1D</span><b>_VPN</b></div>
+      <div class="boot-sub">PRIVATE NETWORK INTERFACE</div>
+      <div class="boot-statuses" aria-hidden="true">
+        <span id="bootS1"><i></i> TELEGRAM SESSION</span>
+        <span id="bootS2"><i></i> SECURE CHANNEL</span>
+        <span id="bootS3"><i></i> ACCESS CORE</span>
+      </div>
+      <div class="boot-track"><i id="bootFill"></i><b id="bootPulse"></b></div>
       <div class="boot-row"><span id="bootText">INITIALIZING</span><span id="bootPct">00%</span></div>
+      <div class="boot-foot">ENCRYPTED SESSION // NO EXTERNAL UI</div>
     </div>
   </div>
 
@@ -203,6 +223,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="/app/app.js?v=4"></script>
+  <script src="/app/app.js?v=5"></script>
 </body>
 </html>
