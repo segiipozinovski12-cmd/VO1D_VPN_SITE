@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: "22"
       - name: Check Python
-        run: python -m py_compile bot/main.py bot/xray_sync.py
+        run: python -m py_compile bot/main.py bot/xray_sync.py bot/community_nodes.py
       - name: Check JavaScript syntax
         run: |
           node --check bot/webapp/app.js
@@ -29,12 +29,22 @@ jobs:
           js=Path("bot/webapp/app.js").read_text()
           html=Path("bot/webapp/index.html").read_text()
           banned=[
-              "$('[data-tab]').forEach",
-              "$('.reveal').forEach",
+              r"(?<!\$)\$\('\[data-tab\]'\)\.forEach",
+              r"(?<!\$)\$\('\.reveal'\)\.forEach",
           ]
-          bad=[x for x in banned if x in js]
+          bad=[p for p in banned if re.search(p,js)]
           if bad:
-              raise SystemExit("Known fatal selector regression: "+", ".join(bad))
+              raise SystemExit("Known fatal selector regression")
+          if js.count("async function api(")!=1:
+              raise SystemExit("Mini App API helper duplicated or missing")
+          if "function fmtMoney(cents){return '          ids=sorted(set(re.findall(r"\$\('#([A-Za-z0-9_-]+)'\)",js)))
+          missing=[x for x in ids if not re.search(rf'id=[\"\']{re.escape(x)}[\"\']',html)]
+          if missing:
+              raise SystemExit("JS references missing DOM ids: "+", ".join(missing))
+          print(f"Mini App DOM check OK ({len(ids)} selectors)")
+          PY
++" not in js:
+              raise SystemExit("Mini App money formatter corrupted")
           ids=sorted(set(re.findall(r"\$\('#([A-Za-z0-9_-]+)'\)",js)))
           missing=[x for x in ids if not re.search(rf'id=[\"\']{re.escape(x)}[\"\']',html)]
           if missing:
