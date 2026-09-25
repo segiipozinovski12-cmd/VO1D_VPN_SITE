@@ -1645,7 +1645,7 @@ class Web(BaseHTTPRequestHandler):
 
         if path=="/internal/xray/clients":
             query=urllib.parse.parse_qs(parsed.query)
-            supplied=(query.get("token") or [""])[0]
+            supplied=self.headers.get("X-VO1D-Sync-Token","") or (query.get("token") or [""])[0]
             if not XRAY_SYNC_SECRET or not hmac.compare_digest(str(supplied),XRAY_SYNC_SECRET):
                 return self.reply_json(403,{"ok":False,"error":"forbidden"})
             return self.reply_json(200,xray_clients_payload())
