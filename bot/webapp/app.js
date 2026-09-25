@@ -313,7 +313,7 @@ function render(me){
   $('#accountId').textContent=safeText(u.id);
   $('#balance').textContent=fmtMoney(u.balance_cents);
   $('#accountUntil').textContent=s.until_text||'—';
-  $('#trialState').textContent=s.trial_claimed?'USED':'AVAILABLE';
+  $('#trialState').textContent=s.trial_claimed?'CLAIMED':'AVAILABLE';
 
   $('#nodeStatus').classList.toggle('active',!!infra.node_configured);
   $('#nodeStatus').innerHTML=`<i></i>${infra.node_configured?'NODE READY':'NODE OFFLINE'}`;
