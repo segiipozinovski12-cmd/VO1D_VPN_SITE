@@ -82,6 +82,88 @@ def api(method, payload=None, timeout=70):
     if not out.get("ok"): raise RuntimeError(out)
     return out.get("result")
 
+def validate_webapp_init_data(init_data,max_age=86400):
+    if not init_data:
+        raise ValueError("Telegram initData is missing")
+    pairs=urllib.parse.parse_qsl(init_data,keep_blank_values=True)
+    params=dict(pairs)
+    received_hash=params.pop("hash",None)
+    if not received_hash:
+        raise ValueError("Telegram hash is missing")
+    check="\n".join(f"{k}={v}" for k,v in sorted(params.items()))
+    secret=hmac.new(b"WebAppData",TOKEN.encode(),hashlib.sha256).digest()
+    calculated=hmac.new(secret,check.encode(),hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(calculated,received_hash):
+        raise ValueError("Telegram signature is invalid")
+    auth_date=int(params.get("auth_date","0") or 0)
+    if not auth_date or abs(now()-auth_date)>max_age:
+        raise ValueError("Telegram session is expired")
+    try:
+        user=json.loads(params.get("user","{}"))
+    except Exception:
+        user={}
+    if not user.get("id"):
+        raise ValueError("Telegram user is missing")
+    return user
+
+def webapp_user_payload(tg_user,row):
+    is_active=active(row)
+    seconds=max(0,int(row["sub_until"])-now()) if row else 0
+    days=seconds//86400
+    hours=(seconds%86400)//3600
+    remaining_short=(f"{days}d" if days else f"{hours}h") if seconds else "0"
+    sub_url=(f"{PUBLIC_URL}/sub/{row['sub_token']}" if is_active and PUBLIC_URL else "")
+    return {
+      "ok":True,
+      "user":{
+        "id":int(row["id"]),
+        "username":tg_user.get("username") or row["username"] or "",
+        "first_name":tg_user.get("first_name") or row["first_name"] or "",
+        "last_name":tg_user.get("last_name") or "",
+        "photo_url":tg_user.get("photo_url") or "",
+        "balance_cents":int(row["balance_cents"]),
+      },
+      "subscription":{
+        "active":is_active,
+        "banned":bool(row["banned"]),
+        "trial_claimed":bool(row["trial_claimed"]),
+        "until":int(row["sub_until"]),
+        "until_text":dt(row["sub_until"]),
+        "remaining_short":remaining_short,
+        "remaining_long":remaining(row["sub_until"]),
+        "subscription_url":sub_url,
+      },
+      "infrastructure":{
+        "node_configured":bool(VPN_NODES),
+        "nodes":len(VPN_NODES),
+        "location":"London",
+        "protocol":"VLESS + REALITY",
+        "transport":"TCP / 443",
+      },
+      "plans":[
+        {"days":days,"title":p["title"],"stars":p["stars"],"usd":money(p["usd"])}
+        for days,p in PLANS.items()
+      ],
+      "links":{
+        "support":SUPPORT_URL,
+        "bot":"https://t.me/VO1D_VPNbot",
+        "channel":CHANNEL_URL,
+        "site":SITE_URL,
+      }
+    }
+
+def create_star_invoice_link(uid,days):
+    p=PLANS[days]
+    payload=f"sub:{uid}:{days}:{secrets.token_hex(6)}"
+    return api("createInvoiceLink",{
+      "title":f"VO1D_VPN — {p['title']}",
+      "description":f"Доступ VO1D_VPN на {days} дней",
+      "payload":payload,
+      "provider_token":"",
+      "currency":"XTR",
+      "prices":[{"label":p["title"],"amount":p["stars"]}],
+    },30)
+
 def send(chat_id,text,kb=None,disable_preview=True):
     p={"chat_id":chat_id,"text":text,"parse_mode":"HTML",
        "disable_web_page_preview":disable_preview}
@@ -92,10 +174,11 @@ def answer_cb(cid,text="",alert=False):
     try: api("answerCallbackQuery",{"callback_query_id":cid,"text":text,"show_alert":alert},20)
     except Exception: pass
 
-def button(text,cb=None,url=None):
+def button(text,cb=None,url=None,web_app=None):
     b={"text":text}
     if cb: b["callback_data"]=cb
     if url: b["url"]=url
+    if web_app: b["web_app"]={"url":web_app}
     return b
 
 def upsert_user(u):
@@ -132,7 +215,10 @@ def add_days(uid,days):
         return end
 
 def main_kb(uid):
-    rows=[
+    rows=[]
+    if MINI_APP_URL:
+        rows.append([button("⚫ Открыть VO1D Mini App",web_app=MINI_APP_URL)])
+    rows += [
       [button("👤 Профиль","profile"),button("💎 Подписка","plans")],
       [button("⚡ Подключить","connect"),button("💰 Купить время","plans")],
       [button("📖 Инструкция","guide"),button("🛟 Поддержка",url=SUPPORT_URL)],
