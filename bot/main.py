@@ -298,6 +298,7 @@ def webapp_user_payload(tg_user,row):
         "last_name":tg_user.get("last_name") or "",
         "photo_url":tg_user.get("photo_url") or "",
         "balance_cents":int(row["balance_cents"]),
+        "is_admin":int(row["id"])==ADMIN_ID,
       },
       "subscription":{
         "active":is_active,
@@ -308,6 +309,9 @@ def webapp_user_payload(tg_user,row):
         "remaining_short":remaining_short,
         "remaining_long":remaining(row["sub_until"]),
         "subscription_url":sub_url,
+        "auto_renew":bool(row["auto_renew"]),
+        "auto_renew_days":int(row["auto_renew_days"] or 30),
+        "notifications":bool(row["notifications"]),
       },
       "infrastructure":{
         "node_configured":bool(VPN_NODES),
@@ -1522,6 +1526,15 @@ class Web(BaseHTTPRequestHandler):
             self.reply_json(401,{"ok":False,"error":"telegram_auth_failed","message":"Открой Mini App заново из Telegram."})
             return None
 
+    def auth_admin(self):
+        auth=self.auth_user()
+        if not auth:return None
+        tg_user,row=auth
+        if int(row["id"])!=ADMIN_ID:
+            self.reply_json(403,{"ok":False,"error":"admin_only"})
+            return None
+        return tg_user,row
+
     def request_ip(self):
         candidates=[]
         for key in ("CF-Connecting-IP","X-Real-IP","X-Forwarded-For"):
@@ -1594,6 +1607,17 @@ class Web(BaseHTTPRequestHandler):
             tg_user,row=auth
             return self.reply_json(200,webapp_user_payload(tg_user,row))
 
+        if path=="/api/admin/overview":
+            auth=self.auth_admin()
+            if not auth:return
+            with db() as cc:
+                users=cc.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
+                active_users=cc.execute("SELECT COUNT(*) n FROM users WHERE banned=0 AND sub_until>?",(now(),)).fetchone()["n"]
+                pending=cc.execute("SELECT COUNT(*) n FROM payments WHERE status='pending'").fetchone()["n"]
+                balance_total=cc.execute("SELECT COALESCE(SUM(balance_cents),0) n FROM users").fetchone()["n"]
+                promos=[dict(x) for x in cc.execute("SELECT code,reward_type,reward_value,max_uses,uses,active FROM promo_codes ORDER BY created_at DESC LIMIT 12").fetchall()]
+            return self.reply_json(200,{"ok":True,"users":users,"active":active_users,"pending":pending,"balance_total":balance_total,"promos":promos})
+
         if path=="/api/privacy-test":
             auth=self.auth_user()
             if not auth:return
@@ -1649,16 +1673,61 @@ class Web(BaseHTTPRequestHandler):
         parsed=urllib.parse.urlparse(self.path)
         path=parsed.path
 
-        if path not in ("/api/trial","/api/invoice"):
+        if path not in ("/api/trial","/api/invoice","/api/admin/promo","/api/admin/grant"):
             return self.reply_json(404,{"ok":False,"error":"not_found"})
 
-        auth=self.auth_user()
+        if path.startswith("/api/admin/"):
+            auth=self.auth_admin()
+        else:
+            auth=self.auth_user()
         if not auth:return
         tg_user,row=auth
         uid=int(row["id"])
 
         if row["banned"]:
             return self.reply_json(403,{"ok":False,"error":"blocked","message":"Доступ заблокирован. Обратись в поддержку."})
+
+        if path=="/api/admin/promo":
+            body=self.read_json()
+            code=normalize_code(body.get("code",""))
+            reward_type=str(body.get("reward_type","")).lower()
+            try:max_uses=max(0,int(body.get("max_uses",0)))
+            except:max_uses=0
+            if not code:return self.reply_json(400,{"ok":False,"message":"Укажи код."})
+            if reward_type=="days":
+                try:value=int(body.get("value",0))
+                except:value=0
+                if value<1 or value>3650:return self.reply_json(400,{"ok":False,"message":"Неверное количество дней."})
+            elif reward_type=="balance":
+                value=parse_topup_amount(body.get("value",""))
+                if value is None:return self.reply_json(400,{"ok":False,"message":"Неверная сумма баланса."})
+            else:return self.reply_json(400,{"ok":False,"message":"Награда: days или balance."})
+            with db() as cc:
+                cc.execute("""INSERT INTO promo_codes(code,reward_type,reward_value,max_uses,uses,expires_at,active,created_by,created_at)
+                  VALUES(?,?,?,?,0,0,1,?,?)
+                  ON CONFLICT(code) DO UPDATE SET reward_type=excluded.reward_type,reward_value=excluded.reward_value,
+                  max_uses=excluded.max_uses,active=1,created_by=excluded.created_by""",
+                  (code,reward_type,value,max_uses,uid,now()))
+            return self.reply_json(200,{"ok":True,"code":code})
+
+        if path=="/api/admin/grant":
+            body=self.read_json()
+            try:target=int(body.get("user_id",0))
+            except:target=0
+            kind=str(body.get("kind","days"))
+            if not get_user(target):return self.reply_json(404,{"ok":False,"message":"Пользователь не найден."})
+            if kind=="days":
+                try:value=int(body.get("value",0))
+                except:value=0
+                if value<1 or value>3650:return self.reply_json(400,{"ok":False,"message":"Неверное количество дней."})
+                end=add_days(target,value,"admin_web")
+                return self.reply_json(200,{"ok":True,"message":f"+{value} дней","until":end})
+            if kind=="balance":
+                cents=parse_topup_amount(body.get("value",""))
+                if cents is None:return self.reply_json(400,{"ok":False,"message":"Неверная сумма."})
+                new_balance=change_balance(target,cents,"admin_web",f"admin:{uid}")
+                return self.reply_json(200,{"ok":True,"message":f"+{money(cents)}","balance":new_balance})
+            return self.reply_json(400,{"ok":False,"message":"Неверный тип начисления."})
 
         if path=="/api/trial":
             if CHANNEL_ID and not is_member(uid):
