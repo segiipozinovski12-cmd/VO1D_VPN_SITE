@@ -1300,71 +1300,181 @@ def handle_callback(q):
             if method in ("crypto","card"):return manual_payment(uid,days,method)
         except Exception as e:return send(uid,f"Ошибка оплаты: <code>{esc(e)}</code>")
 
-def successful_payment(msg):
-    sp=msg.get("successful_payment")
-    if not sp:return
-    uid=int(msg["from"]["id"]); payload=sp.get("invoice_payload","")
-    charge=sp.get("telegram_payment_charge_id","")
-    with db() as c:
-        dup=c.execute("SELECT id FROM payments WHERE charge_id=?",(charge,)).fetchone()
-    if dup:return
+def fulfill_stars_payment(msg):
+    sp=msg.get("successful_payment") or {}
+    uid=int(msg["from"]["id"])
+    payload=str(sp.get("invoice_payload",""))
+    charge=str(sp.get("telegram_payment_charge_id","")).strip()
+    currency=str(sp.get("currency",""))
+    total=int(sp.get("total_amount",0) or 0)
+    if not charge or currency!="XTR":
+        return {"status":"invalid","reason":"missing_charge_or_currency"}
+
     try:
         parts=payload.split(":")
         kind=parts[0]
         puid=int(parts[1])
-        if puid!=uid:return
+        if puid!=uid:return {"status":"invalid","reason":"payer_mismatch"}
 
+        target=None;cents=0;days=0
         if kind=="sub":
             days=int(parts[2])
-            if days not in PLANS:return
-            expected=PLANS[days]["stars"]
-            if int(sp.get("total_amount",0))!=expected:return
-            make_payment(uid,"stars",days,"paid",charge)
-            end=add_days(uid,days,"stars")
-            notify_referral_reward(uid)
-            send(uid,f"✅ <b>Оплата Stars получена.</b>\nНачислено {days} дней.\nПодписка до {dt(end)}.",main_kb(uid))
-            send(ADMIN_ID,f"⭐ Stars payment\nUser: <code>{uid}</code>\n{days} дней · {expected} ⭐\nCharge: <code>{esc(charge)}</code>")
-            return
-
-        if kind=="bal":
-            cents=int(parts[2]); expected_stars=int(parts[3])
-            if not valid_topup_cents(cents) or topup_stars(cents)!=expected_stars:return
-            if int(sp.get("total_amount",0))!=expected_stars:return
-            pid=record_payment(uid,"stars_topup",0,expected_stars,cents,"paid",charge)
-            new_balance=change_balance(uid,cents,"stars_topup",f"payment:{pid}")
-            send(uid,
-              f"✅ <b>Баланс пополнен на {money(cents)}.</b>\n"
-              f"Теперь на балансе: <b>{money(new_balance)}</b>.",
-              main_kb(uid))
-            send(ADMIN_ID,
-              f"⭐ Balance top-up\nUser: <code>{uid}</code>\n"
-              f"+{money(cents)} · {expected_stars} ⭐\nCharge: <code>{esc(charge)}</code>")
-            return
-
-        if kind=="gift":
-            target=int(parts[2]); days=int(parts[3])
-            if days not in PLANS or not get_user(target):return
-            expected=PLANS[days]["stars"]
-            if int(sp.get("total_amount",0))!=expected:return
-            record_payment(uid,"gift_stars",days,expected,PLANS[days]["usd"],"paid",charge,f"target:{target}")
-            end=add_days(target,days,f"gift_stars:{uid}")
-            send(uid,f"✅ <b>Подарок отправлен.</b>\nПолучатель: <code>{target}</code>\nСрок: {days} дней.",main_kb(uid))
-            try:send(target,f"🎁 <b>Тебе подарили {days} дней VO1D_VPN.</b>\nДоступ до {dt(end)}.",main_kb(target))
-            except Exception:pass
-            send(ADMIN_ID,f"⭐ Gift payment\nFrom: <code>{uid}</code>\nTo: <code>{target}</code>\n{days} дней · {expected} ⭐")
-            return
-
-        if kind=="gcode":
+            if days not in PLANS:return {"status":"invalid","reason":"bad_plan"}
+            expected=int(PLANS[days]["stars"])
+        elif kind=="bal":
+            cents=int(parts[2]); expected=int(parts[3])
+            if not valid_topup_cents(cents) or topup_stars(cents)!=expected:
+                return {"status":"invalid","reason":"bad_topup"}
+        elif kind=="gift":
+            target=int(parts[2]);days=int(parts[3])
+            if days not in PLANS:return {"status":"invalid","reason":"bad_gift_plan"}
+            expected=int(PLANS[days]["stars"])
+        elif kind=="gcode":
             days=int(parts[2])
-            if days not in PLANS:return
-            expected=PLANS[days]["stars"]
-            if int(sp.get("total_amount",0))!=expected:return
-            record_payment(uid,"giftcode_stars",days,expected,PLANS[days]["usd"],"paid",charge,"giftcode")
-            code=create_gift_code(uid,days)
-            send(uid,f"🎫 <b>Подарочный код готов</b>\n\n<code>{code}</code>\nСрок: <b>{days} дней</b>\nОдноразовый.",[[button("◀️ Подарки","gifts")]])
-            return
+            if days not in PLANS:return {"status":"invalid","reason":"bad_giftcode_plan"}
+            expected=int(PLANS[days]["stars"])
+        else:
+            return {"status":"invalid","reason":"unknown_kind"}
+        if total!=expected:return {"status":"invalid","reason":"amount_mismatch"}
+    except Exception:
+        return {"status":"invalid","reason":"payload_parse"}
+
+    try:
+        with db() as c:
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                c.execute("INSERT INTO payment_receipts(charge_id,user_id,payload,created_at) VALUES(?,?,?,?)",
+                          (charge,uid,payload,now()))
+            except sqlite3.IntegrityError:
+                return {"status":"duplicate"}
+
+            payer=c.execute("SELECT * FROM users WHERE id=?",(uid,)).fetchone()
+            if not payer:
+                raise RuntimeError("payer_missing")
+
+            if kind=="sub":
+                price=int(PLANS[days]["usd"])
+                end=max(now(),int(payer["sub_until"]))+days*86400
+                cur=c.execute("""INSERT INTO payments
+                  (user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id,reference)
+                  VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                  (uid,"stars",days,expected,price,"paid",now(),now(),charge,""))
+                c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,uid))
+                c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                          (uid,days,"stars",now(),end))
+                return {"status":"ok","kind":"sub","days":days,"end":end,"stars":expected,"payment_id":cur.lastrowid}
+
+            if kind=="bal":
+                new_balance=int(payer["balance_cents"])+cents
+                cur=c.execute("""INSERT INTO payments
+                  (user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id,reference)
+                  VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                  (uid,"stars_topup",0,expected,cents,"paid",now(),now(),charge,""))
+                c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,uid))
+                c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
+                          (uid,"stars_topup",cents,f"payment:{cur.lastrowid}",now()))
+                return {"status":"ok","kind":"bal","cents":cents,"balance":new_balance,"stars":expected,"payment_id":cur.lastrowid}
+
+            if kind=="gift":
+                recipient=c.execute("SELECT * FROM users WHERE id=?",(target,)).fetchone()
+                if not recipient:
+                    cur=c.execute("""INSERT INTO payments
+                      (user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id,reference)
+                      VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                      (uid,"gift_stars",days,expected,PLANS[days]["usd"],"review",now(),now(),charge,f"target:{target}"))
+                    return {"status":"review","kind":"gift","target":target,"payment_id":cur.lastrowid}
+                end=max(now(),int(recipient["sub_until"]))+days*86400
+                cur=c.execute("""INSERT INTO payments
+                  (user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id,reference)
+                  VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                  (uid,"gift_stars",days,expected,PLANS[days]["usd"],"paid",now(),now(),charge,f"target:{target}"))
+                c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,target))
+                c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                          (target,days,f"gift_stars:{uid}",now(),end))
+                return {"status":"ok","kind":"gift","target":target,"days":days,"end":end,"stars":expected,"payment_id":cur.lastrowid}
+
+            if kind=="gcode":
+                cur=c.execute("""INSERT INTO payments
+                  (user_id,method,plan_days,amount_stars,amount_usd_cents,status,created_at,paid_at,charge_id,reference)
+                  VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                  (uid,"giftcode_stars",days,expected,PLANS[days]["usd"],"paid",now(),now(),charge,"giftcode"))
+                while True:
+                    code=gift_code_value()
+                    try:
+                        c.execute("INSERT INTO gift_codes(code,days,created_by,created_at) VALUES(?,?,?,?)",
+                                  (code,days,uid,now()))
+                        break
+                    except sqlite3.IntegrityError:
+                        continue
+                return {"status":"ok","kind":"gcode","days":days,"code":code,"stars":expected,"payment_id":cur.lastrowid}
     except Exception as e:
-        print("successful payment parse error",repr(e),flush=True)
+        print("stars fulfillment error",repr(e),flush=True)
+        return {"status":"error","reason":str(e)}
+
+def successful_payment(msg):
+    result=fulfill_stars_payment(msg)
+    status=result.get("status")
+    if status=="duplicate":return
+    uid=int(msg["from"]["id"])
+
+    if status=="review":
+        send(uid,"⚠️ Оплата получена, но подарок требует ручной проверки. Администратор уже уведомлён.",main_kb(uid))
+        send(ADMIN_ID,
+          f"⚠️ <b>Stars payment requires review</b>\n"
+          f"Payment: <code>{result.get('payment_id')}</code>\nUser: <code>{uid}</code>\n"
+          f"Target: <code>{result.get('target')}</code>")
+        return
+
+    if status!="ok":
+        print("successful payment rejected",result,flush=True)
+        try:
+            send(ADMIN_ID,
+              f"⚠️ <b>Stars fulfillment error</b>\nUser: <code>{uid}</code>\n"
+              f"Reason: <code>{esc(result.get('reason','unknown'))}</code>")
+        except Exception:pass
+        return
+
+    kind=result["kind"]
+    if kind=="sub":
+        notify_referral_reward(uid)
+        send(uid,
+          f"✅ <b>Оплата Stars получена.</b>\nНачислено {result['days']} дней.\n"
+          f"Подписка до {dt(result['end'])}.",main_kb(uid))
+        send(ADMIN_ID,
+          f"⭐ Stars payment\nUser: <code>{uid}</code>\n"
+          f"{result['days']} дней · {result['stars']} ⭐\nPayment: <code>{result['payment_id']}</code>")
+        return
+
+    if kind=="bal":
+        send(uid,
+          f"✅ <b>Баланс пополнен на {money(result['cents'])}.</b>\n"
+          f"Теперь на балансе: <b>{money(result['balance'])}</b>.",main_kb(uid))
+        send(ADMIN_ID,
+          f"⭐ Balance top-up\nUser: <code>{uid}</code>\n"
+          f"+{money(result['cents'])} · {result['stars']} ⭐\nPayment: <code>{result['payment_id']}</code>")
+        return
+
+    if kind=="gift":
+        target=result["target"]
+        send(uid,
+          f"✅ <b>Подарок отправлен.</b>\nПолучатель: <code>{target}</code>\n"
+          f"Срок: {result['days']} дней.",main_kb(uid))
+        try:
+            send(target,
+              f"🎁 <b>Тебе подарили {result['days']} дней VO1D_VPN.</b>\n"
+              f"Доступ до {dt(result['end'])}.",main_kb(target))
+        except Exception:pass
+        send(ADMIN_ID,
+          f"⭐ Gift payment\nFrom: <code>{uid}</code>\nTo: <code>{target}</code>\n"
+          f"{result['days']} дней · {result['stars']} ⭐")
+        return
+
+    if kind=="gcode":
+        send(uid,
+          f"🎫 <b>Подарочный код готов</b>\n\n<code>{result['code']}</code>\n"
+          f"Срок: <b>{result['days']} дней</b>\nОдноразовый.",
+          [[button("◀️ Подарки","gifts")]])
+        return
 
 def handle_update(u):
     if "pre_checkout_query" in u:
