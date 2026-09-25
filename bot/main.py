@@ -84,8 +84,14 @@ def set_pending(uid,action,data=""):
           ON CONFLICT(user_id) DO UPDATE SET action=excluded.action,data=excluded.data,created_at=excluded.created_at""",
           (int(uid),str(action),str(data or ""),now()))
 
-def get_pending(uid):
-    with db() as c:return c.execute("SELECT * FROM pending_actions WHERE user_id=?",(int(uid),)).fetchone()
+def get_pending(uid,max_age=1800):
+    uid=int(uid)
+    with db() as c:
+        row=c.execute("SELECT * FROM pending_actions WHERE user_id=?",(uid,)).fetchone()
+        if row and now()-int(row["created_at"])>int(max_age):
+            c.execute("DELETE FROM pending_actions WHERE user_id=?",(uid,))
+            return None
+        return row
 
 def clear_pending(uid):
     with db() as c:c.execute("DELETE FROM pending_actions WHERE user_id=?",(int(uid),))
@@ -143,6 +149,12 @@ def init_db():
           created_at INTEGER NOT NULL,
           paid_at INTEGER NOT NULL DEFAULT 0,
           charge_id TEXT DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS payment_receipts(
+          charge_id TEXT PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          payload TEXT NOT NULL,
+          created_at INTEGER NOT NULL
         );
         CREATE TABLE IF NOT EXISTS balance_transactions(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1458,6 +1470,46 @@ class Web(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def reply_file_range(self,full,ctype="application/octet-stream",cache="public, max-age=3600"):
+        size=os.path.getsize(full)
+        start,end=0,size-1
+        partial=False
+        raw=self.headers.get("Range","").strip()
+        if raw.startswith("bytes="):
+            try:
+                spec=raw[6:].split(",",1)[0].strip()
+                left,right=spec.split("-",1)
+                if left:
+                    start=int(left); end=int(right) if right else size-1
+                elif right:
+                    length=max(1,int(right)); start=max(0,size-length); end=size-1
+                if start<0 or start>=size:
+                    self.send_response(416)
+                    self.send_header("Content-Range",f"bytes */{size}")
+                    self.common_headers("no-store")
+                    self.end_headers()
+                    return
+                end=min(max(start,end),size-1)
+                partial=True
+            except Exception:
+                start,end,partial=0,size-1,False
+        length=end-start+1
+        self.send_response(206 if partial else 200)
+        self.send_header("Content-Type",ctype)
+        self.send_header("Content-Length",str(length))
+        self.send_header("Accept-Ranges","bytes")
+        if partial:self.send_header("Content-Range",f"bytes {start}-{end}/{size}")
+        self.common_headers(cache)
+        self.end_headers()
+        with open(full,"rb") as fh:
+            fh.seek(start)
+            remaining=length
+            while remaining>0:
+                chunk=fh.read(min(256*1024,remaining))
+                if not chunk:break
+                self.wfile.write(chunk)
+                remaining-=len(chunk)
+
     def reply(self,code,body,ctype="text/plain; charset=utf-8",extra=None):
         self.reply_bytes(code,body.encode(),ctype,"no-store",extra)
 
@@ -1536,8 +1588,11 @@ class Web(BaseHTTPRequestHandler):
         else:
             full=os.path.join(WEBAPP_DIR,name)
         try:
-            with open(full,"rb") as f:data=f.read()
             ctype=mimetypes.guess_type(full)[0] or "application/octet-stream"
+            if name=="audio/leaveamsg-slowed.mp3":
+                self.reply_file_range(full,ctype,"public, max-age=3600")
+                return True
+            with open(full,"rb") as f:data=f.read()
             if ctype.startswith("text/") or ctype in ("application/javascript","application/json"):
                 ctype+="; charset=utf-8"
             cache="no-cache" if name=="index.html" else "public, max-age=300"
@@ -1599,8 +1654,7 @@ class Web(BaseHTTPRequestHandler):
             })
 
         if path=="/internal/xray/clients":
-            query=urllib.parse.parse_qs(parsed.query)
-            supplied=self.headers.get("X-VO1D-Sync-Token","") or (query.get("token") or [""])[0]
+            supplied=self.headers.get("X-VO1D-Sync-Token","")
             if not XRAY_SYNC_SECRET or not hmac.compare_digest(str(supplied),XRAY_SYNC_SECRET):
                 return self.reply_json(403,{"ok":False,"error":"forbidden"})
             return self.reply_json(200,xray_clients_payload())
@@ -1720,7 +1774,11 @@ def backup_db(label="auto"):
         path=os.path.join(BACKUP_DIR,f"vo1d-{stamp}-{label}.db")
         src=sqlite3.connect(DB_PATH,timeout=30)
         dst=sqlite3.connect(path)
-        try:src.backup(dst)
+        try:
+            src.backup(dst)
+            check=dst.execute("PRAGMA integrity_check").fetchone()
+            if not check or str(check[0]).lower()!="ok":
+                raise RuntimeError("backup integrity_check failed")
         finally:
             dst.close();src.close()
         backups=sorted(glob.glob(os.path.join(BACKUP_DIR,"vo1d-*.db")),key=os.path.getmtime,reverse=True)
