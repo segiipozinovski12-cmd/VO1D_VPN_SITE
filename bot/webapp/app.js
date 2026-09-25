@@ -181,14 +181,30 @@ telegramInit();
 const boot=$('#boot'),bootFill=$('#bootFill'),bootPct=$('#bootPct'),bootText=$('#bootText'),shell=$('#shell'),
       bootPulse=$('#bootPulse'),bootS1=$('#bootS1'),bootS2=$('#bootS2'),bootS3=$('#bootS3');
 
+let bootVisualDone=false,bootDataReady=false,bootFailed=false;
 function forceShellReady(){
   boot?.classList.add('hide');
   shell?.classList.add('ready');
+  refreshReveal();
 }
-setTimeout(forceShellReady,3200);
+function maybeFinishBoot(force=false){
+  if(!force&&(!bootVisualDone||(!bootDataReady&&!bootFailed)))return;
+  if(bootDataReady)updateBoot(100);
+  boot?.classList.remove('loading');
+  boot?.classList.add(bootDataReady?'complete':'failed');
+  setTimeout(forceShellReady,bootDataReady?320:120);
+}
+setTimeout(()=>{
+  if(!bootDataReady){
+    bootFailed=true;
+    if(bootText)bootText.textContent='CONNECTION TIMEOUT';
+    maybeFinishBoot(true);
+  }
+},9000);
 window.addEventListener('error',e=>{
   console.error('VO1D UI error',e.error||e.message);
-  forceShellReady();
+  bootFailed=true;
+  maybeFinishBoot(true);
 });
 const bootSteps=[
   [0,'INITIALIZING'],
@@ -225,14 +241,15 @@ function bootFrame(now){
   if(raw<1){
     requestAnimationFrame(bootFrame);
   }else{
-    updateBoot(100);
-    boot?.classList.remove('loading');
-    boot?.classList.add('complete');
-    setTimeout(()=>{
-      boot?.classList.add('hide');
-      shell?.classList.add('ready');
-      refreshReveal();
-    },430);
+    bootVisualDone=true;
+    if(bootDataReady){
+      updateBoot(100);
+      if(bootText)bootText.textContent='ACCESS READY';
+    }else{
+      updateBoot(94);
+      if(bootText)bootText.textContent='SYNCING ACCOUNT';
+    }
+    maybeFinishBoot();
   }
 }
 requestAnimationFrame(bootFrame);
@@ -246,11 +263,20 @@ function notify(msg){
 function safeText(v,fallback='—'){return v===null||v===undefined||v===''?fallback:String(v)}
 function fmtMoney(cents){return '$'+(Number(cents||0)/100).toFixed(2)}
 async function api(path,opts={}){
-  const headers={'Content-Type':'application/json','X-Telegram-Init-Data':tg?.initData||'',...(opts.headers||{})};
-  const res=await fetch(path,{...opts,headers,cache:'no-store'});
-  let data={};try{data=await res.json()}catch(e){data={ok:false,error:'bad_response'}}
-  if(!res.ok||data.ok===false){const err=new Error(data.message||data.error||'request_failed');err.data=data;err.status=res.status;throw err}
-  return data;
+  const timeout=Number(opts.timeout||8000);
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeout);
+  const {timeout:_ignored,headers:extraHeaders,...rest}=opts;
+  const headers={'Content-Type':'application/json','X-Telegram-Init-Data':tg?.initData||'',...(extraHeaders||{})};
+  try{
+    const res=await fetch(path,{...rest,headers,cache:'no-store',signal:controller.signal});
+    let data={};try{data=await res.json()}catch(e){data={ok:false,error:'bad_response'}}
+    if(!res.ok||data.ok===false){const err=new Error(data.message||data.error||'request_failed');err.data=data;err.status=res.status;throw err}
+    return data;
+  }catch(e){
+    if(e?.name==='AbortError'){const err=new Error('timeout');err.data={message:'Сервер отвечает слишком долго. Попробуй ещё раз.'};throw err}
+    throw e;
+  }finally{clearTimeout(timer)}
 }
 
 let observer;
@@ -293,11 +319,16 @@ document.addEventListener('click',e=>{
 });
 try{tg?.BackButton?.onClick(()=>switchTab('home'))}catch(e){}
 
-function setLoadingError(){
-  forceShellReady();
+function setLoadingError(message='Не удалось получить данные. Нажми сюда, чтобы повторить.'){
+  bootFailed=true;
+  maybeFinishBoot(true);
   notify('НЕ УДАЛОСЬ ЗАГРУЗИТЬ ДАННЫЕ');
   const hint=$('#heroHint');
-  if(hint)hint.textContent='Не удалось получить данные. Закрой Mini App и открой его снова из бота.';
+  if(hint){
+    hint.textContent=message;
+    hint.classList.add('retry-hint');
+    hint.onclick=()=>loadMe(true);
+  }
   const chip=$('#chipStatus');
   if(chip)chip.textContent='reconnect needed';
 }
@@ -350,15 +381,28 @@ function render(me){
   renderPlans(me.plans||[]);
 }
 
-async function loadMe(){
-  if(!tg?.initData){setLoadingError();return}
+async function loadMe(manual=false){
+  if(state.loadingMe)return;
+  if(!tg?.initData){setLoadingError('Открой Mini App заново из @VO1D_VPNbot.');return}
+  state.loadingMe=true;
+  if(manual){
+    bootFailed=false;
+    notify('ПОВТОРНОЕ ПОДКЛЮЧЕНИЕ…');
+  }
   try{
-    const me=await api('/api/me');
+    const me=await api('/api/me',{timeout:8000});
     render(me);
+    bootDataReady=true;
+    bootFailed=false;
+    const hint=$('#heroHint');
+    if(hint){hint.classList.remove('retry-hint');hint.onclick=null}
+    maybeFinishBoot();
     measurePing();
     setTimeout(()=>runPrivacyTest(false),550);
   }catch(e){
-    console.error(e);setLoadingError();
+    console.error(e);setLoadingError(e.data?.message||'Не удалось получить данные. Нажми сюда, чтобы повторить.');
+  }finally{
+    state.loadingMe=false;
   }
 }
 
@@ -413,7 +457,7 @@ async function measurePing(){
   const values=[];
   for(let i=0;i<3;i++){
     const t=performance.now();
-    try{await fetch('/api/ping?x='+Date.now(),{cache:'no-store'});values.push(performance.now()-t)}catch(e){}
+    try{await api('/api/ping?x='+Date.now(),{timeout:3500});values.push(performance.now()-t)}catch(e){}
   }
   if(!values.length){out.textContent='OFF';return}
   const ms=Math.round(values.reduce((a,b)=>a+b,0)/values.length);
