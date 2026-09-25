@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#050505">
   <title>VO1D_VPN</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="stylesheet" href="/app/style.css?v=5">
+  <link rel="stylesheet" href="/app/style.css?v=7">
 </head>
 <body>
   <div class="ambient" aria-hidden="true">
@@ -181,6 +181,44 @@
           <div class="info-card reveal"><span>TRIAL</span><b id="trialState">—</b></div>
         </div>
         <button id="openBotBtn" class="wide-link reveal">ОТКРЫТЬ ЧАТ С БОТОМ <span>↗</span></button>
+        <button id="adminOpen" class="wide-link reveal" data-tab="admin" hidden>ADMIN CONSOLE <span>↗</span></button>
+      </section>
+
+      <section id="tab-admin" class="tab">
+        <div class="page-head reveal"><span>// ADMIN</span><h1>VO1D<br>CONTROL</h1><p>Закрытая панель администратора. Доступ проверяется сервером через Telegram initData.</p></div>
+
+        <div class="admin-grid">
+          <div class="info-card reveal"><span>USERS</span><b id="adminUsers">—</b></div>
+          <div class="info-card reveal"><span>ACTIVE</span><b id="adminActive">—</b></div>
+          <div class="info-card reveal"><span>PENDING</span><b id="adminPending">—</b></div>
+          <div class="info-card reveal"><span>USER BALANCE</span><b id="adminBalanceTotal">—</b></div>
+        </div>
+
+        <div class="admin-card reveal">
+          <span>// PROMO BUILDER</span>
+          <h2>НОВЫЙ ПРОМОКОД</h2>
+          <div class="admin-form">
+            <input id="promoCodeInput" maxlength="40" placeholder="CODE">
+            <select id="promoTypeInput"><option value="days">ДНИ</option><option value="balance">БАЛАНС</option></select>
+            <input id="promoValueInput" inputmode="decimal" placeholder="НАГРАДА: 7 или 5.00">
+            <input id="promoUsesInput" inputmode="numeric" placeholder="ЛИМИТ, 0 = ∞" value="0">
+          </div>
+          <button id="createPromoBtn" class="primary-btn">СОЗДАТЬ / ОБНОВИТЬ</button>
+          <div id="adminPromos" class="admin-list"></div>
+        </div>
+
+        <div class="admin-card reveal">
+          <span>// MANUAL GRANT</span>
+          <h2>НАЧИСЛЕНИЕ</h2>
+          <div class="admin-form">
+            <input id="grantUserInput" inputmode="numeric" placeholder="TELEGRAM ID">
+            <select id="grantTypeInput"><option value="days">ДНИ</option><option value="balance">БАЛАНС</option></select>
+            <input id="grantValueInput" inputmode="decimal" placeholder="ЗНАЧЕНИЕ">
+          </div>
+          <button id="grantBtn" class="primary-btn">НАЧИСЛИТЬ</button>
+        </div>
+
+        <button class="wide-link reveal" data-tab="account">← НАЗАД В АККАУНТ</button>
       </section>
 
       <section id="tab-help" class="tab">
@@ -223,6 +261,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="/app/app.js?v=6"></script>
+  <script src="/app/app.js?v=7"></script>
 </body>
 </html>
