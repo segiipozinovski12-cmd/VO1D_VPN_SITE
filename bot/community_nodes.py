@@ -1,4 +1,4 @@
-import os, json, time, base64, socket, threading, urllib.request, urllib.parse
+import os, json, time, base64, socket, threading, urllib.request, urllib.parse, ipaddress, html
 from concurrent.futures import ThreadPoolExecutor
 
 SOURCE_TEMPLATE=os.getenv(
@@ -26,6 +26,8 @@ RU_BLOCKED_HOSTS={
     "83.222.26.101",
     "45.12.75.242",
 }
+_GEO_CACHE={}
+_GEO_LOCK=threading.Lock()
 
 def _b64decode_text(value):
     raw="".join(str(value or "").split())
@@ -146,6 +148,28 @@ def _prefer_same_endpoint(items):
     out.extend(hy2.values())
     return out
 
+def _ru_endpoint_verified(host):
+    try:
+        ip=str(ipaddress.ip_address(host))
+    except Exception:
+        return False
+    now_ts=time.time()
+    with _GEO_LOCK:
+        cached=_GEO_CACHE.get(ip)
+        if cached and now_ts-cached[1] < 21600:
+            return cached[0]=="RU"
+    try:
+        url="https://ipwho.is/"+urllib.parse.quote(ip,safe="")+"?fields=success,country_code"
+        req=urllib.request.Request(url,headers={"User-Agent":"VO1D-RU-GeoCheck/1.0"})
+        with urllib.request.urlopen(req,timeout=6) as r:
+            data=json.loads(r.read(4096).decode("utf-8","ignore"))
+        code=str(data.get("country_code") or "").upper() if data.get("success",True) else ""
+    except Exception:
+        code=""
+    with _GEO_LOCK:
+        _GEO_CACHE[ip]=(code,now_ts)
+    return code=="RU"
+
 def _source_latency_ms(uri):
     try:
         frag=urllib.parse.unquote(uri.split("#",1)[1] if "#" in uri else "")
@@ -165,31 +189,20 @@ def _explicit_ru_label(uri):
         return False
 
 def _normalize_uri(uri):
+    # Preserve upstream transport/fingerprint/Reality parameters exactly.
+    # Rewriting raw->tcp or firefox->chrome can make an otherwise valid node fail.
     try:
-        scheme=uri.split("://",1)[0].lower()
-        if scheme!="vless":
+        uri=html.unescape(str(uri or "").strip())
+        if not uri.lower().startswith("vless://"):
             return uri
         p=urllib.parse.urlsplit(uri)
         q=urllib.parse.parse_qsl(p.query,keep_blank_values=True)
-        normalized=[]
-        seen=set()
-        for k,v in q:
-            lk=k.lower()
-            if lk=="type" and str(v).lower()=="raw":
-                v="tcp"
-            if lk=="fp" and str(v).lower() in ("qq","ios","safari","edge","random",""):
-                v="chrome"
-            normalized.append((k,v));seen.add(lk)
-        q=normalized
-        if "encryption" not in seen:
+        if not any(k.lower()=="encryption" for k,_ in q):
             q.append(("encryption","none"))
-        qd={k.lower():v for k,v in q}
-        if qd.get("type","").lower() in ("","tcp") and "headertype" not in seen:
-            q.append(("headerType","none"))
         query=urllib.parse.urlencode(q,doseq=True,safe="-._~")
         return urllib.parse.urlunsplit((p.scheme,p.netloc,p.path,query,p.fragment))
     except Exception:
-        return uri
+        return str(uri or "").strip()
 
 def _rename(uri,label):
     scheme=uri.split("://",1)[0].lower()
@@ -264,17 +277,27 @@ class CommunityPool:
                 ep=_endpoint(uri)
                 if scheme!="vless" or not ep:
                     continue
-                if ep[0] in RU_BLOCKED_HOSTS:
+                host,port=ep
+                if host in RU_BLOCKED_HOSTS:
                     continue
-                if not _explicit_ru_label(uri):
+                # SNI saying "yandex.ru" does NOT prove a Russian exit.
+                # Require the actual server endpoint IP to geolocate to RU.
+                if not _ru_endpoint_verified(host):
                     continue
                 p=urllib.parse.urlsplit(uri)
                 q=urllib.parse.parse_qs(p.query)
                 security=(q.get("security") or [""])[0].lower()
                 transport=(q.get("type") or [""])[0].lower()
-                if security!="reality" or transport not in ("","tcp"):
+                sni=(q.get("sni") or [""])[0].strip()
+                pbk=(q.get("pbk") or [""])[0].strip()
+                if security!="reality" or transport not in ("","tcp","raw"):
                     continue
-                if int(ep[1]) not in (443,8443):
+                if int(port) not in (443,8443):
+                    continue
+                if not sni or not pbk:
+                    continue
+                source_lat=_source_latency_ms(uri)
+                if source_lat is not None and source_lat>450:
                     continue
             key=uri.split("#",1)[0]
             if key in seen:continue
@@ -300,6 +323,15 @@ class CommunityPool:
             ))
             ru_limit=max(self.per_country,min(4,int(os.getenv("COMMUNITY_RU_COUNT","4"))))
             selected=[u for u,_ in measured][:ru_limit]
+            summary=[]
+            for u in selected:
+                ep=_endpoint(u)
+                summary.append({
+                    "endpoint":f"{ep[0]}:{ep[1]}" if ep else "?",
+                    "source_ms":_source_latency_ms(u),
+                    "tcp_ms":next((lat for node,lat in measured if node==u),None),
+                })
+            print("RU selected:",json.dumps(summary,ensure_ascii=False),flush=True)
         else:
             measured.sort(key=lambda pair:pair[1])
             selected=[u for u,_ in measured][:self.per_country]
