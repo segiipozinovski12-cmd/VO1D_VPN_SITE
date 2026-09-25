@@ -276,8 +276,9 @@ function switchTab(name){
     tg?.HapticFeedback?.selectionChanged?.();
   }catch(e){}
   refreshReveal();
+  if(name==='admin')loadAdmin();
 }
-$$('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
+$('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
 try{tg?.BackButton?.onClick(()=>switchTab('home'))}catch(e){}
 
 function setLoadingError(){
@@ -314,6 +315,7 @@ function render(me){
   $('#balance').textContent=fmtMoney(u.balance_cents);
   $('#accountUntil').textContent=s.until_text||'—';
   $('#trialState').textContent=s.trial_claimed?'CLAIMED':'AVAILABLE';
+  if($('#adminOpen'))$('#adminOpen').hidden=!u.is_admin;
 
   $('#nodeStatus').classList.toggle('active',!!infra.node_configured);
   $('#nodeStatus').innerHTML=`<i></i>${infra.node_configured?'NODE READY':'NODE OFFLINE'}`;
@@ -342,6 +344,51 @@ async function loadMe(){
   }catch(e){
     console.error(e);setLoadingError();
   }
+}
+
+async function loadAdmin(){
+  if(!state.me?.user?.is_admin)return;
+  try{
+    const d=await api('/api/admin/overview');
+    $('#adminUsers').textContent=safeText(d.users);
+    $('#adminActive').textContent=safeText(d.active);
+    $('#adminPending').textContent=safeText(d.pending);
+    $('#adminBalanceTotal').textContent=fmtMoney(d.balance_total);
+    const box=$('#adminPromos');
+    if(box)box.innerHTML=(d.promos||[]).map(p=>{
+      const reward=p.reward_type==='days'?'+'+p.reward_value+' DAYS':'+'+fmtMoney(p.reward_value);
+      const limit=Number(p.max_uses||0)?p.max_uses:'∞';
+      return `<div><b>${p.code}</b><small>${reward} · ${p.uses}/${limit} · ${p.active?'ON':'OFF'}</small></div>`;
+    }).join('')||'<div><b>NO PROMOS</b><small>—</small></div>';
+    refreshReveal();
+  }catch(e){notify(e.data?.message||'ADMIN LOAD ERROR')}
+}
+
+async function createAdminPromo(){
+  const code=$('#promoCodeInput')?.value.trim();
+  const reward_type=$('#promoTypeInput')?.value;
+  const value=$('#promoValueInput')?.value.trim();
+  const max_uses=$('#promoUsesInput')?.value.trim()||'0';
+  if(!code||!value){notify('ЗАПОЛНИ CODE И НАГРАДУ');return}
+  try{
+    const r=await api('/api/admin/promo',{method:'POST',body:JSON.stringify({code,reward_type,value,max_uses})});
+    notify('PROMO '+r.code+' SAVED');
+    $('#promoCodeInput').value='';$('#promoValueInput').value='';
+    await loadAdmin();
+  }catch(e){notify(e.data?.message||'PROMO ERROR')}
+}
+
+async function adminGrant(){
+  const user_id=$('#grantUserInput')?.value.trim();
+  const kind=$('#grantTypeInput')?.value;
+  const value=$('#grantValueInput')?.value.trim();
+  if(!user_id||!value){notify('УКАЖИ ID И ЗНАЧЕНИЕ');return}
+  try{
+    const r=await api('/api/admin/grant',{method:'POST',body:JSON.stringify({user_id,kind,value})});
+    notify('ГОТОВО · '+r.message);
+    $('#grantValueInput').value='';
+    await loadAdmin();
+  }catch(e){notify(e.data?.message||'GRANT ERROR')}
 }
 
 async function measurePing(){
@@ -483,6 +530,8 @@ $('#pingCard')?.addEventListener('click',()=>{haptic('light');measurePing()});
 $('#supportBtn')?.addEventListener('click',()=>openTelegramUser('vo1d_root'));
 $('#supportPayBtn')?.addEventListener('click',()=>openTelegramUser('vo1d_root'));
 $('#openBotBtn')?.addEventListener('click',()=>openTelegramUser('VO1D_VPNbot'));
+$('#createPromoBtn')?.addEventListener('click',createAdminPromo);
+$('#grantBtn')?.addEventListener('click',adminGrant);
 
 bindPressEffects();
 setupReveal();
