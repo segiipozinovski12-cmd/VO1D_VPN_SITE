@@ -1,4 +1,4 @@
-import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes
+import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress
 from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -36,6 +36,21 @@ def dt(ts):
     return datetime.fromtimestamp(ts,timezone.utc).strftime("%d.%m.%Y %H:%M UTC") if ts else "—"
 def money(c): return "$"+f"{c/100:.2f}"
 def esc(s): return html.escape(str(s or ""))
+
+def configured_node_ips():
+    out=[]
+    for node in VPN_NODES:
+        try:
+            host=urllib.parse.urlparse(node).hostname
+            if not host: continue
+            ipaddress.ip_address(host)
+            if host not in out: out.append(host)
+        except Exception:
+            pass
+    return out
+
+VO1D_NODE_IPS=configured_node_ips()
+
 
 def db():
     c=sqlite3.connect(DB_PATH,timeout=30)
@@ -537,6 +552,31 @@ class Web(BaseHTTPRequestHandler):
             self.reply_json(401,{"ok":False,"error":"telegram_auth_failed","message":"Открой Mini App заново из Telegram."})
             return None
 
+    def request_ip(self):
+        candidates=[]
+        for key in ("CF-Connecting-IP","X-Real-IP","X-Forwarded-For"):
+            raw=self.headers.get(key,"")
+            if raw:
+                candidates.extend(x.strip() for x in raw.split(",") if x.strip())
+        if self.client_address and self.client_address[0]:
+            candidates.append(self.client_address[0])
+        valid=[]
+        for value in candidates:
+            candidate=value.strip().strip("[]")
+            if candidate.count(":")==1 and "." in candidate:
+                host,port=candidate.rsplit(":",1)
+                if port.isdigit(): candidate=host
+            try:
+                ip=ipaddress.ip_address(candidate)
+                text=str(ip)
+                valid.append(text)
+                if ip.is_global:
+                    return text
+            except Exception:
+                continue
+        return valid[0] if valid else ""
+
+
     def serve_app_asset(self,path):
         mapping={
           "/app":"index.html",
@@ -574,6 +614,31 @@ class Web(BaseHTTPRequestHandler):
             if not auth:return
             tg_user,row=auth
             return self.reply_json(200,webapp_user_payload(tg_user,row))
+
+        if path=="/api/privacy-test":
+            auth=self.auth_user()
+            if not auth:return
+            tg_user,row=auth
+            observed=self.request_ip()
+            route_match=bool(observed and observed in VO1D_NODE_IPS)
+            if route_match:
+                score=98.70
+                level="VO1D PROTECTED"
+            elif observed:
+                score=41.80
+                level="ROUTE NOT VERIFIED"
+            else:
+                score=0.0
+                level="IP UNAVAILABLE"
+            return self.reply_json(200,{
+              "ok":True,
+              "ip":observed,
+              "vo1d_route":route_match,
+              "score":score,
+              "level":level,
+              "measurement":"route_indicator",
+              "note":"Score confirms whether this request is seen from a configured VO1D node; it is not a complete anonymity audit."
+            })
 
         if self.serve_app_asset(path):
             return
