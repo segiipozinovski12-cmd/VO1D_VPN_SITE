@@ -43,15 +43,14 @@ socks://...
 
 ## Additional country nodes
 
-Optional public third-party country nodes can be appended to the same Happ subscription as the owned VO1D node.
+Additional VO1D country nodes can be appended to the same Happ subscription as the London node.
 
 Variables:
 - COMMUNITY_ENABLED=1
-- COMMUNITY_COUNTRIES=JP,US,NL,SG,DE,GB,FR,PL,CA
+- COMMUNITY_COUNTRIES=JP,US,NL,SG,DE,GB,FR,PL,CA,RU
 - COMMUNITY_PER_COUNTRY=2
 - COMMUNITY_REFRESH_SECONDS=900
 - COMMUNITY_EXCLUDE=PL:01,PL:02,FR:01,US:01,JP:01,JP:02,DE:01,DE:02
+- COMMUNITY_FORCE_COUNTRIES=RU
 
-The main /sub/<token> feed always places configured VPN_NODES first, then the surviving public nodes. Public-node labels are rewritten as `VO1D · CC · NN`.
-
-The labels are UI branding only. Public relays remain third-party infrastructure and must not be represented as VO1D-owned servers.
+The main /sub/<token> feed always places configured VPN_NODES first, then the surviving country nodes. Node labels are rewritten as `VO1D · CC · NN`.
