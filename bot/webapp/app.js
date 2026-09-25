@@ -2,6 +2,51 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const tg=window.Telegram?.WebApp;
 const state={me:null,tab:'home',busy:false,privacy:null};
 
+
+const music=$('#bgMusic'),musicToggle=$('#musicToggle'),musicState=$('#musicState'),musicIcon=$('#musicIcon');
+let musicUserPaused=false;
+function syncMusicUI(){
+  if(!music||!musicToggle)return;
+  const playing=!music.paused&&!music.ended;
+  musicToggle.classList.toggle('paused',!playing);
+  musicIcon.textContent=playing?'Ⅱ':'▶';
+  if(music.error){
+    musicState.textContent='SLOWED · FILE NEEDED';
+    musicToggle.classList.add('unavailable');
+  }else{
+    musicToggle.classList.remove('unavailable');
+    musicState.textContent=playing?'SLOWED · PLAYING':'SLOWED · PAUSED';
+  }
+}
+async function tryStartMusic(){
+  if(!music||musicUserPaused||music.error)return;
+  music.volume=.42;
+  try{await music.play();syncMusicUI()}catch(e){
+    musicState.textContent='SLOWED · TAP TO PLAY';
+    syncMusicUI();
+  }
+}
+function toggleMusic(){
+  if(!music)return;
+  haptic('light');
+  if(music.paused){
+    musicUserPaused=false;
+    music.play().then(syncMusicUI).catch(()=>{musicState.textContent='SLOWED · TAP TO PLAY';syncMusicUI()});
+  }else{
+    musicUserPaused=true;
+    music.pause();
+    syncMusicUI();
+  }
+}
+music?.addEventListener('play',syncMusicUI);
+music?.addEventListener('pause',syncMusicUI);
+music?.addEventListener('error',syncMusicUI);
+musicToggle?.addEventListener('click',toggleMusic);
+document.addEventListener('pointerdown',()=>{
+  if(music&&!musicUserPaused&&music.paused&&!music.error)tryStartMusic();
+},{once:true,passive:true});
+setTimeout(tryStartMusic,450);
+
 function telegramInit(){
   if(!tg)return;
   try{
