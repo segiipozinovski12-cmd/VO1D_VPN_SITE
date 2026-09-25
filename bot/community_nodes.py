@@ -42,8 +42,13 @@ def _endpoint(uri):
     return None
 
 def _tcp_alive(uri,timeout=1.4):
+    scheme=uri.split("://",1)[0].lower()
     ep=_endpoint(uri)
     if not ep:return False
+    if scheme in ("hy2","hysteria2"):
+        # Hysteria2 is QUIC/UDP, so a TCP dial would incorrectly mark a healthy node dead.
+        # The source feed already exports verified nodes; here we keep the preferred RU HY2 entry.
+        return True
     try:
         with socket.create_connection(ep,timeout=timeout):
             return True
