@@ -328,6 +328,9 @@ def webapp_user_payload(tg_user,row):
       },
       "infrastructure":{
         "node_configured":bool(VPN_NODES),
+        "node_online":(NODE_STATUS.get(0) or {}).get("online") if VPN_NODES else False,
+        "node_latency_ms":(NODE_STATUS.get(0) or {}).get("latency") if VPN_NODES else None,
+        "node_checked_at":(NODE_STATUS.get(0) or {}).get("checked_at") if VPN_NODES else None,
         "nodes":len(VPN_NODES),
         "location":"London",
         "protocol":"VLESS + REALITY",
@@ -1938,6 +1941,8 @@ def refresh_node_statuses(notify_changes=True):
             except Exception:pass
 
 def maintenance_once():
+    try:refresh_node_statuses(False)
+    except Exception as e:print("node probe error",repr(e),flush=True)
     with db() as c:
         users=c.execute("""SELECT * FROM users
           WHERE banned=0 AND notifications=1 AND sub_until>?""",(now(),)).fetchall()
