@@ -104,6 +104,8 @@ def configured_node_ips():
     return out
 
 VO1D_NODE_IPS=configured_node_ips()
+NODE_STATUS={}
+NODE_STATUS_LOCK=threading.Lock()
 
 
 def db():
@@ -428,6 +430,309 @@ def buy_with_balance(uid,days):
         c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
                   (uid,days,"balance",now(),end))
         return {"end":end,"balance":new_balance,"payment_id":pid},"ok"
+
+def normalize_code(value):
+    return "".join(ch for ch in str(value or "").upper().strip() if ch.isalnum() or ch in "-_")[:40]
+
+def assign_referrer(uid,referrer_id):
+    uid=int(uid); referrer_id=int(referrer_id)
+    if uid==referrer_id:return False
+    with db() as c:
+        ref=c.execute("SELECT id FROM users WHERE id=?",(referrer_id,)).fetchone()
+        row=c.execute("SELECT referrer_id FROM users WHERE id=?",(uid,)).fetchone()
+        if not ref or not row or int(row["referrer_id"] or 0):return False
+        c.execute("UPDATE users SET referrer_id=? WHERE id=?",(referrer_id,uid))
+        return True
+
+def award_referral_if_needed(invitee_id):
+    invitee_id=int(invitee_id)
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        u=c.execute("SELECT referrer_id,referral_awarded FROM users WHERE id=?",(invitee_id,)).fetchone()
+        if not u or int(u["referral_awarded"] or 0):return None
+        referrer=int(u["referrer_id"] or 0)
+        if not referrer or referrer==invitee_id:return None
+        if c.execute("SELECT invitee_id FROM referral_rewards WHERE invitee_id=?",(invitee_id,)).fetchone():
+            c.execute("UPDATE users SET referral_awarded=1 WHERE id=?",(invitee_id,))
+            return None
+        rr=c.execute("SELECT balance_cents FROM users WHERE id=?",(referrer,)).fetchone()
+        if not rr:return None
+        reward=REFERRAL_REWARD_CENTS
+        new_balance=int(rr["balance_cents"])+reward
+        c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,referrer))
+        c.execute("UPDATE users SET referral_awarded=1 WHERE id=?",(invitee_id,))
+        c.execute("INSERT INTO referral_rewards(invitee_id,referrer_id,reward_cents,created_at) VALUES(?,?,?,?)",
+                  (invitee_id,referrer,reward,now()))
+        c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
+                  (referrer,"referral",reward,f"invitee:{invitee_id}",now()))
+        return referrer,reward,new_balance
+
+def notify_referral_reward(invitee_id):
+    result=award_referral_if_needed(invitee_id)
+    if not result:return
+    referrer,reward,new_balance=result
+    try:
+        send(referrer,
+          f"🎉 <b>Реферальный бонус</b>\n\nДруг впервые оплатил подписку. "
+          f"На баланс начислено <b>{money(reward)}</b>.\nБаланс: <b>{money(new_balance)}</b>.")
+    except Exception:pass
+
+def redeem_code(uid,raw_code):
+    code=normalize_code(raw_code)
+    if not code:return False,"Пустой код."
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        gift=c.execute("SELECT * FROM gift_codes WHERE code=?",(code,)).fetchone()
+        if gift:
+            if not gift["active"] or int(gift["redeemed_by"] or 0):
+                return False,"Этот подарочный код уже использован."
+            days=int(gift["days"])
+            row=c.execute("SELECT sub_until FROM users WHERE id=?",(uid,)).fetchone()
+            if not row:return False,"Пользователь не найден."
+            end=max(now(),int(row["sub_until"]))+days*86400
+            c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,uid))
+            c.execute("UPDATE gift_codes SET redeemed_by=?,redeemed_at=?,active=0 WHERE code=?",(uid,now(),code))
+            c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                      (uid,days,f"gift:{code}",now(),end))
+            return True,f"🎁 Подарок активирован: <b>+{days} дней</b>.\nПодписка до {dt(end)}."
+
+        p=c.execute("SELECT * FROM promo_codes WHERE code=?",(code,)).fetchone()
+        if not p:return False,"Промокод не найден."
+        if not p["active"]:return False,"Промокод отключён."
+        if int(p["expires_at"] or 0)>0 and int(p["expires_at"])<now():return False,"Срок промокода истёк."
+        if int(p["max_uses"] or 0)>0 and int(p["uses"])>=int(p["max_uses"]):return False,"Лимит активаций промокода исчерпан."
+        if c.execute("SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?",(code,uid)).fetchone():
+            return False,"Ты уже активировал этот промокод."
+        reward_type=p["reward_type"]; value=int(p["reward_value"])
+        if reward_type=="days":
+            row=c.execute("SELECT sub_until FROM users WHERE id=?",(uid,)).fetchone()
+            end=max(now(),int(row["sub_until"]))+value*86400
+            c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,uid))
+            c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                      (uid,value,f"promo:{code}",now(),end))
+            message=f"✅ Промокод активирован: <b>+{value} дней</b>.\nПодписка до {dt(end)}."
+        elif reward_type=="balance":
+            row=c.execute("SELECT balance_cents FROM users WHERE id=?",(uid,)).fetchone()
+            new_balance=int(row["balance_cents"])+value
+            c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,uid))
+            c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
+                      (uid,"promo",value,f"promo:{code}",now()))
+            message=f"✅ Промокод активирован: <b>+{money(value)}</b> на баланс.\nБаланс: <b>{money(new_balance)}</b>."
+        else:
+            return False,"Неизвестный тип награды."
+        c.execute("INSERT INTO promo_redemptions(code,user_id,redeemed_at) VALUES(?,?,?)",(code,uid,now()))
+        c.execute("UPDATE promo_codes SET uses=uses+1 WHERE code=?",(code,))
+        return True,message
+
+def balance_history(uid):
+    with db() as c:rows=c.execute("SELECT * FROM balance_transactions WHERE user_id=? ORDER BY id DESC LIMIT 15",(uid,)).fetchall()
+    text="<b>🧾 История баланса</b>\n\n"
+    if not rows:text+="Пока операций нет."
+    labels={"stars_topup":"Stars","manual_topup":"Пополнение","subscription":"Подписка","promo":"Промокод","referral":"Реферал","admin":"Админ"}
+    for r in rows:
+        amount=int(r["amount_cents"]); sign="+" if amount>=0 else "−"
+        text+=f"{sign}<b>{money(abs(amount))}</b> · {esc(labels.get(r['kind'],r['kind']))}\n"
+    send(uid,text,[[button("◀️ Баланс","balance")]])
+
+def subscription_history(uid):
+    with db() as c:rows=c.execute("SELECT * FROM subscription_events WHERE user_id=? ORDER BY id DESC LIMIT 15",(uid,)).fetchall()
+    text="<b>🕘 История подписки</b>\n\n"
+    if not rows:text+="Пока продлений нет."
+    for r in rows:
+        text+=f"+<b>{r['days']} дн.</b> · {esc(r['source'])} · до {dt(r['sub_until'])}\n"
+    send(uid,text,[[button("◀️ Ещё","more")]])
+
+def promo_prompt(uid):
+    set_pending(uid,"redeem_code")
+    send(uid,
+      "<b>🎟 Промокод / подарок</b>\n\nОтправь код одним сообщением.",
+      [[button("❌ Отмена","more")]])
+
+def referral_screen(uid):
+    with db() as c:
+        invited=c.execute("SELECT COUNT(*) n FROM users WHERE referrer_id=?",(uid,)).fetchone()["n"]
+        paid=c.execute("SELECT COUNT(*) n FROM referral_rewards WHERE referrer_id=?",(uid,)).fetchone()["n"]
+    link=f"https://t.me/{BOT_USERNAME}?start=ref_{uid}"
+    send(uid,
+      f"<b>👥 Пригласить друга</b>\n\n"
+      f"За первую оплаченную подписку приглашённого ты получишь <b>{money(REFERRAL_REWARD_CENTS)}</b> на баланс.\n\n"
+      f"Приглашено: <b>{invited}</b>\nС бонусом: <b>{paid}</b>\n\n"
+      f"Твоя ссылка:\n<code>{esc(link)}</code>",
+      [[button("◀️ Ещё","more")]])
+
+def auto_renew_screen(uid):
+    r=get_user(uid)
+    state="ВКЛЮЧЕНО" if r["auto_renew"] else "ВЫКЛЮЧЕНО"
+    days=int(r["auto_renew_days"] or 30)
+    kb=[[button("✅ Выключить" if r["auto_renew"] else "⚡ Включить", "autorenew:toggle")]]
+    kb += [[button(("✓ " if days==d else "")+PLANS[d]["title"],f"autorenew:{d}")] for d in PLANS]
+    kb.append([button("◀️ Ещё","more")])
+    send(uid,
+      f"<b>♻️ Автопродление</b>\n\nСтатус: <b>{state}</b>\nТариф: <b>{PLANS.get(days,PLANS[30])['title']}</b>\n"
+      "Оплата идёт только с внутреннего баланса примерно за 24 часа до окончания подписки.",kb)
+
+def node_name(index,node=None):
+    try:
+        node=node or VPN_NODES[index]
+        p=urllib.parse.urlsplit(node)
+        if p.fragment:return urllib.parse.unquote(p.fragment)
+        return p.hostname or f"NODE-{index+1}"
+    except Exception:return f"NODE-{index+1}"
+
+def node_target(node):
+    try:
+        p=urllib.parse.urlsplit(node)
+        return p.hostname,int(p.port or 443)
+    except Exception:return None,None
+
+def probe_node(index,timeout=2.5):
+    if index<0 or index>=len(VPN_NODES):return False,None
+    host,port=node_target(VPN_NODES[index])
+    if not host:return False,None
+    started=time.monotonic()
+    try:
+        with socket.create_connection((host,port),timeout=timeout):pass
+        return True,int((time.monotonic()-started)*1000)
+    except Exception:return False,None
+
+def servers_screen(uid):
+    r=get_user(uid); preferred=int(r["preferred_node"] or 0)
+    kb=[]
+    for i,node in enumerate(VPN_NODES):
+        with NODE_STATUS_LOCK: st=NODE_STATUS.get(i,{})
+        online=st.get("online")
+        icon="🟢" if online is True else ("🔴" if online is False else "⚪")
+        chosen="✓ " if i==preferred else ""
+        kb.append([button(f"{chosen}{icon} {node_name(i,node)}",f"server:{i}")])
+    kb.append([button("◀️ Ещё","more")])
+    send(uid,
+      "<b>🌐 Серверы VO1D</b>\n\nВыбранный сервер ставится первым в подписке Happ. "
+      "Статус проверяется реальным TCP-соединением.",kb)
+
+def diagnostics(uid):
+    r=get_user(uid); idx=int(r["preferred_node"] or 0)
+    online,lat=probe_node(idx)
+    checks=[
+      ("Подписка","OK" if active(r) else "OFF"),
+      ("Subscription URL","OK" if PUBLIC_URL else "ERROR"),
+      (node_name(idx),"ONLINE" if online else "OFFLINE"),
+      ("Конфигурация","READY" if VPN_NODES else "EMPTY"),
+    ]
+    ok=sum(v in ("OK","ONLINE","READY") for _,v in checks)
+    text=f"<b>🧪 Диагностика VO1D</b>\n\nРезультат: <b>{ok}/{len(checks)}</b>\n\n"
+    for k,v in checks:text+=f"{'✅' if v in ('OK','ONLINE','READY') else '❌'} {esc(k)}: <b>{v}</b>\n"
+    if lat is not None:text+=f"\nОтклик TCP узла: <b>{lat} ms</b>\n"
+    kb=[]
+    if MINI_APP_URL:kb.append([button("🔎 Проверить внешний IP",web_app=MINI_APP_URL)])
+    kb.append([button("◀️ Ещё","more")])
+    send(uid,text,kb)
+
+def devices_screen(uid):
+    with db() as c:rows=c.execute("SELECT * FROM devices WHERE user_id=? ORDER BY id",(uid,)).fetchall()
+    kb=[]
+    for r in rows:kb.append([button(f"📱 {r['name']} · удалить",f"device_del:{r['id']}")])
+    if len(rows)<DEVICE_LIMIT:kb.append([button("➕ Добавить устройство","device_add")])
+    kb.append([button("◀️ Ещё","more")])
+    text=f"<b>📱 Мои устройства</b>\n\nДобавлено: <b>{len(rows)}/{DEVICE_LIMIT}</b>."
+    if not PER_USER_KEYS:text+="\n\nСейчас список используется для управления аккаунтом; жёсткое отключение отдельных устройств включится после синхронизации персональных ключей с Xray."
+    send(uid,text,kb)
+
+def add_device(uid,name):
+    name=" ".join(str(name or "").strip().split())[:32]
+    if len(name)<2:return False,"Название слишком короткое."
+    with db() as c:
+        count=c.execute("SELECT COUNT(*) n FROM devices WHERE user_id=?",(uid,)).fetchone()["n"]
+        if count>=DEVICE_LIMIT:return False,f"Лимит устройств: {DEVICE_LIMIT}."
+        try:
+            c.execute("INSERT INTO devices(user_id,name,vpn_uuid,created_at) VALUES(?,?,?,?)",
+                      (uid,name,str(uuid.uuid4()),now()))
+        except sqlite3.IntegrityError:return False,"Устройство с таким названием уже есть."
+    return True,"Устройство добавлено."
+
+def reset_access(uid):
+    token=secrets.token_urlsafe(24); new_uuid=str(uuid.uuid4())
+    with db() as c:c.execute("UPDATE users SET sub_token=?,vpn_uuid=? WHERE id=?",(token,new_uuid,uid))
+    if PER_USER_KEYS:
+        return "✅ Ссылка и персональный VPN-ключ заменены. После синхронизации Xray старый ключ перестанет работать."
+    return "✅ Персональная subscription-ссылка заменена. Старый импортированный VPN-конфиг пока не отключается сервером — для этого нужен режим персональных Xray-ключей."
+
+def more_menu(uid):
+    r=get_user(uid)
+    send(uid,
+      "<b>⚙️ VO1D Control</b>\nВыбери раздел:",
+      [[button("♻️ Автопродление","autorenew"),button("🌐 Серверы","servers")],
+       [button("🧪 Диагностика","diagnostics"),button("📱 Устройства","devices")],
+       [button("🎟 Промокод","promo"),button("👥 Рефералы","referral")],
+       [button("🎁 Подарки","gifts"),button("🕘 История подписки","sub_history")],
+       [button("🔔 Уведомления: "+("ON" if r["notifications"] else "OFF"),"notifications")],
+       [button("🔐 Сбросить доступ","reset_access")],
+       [button("◀️ Меню","menu")]])
+
+def gift_code_value():
+    alphabet="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "VOID-"+"".join(secrets.choice(alphabet) for _ in range(4))+"-"+"".join(secrets.choice(alphabet) for _ in range(4))
+
+def create_gift_code(uid,days):
+    while True:
+        code=gift_code_value()
+        with db() as c:
+            try:
+                c.execute("INSERT INTO gift_codes(code,days,created_by,created_at) VALUES(?,?,?,?)",(code,days,uid,now()))
+                return code
+            except sqlite3.IntegrityError:pass
+
+def gifts_screen(uid):
+    send(uid,
+      "<b>🎁 Подарки VO1D</b>\n\nМожно подарить подписку человеку по Telegram ID или купить код, который он активирует сам.",
+      [[button("👤 Подарить пользователю","gift_direct")],
+       [button("🎫 Купить подарочный код","gift_code")],
+       [button("🎟 Активировать код","promo")],
+       [button("◀️ Ещё","more")]])
+
+def gift_plan_menu(uid,mode):
+    kb=[[button(p["title"],f"{mode}:{days}")] for days,p in PLANS.items()]
+    kb.append([button("◀️ Подарки","gifts")])
+    title="кому подарить" if mode=="giftplan" else "для подарочного кода"
+    send(uid,f"<b>🎁 Выбери срок {title}</b>",kb)
+
+def direct_gift_recipient_prompt(uid,days):
+    set_pending(uid,"gift_recipient",json.dumps({"days":int(days)}))
+    send(uid,
+      f"<b>Подарок · {PLANS[days]['title']}</b>\n\nОтправь Telegram ID получателя. "
+      "Получатель должен хотя бы один раз запустить @"+BOT_USERNAME+".",
+      [[button("❌ Отмена","gifts")]])
+
+def direct_gift_payment(uid,target,days):
+    if not get_user(target):return send(uid,"Получатель ещё не запускал бота.",[[button("◀️ Подарки","gifts")]])
+    p=PLANS[days]
+    send(uid,
+      f"<b>🎁 Подарок</b>\n\nПолучатель: <code>{target}</code>\nСрок: <b>{p['title']}</b>\nЦена: <b>{money(p['usd'])}</b>",
+      [[button(f"💰 С баланса · {money(p['usd'])}",f"giftpay:{target}:{days}:balance")],
+       [button(f"⭐ Telegram Stars · {p['stars']} ⭐",f"giftpay:{target}:{days}:stars")],
+       [button("◀️ Подарки","gifts")]])
+
+def gift_code_payment(uid,days):
+    p=PLANS[days]
+    send(uid,
+      f"<b>🎫 Подарочный код · {p['title']}</b>\n\nПосле оплаты получишь одноразовый код.",
+      [[button(f"💰 С баланса · {money(p['usd'])}",f"gcodepay:{days}:balance")],
+       [button(f"⭐ Telegram Stars · {p['stars']} ⭐",f"gcodepay:{days}:stars")],
+       [button("◀️ Подарки","gifts")]])
+
+def welcome_screen(uid,step=1):
+    if step==1:
+        return send(uid,
+          "<b>VO1D_VPN // WELCOME</b>\n\nVO1D выдаёт персональную subscription-ссылку для Happ и управляет сроком доступа из Telegram.",
+          [[button("ДАЛЬШЕ →","welcome:2")]])
+    if step==2:
+        return send(uid,
+          "<b>02 // БЫСТРЫЙ СТАРТ</b>\n\nАктивируй пробный доступ, добавь ссылку в Happ и затем проверь внешний IP в Mini App.",
+          [[button("ДАЛЬШЕ →","welcome:3")]])
+    with db() as c:c.execute("UPDATE users SET welcome_done=1 WHERE id=?",(uid,))
+    send(uid,
+      "<b>03 // ГОТОВО</b>\n\nБаланс, серверы, подарки, промокоды и диагностика находятся в разделе «Ещё».",
+      [[button("🎁 Пробный доступ","activate_trial")],[button("⚫ Открыть VO1D",web_app=MINI_APP_URL)] if MINI_APP_URL else [button("⚙️ Открыть меню","menu")],
+       [button("⚙️ Меню","menu")]])
 
 def main_kb(uid):
     rows=[]
