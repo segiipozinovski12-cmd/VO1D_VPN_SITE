@@ -93,8 +93,8 @@ function saveMusicPosition(){
 }
 function restoreMusicPlayer(){
   if(!musicPlayer)return;
-  const collapsed=!!musicStorageGet('vo1d_music_collapsed',false);
-  setMusicCollapsed(collapsed,false);
+  // Каждый новый запуск Mini App начинается с компактного квадрата.
+  setMusicCollapsed(true,false);
   const pos=musicStorageGet('vo1d_music_position',null);
   if(pos&&Number.isFinite(pos.left)&&Number.isFinite(pos.top)){
     musicPlayer.style.left=pos.left+'px';
@@ -179,20 +179,54 @@ function telegramInit(){
 }
 telegramInit();
 
-const boot=$('#boot'),bootFill=$('#bootFill'),bootPct=$('#bootPct'),bootText=$('#bootText'),shell=$('#shell');
-let bp=0;
-const bootSteps=[[8,'VERIFYING TELEGRAM'],[29,'AUTHENTICATING'],[52,'LOADING ACCOUNT'],[73,'SYNCING ACCESS'],[91,'BUILDING SECURE UI'],[99,'READY']];
-const bootTimer=setInterval(()=>{
-  bp=Math.min(100,bp+Math.floor(Math.random()*7)+3);
-  bootFill.style.width=bp+'%';
-  bootPct.textContent=String(bp).padStart(2,'0')+'%';
+const boot=$('#boot'),bootFill=$('#bootFill'),bootPct=$('#bootPct'),bootText=$('#bootText'),shell=$('#shell'),
+      bootPulse=$('#bootPulse'),bootS1=$('#bootS1'),bootS2=$('#bootS2'),bootS3=$('#bootS3');
+const bootSteps=[
+  [0,'INITIALIZING'],
+  [15,'VERIFYING TELEGRAM'],
+  [34,'OPENING SECURE CHANNEL'],
+  [56,'AUTHENTICATING SESSION'],
+  [74,'SYNCING ACCESS CORE'],
+  [90,'RENDERING PRIVATE INTERFACE'],
+  [99,'ACCESS READY']
+];
+let bp=0,bootStarted=performance.now();
+boot?.classList.add('loading');
+
+function updateBoot(value){
+  bp=Math.max(0,Math.min(100,value));
+  if(bootFill)bootFill.style.width=bp.toFixed(1)+'%';
+  if(bootPulse)bootPulse.style.left=`calc(${bp.toFixed(1)}% - 5px)`;
+  if(bootPct)bootPct.textContent=String(Math.floor(bp)).padStart(2,'0')+'%';
   const match=[...bootSteps].reverse().find(x=>bp>=x[0]);
-  if(match)bootText.textContent=match[1];
-  if(bp>=100){
-    clearInterval(bootTimer);
-    setTimeout(()=>{boot.classList.add('hide');shell.classList.add('ready');refreshReveal()},250);
+  if(match&&bootText)bootText.textContent=match[1];
+  bootS1?.classList.toggle('ok',bp>=28);
+  bootS2?.classList.toggle('ok',bp>=55);
+  bootS3?.classList.toggle('ok',bp>=82);
+}
+function bootFrame(now){
+  const elapsed=now-bootStarted;
+  const raw=Math.min(1,elapsed/2050);
+  const eased=1-Math.pow(1-raw,3.2);
+  // Лёгкие замедления делают загрузку похожей на настоящий системный handshake.
+  let target=eased*100;
+  if(raw<.42)target=Math.min(target,47);
+  if(raw<.70&&target>71)target=71;
+  updateBoot(target);
+  if(raw<1){
+    requestAnimationFrame(bootFrame);
+  }else{
+    updateBoot(100);
+    boot?.classList.remove('loading');
+    boot?.classList.add('complete');
+    setTimeout(()=>{
+      boot?.classList.add('hide');
+      shell?.classList.add('ready');
+      refreshReveal();
+    },430);
   }
-},82);
+}
+requestAnimationFrame(bootFrame);
 
 function haptic(type='light'){try{tg?.HapticFeedback?.impactOccurred(type)}catch(e){}}
 function notify(msg){
