@@ -584,6 +584,7 @@ class Web(BaseHTTPRequestHandler):
           "/app/index.html":"index.html",
           "/app/style.css":"style.css",
           "/app/app.js":"app.js",
+          "/app/audio/leaveamsg-slowed.mp3":"audio/leaveamsg-slowed.mp3",
         }
         name=mapping.get(path)
         if not name:return False
