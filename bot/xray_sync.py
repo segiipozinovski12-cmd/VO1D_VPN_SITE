@@ -80,10 +80,15 @@ def apply_clients(rows):
         os.replace(tmp,CONFIG_PATH)
         try:
             test_config()
+            subprocess.run(["systemctl","restart","xray"],check=True,timeout=25)
         except Exception:
             shutil.copy2(backup,CONFIG_PATH)
+            try:
+                test_config()
+                subprocess.run(["systemctl","restart","xray"],check=True,timeout=25)
+            except Exception as rollback_error:
+                raise RuntimeError(f"Xray update failed and rollback restart also failed: {rollback_error}")
             raise
-        subprocess.run(["systemctl","restart","xray"],check=True,timeout=25)
         return True
     finally:
         if os.path.exists(tmp):

@@ -4,6 +4,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 jobs:
@@ -20,6 +22,9 @@ jobs:
 
       - name: Check Python
         run: python -m py_compile bot/main.py bot/xray_sync.py bot/community_nodes.py bot/test_ru_e2e.py bot/pinned_ru.py
+
+      - name: Core bot regression tests
+        run: python bot/test_core.py
 
       - name: Pinned RU parser test
         run: |
@@ -82,11 +87,22 @@ jobs:
           if missing:
               raise SystemExit("JS references missing DOM ids: " + ", ".join(missing))
 
-          print(f"Mini App regression check OK ({len(ids)} selectors)")
+          source = Path("bot/main.py").read_text()
+          if 'UPDATE users SET auto_renew=0' in source:
+              raise SystemExit("Auto-renew must not be wiped on startup")
+          if 'refresh_node_statuses(True)' not in source:
+              raise SystemExit("Node transition notifications are disabled")
+          if 'if scheme.lower()!="vless"' not in source:
+              raise SystemExit("Per-user key personalization must be limited to VLESS")
+          if 'manual_bonus:' not in source:
+              raise SystemExit("Manual payment bonus marker missing")
+
+          print(f"Mini App/core regression check OK ({len(ids)} selectors)")
           PY
 
 
   ru-e2e:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -106,5 +122,5 @@ jobs:
         env:
           XRAY_BIN: /tmp/xray/xray
           RU_E2E_MAX: "24"
-          RU_E2E_SOURCE: https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/WHITE-CIDR-RU-all.txt
+          RU_E2E_SOURCE: https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/data/githubmirror/ru-sni-local/vless.txt
         run: python bot/test_ru_e2e.py

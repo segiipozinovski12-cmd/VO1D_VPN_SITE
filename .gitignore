@@ -1,0 +1,25 @@
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime databases and backups
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backups/
+bot/backups/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node / editor / OS
+node_modules/
+*.log
+.DS_Store
+.vscode/
+.idea/
