@@ -363,8 +363,8 @@ def upsert_user(u):
             c.execute("UPDATE users SET username=?,first_name=?,last_seen=? WHERE id=?",
                       (username,first,now(),uid))
         else:
-            c.execute("INSERT INTO users(id,username,first_name,joined_at,last_seen,sub_token) VALUES(?,?,?,?,?,?)",
-                      (uid,username,first,now(),now(),secrets.token_urlsafe(24)))
+            c.execute("INSERT INTO users(id,username,first_name,joined_at,last_seen,sub_token,vpn_uuid) VALUES(?,?,?,?,?,?,?)",
+                      (uid,username,first,now(),now(),secrets.token_urlsafe(24),str(uuid.uuid4())))
     return get_user(uid)
 
 def get_user(uid):
@@ -379,13 +379,17 @@ def remaining(ts):
     d,s=divmod(s,86400); h,s=divmod(s,3600); m=s//60
     return (f"{d} дн. {h} ч." if d else f"{h} ч. {m} мин.")
 
-def add_days(uid,days):
+def add_days(uid,days,source="grant"):
+    uid=int(uid); days=int(days)
     with db() as c:
+        c.execute("BEGIN IMMEDIATE")
         r=c.execute("SELECT sub_until FROM users WHERE id=?",(uid,)).fetchone()
         if not r:return 0
         base=max(now(),int(r["sub_until"]))
-        end=base+int(days)*86400
+        end=base+days*86400
         c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,uid))
+        c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                  (uid,days,str(source),now(),end))
         return end
 
 def change_balance(uid,delta_cents,kind="adjustment",reference=""):
@@ -421,6 +425,8 @@ def buy_with_balance(uid,days):
         c.execute("UPDATE users SET balance_cents=?,sub_until=? WHERE id=?",(new_balance,end,uid))
         c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
                   (uid,"subscription",-price,f"payment:{pid}",now()))
+        c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                  (uid,days,"balance",now(),end))
         return {"end":end,"balance":new_balance,"payment_id":pid},"ok"
 
 def main_kb(uid):
