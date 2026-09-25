@@ -3,90 +3,169 @@ const tg=window.Telegram?.WebApp;
 const state={me:null,tab:'home',busy:false,privacy:null};
 
 
-const musicFrame=$('#soundcloudPlayer'),musicToggle=$('#musicToggle'),musicState=$('#musicState'),musicIcon=$('#musicIcon');
-let scWidget=null,musicReady=false,musicPlaying=false,musicUserPaused=false;
+const music=$('#bgMusic'),musicPlayer=$('#musicPlayer'),musicDrag=$('#musicDrag'),
+      musicToggle=$('#musicToggle'),musicCollapse=$('#musicCollapse'),
+      musicState=$('#musicState'),musicIcon=$('#musicIcon'),musicProgress=$('#musicProgress');
+let musicUserPaused=false,musicDragState=null;
 
-function syncMusicUI(label){
-  if(!musicToggle)return;
-  musicToggle.classList.toggle('paused',!musicPlaying);
-  musicIcon.textContent=musicPlaying?'Ⅱ':'▶';
-  if(label)musicState.textContent=label;
-  else musicState.textContent=musicPlaying?'SLOWED · PLAYING':'SLOWED · PAUSED';
+function musicStorageGet(key,fallback=null){
+  try{const v=localStorage.getItem(key);return v===null?fallback:JSON.parse(v)}catch(e){return fallback}
 }
-
-function tryStartMusic(){
-  if(!scWidget||!musicReady||musicUserPaused)return;
+function musicStorageSet(key,value){
+  try{localStorage.setItem(key,JSON.stringify(value))}catch(e){}
+}
+function syncMusicUI(label){
+  if(!music||!musicPlayer)return;
+  const playing=!music.paused&&!music.ended&&!music.error;
+  musicPlayer.classList.toggle('paused',!playing);
+  musicPlayer.classList.toggle('unavailable',!!music.error);
+  if(musicIcon)musicIcon.textContent=playing?'Ⅱ':'▶';
+  if(musicState){
+    if(label)musicState.textContent=label;
+    else if(music.error)musicState.textContent='SLOWED · TRACK NEEDED';
+    else musicState.textContent=playing?'SLOWED · PLAYING':'SLOWED · PAUSED';
+  }
+}
+async function tryStartMusic(){
+  if(!music||musicUserPaused||music.error)return;
+  music.volume=.42;
   try{
-    musicState.textContent='SLOWED · STARTING';
-    scWidget.play();
+    await music.play();
+    syncMusicUI();
   }catch(e){
     syncMusicUI('SLOWED · TAP TO PLAY');
   }
 }
-
-function toggleMusic(){
+async function toggleMusic(){
+  if(!music)return;
   haptic('light');
-  if(!scWidget||!musicReady){
-    syncMusicUI('SLOWED · CONNECTING');
-    return;
-  }
-  if(musicPlaying){
-    musicUserPaused=true;
-    scWidget.pause();
-  }else{
+  if(music.error){syncMusicUI('SLOWED · TRACK NEEDED');return}
+  if(music.paused){
     musicUserPaused=false;
-    scWidget.play();
-  }
-}
-
-function initSoundCloud(){
-  if(!musicFrame||!musicToggle)return;
-  if(!window.SC?.Widget){
-    setTimeout(initSoundCloud,120);
-    return;
-  }
-  scWidget=window.SC.Widget(musicFrame);
-  const E=window.SC.Widget.Events;
-  scWidget.bind(E.READY,()=>{
-    musicReady=true;
-    try{scWidget.setVolume(42)}catch(e){}
-    syncMusicUI('SLOWED · TAP TO PLAY');
-    setTimeout(tryStartMusic,180);
-  });
-  scWidget.bind(E.PLAY,()=>{
-    musicPlaying=true;
+    try{await music.play();syncMusicUI()}catch(e){syncMusicUI('SLOWED · TAP TO PLAY')}
+  }else{
+    musicUserPaused=true;
+    music.pause();
     syncMusicUI();
-  });
-  scWidget.bind(E.PAUSE,()=>{
-    musicPlaying=false;
-    syncMusicUI(musicUserPaused?'SLOWED · PAUSED':'SLOWED · TAP TO PLAY');
-  });
-  scWidget.bind(E.FINISH,()=>{
-    musicPlaying=false;
-    try{
-      scWidget.seekTo(0);
-      if(!musicUserPaused)setTimeout(()=>scWidget.play(),120);
-    }catch(e){}
-  });
-  scWidget.bind(E.ERROR,()=>{
-    musicReady=false;
-    musicPlaying=false;
-    musicToggle.classList.add('unavailable');
-    syncMusicUI('SLOWED · UNAVAILABLE');
+  }
+}
+function setMusicCollapsed(collapsed,save=true){
+  if(!musicPlayer)return;
+  musicPlayer.classList.toggle('collapsed',collapsed);
+  if(musicCollapse){
+    musicCollapse.textContent=collapsed?'↗':'—';
+    musicCollapse.setAttribute('aria-label',collapsed?'Развернуть плеер':'Свернуть плеер');
+  }
+  if(save)musicStorageSet('vo1d_music_collapsed',collapsed);
+  requestAnimationFrame(()=>requestAnimationFrame(clampMusicPlayer));
+}
+function viewportBox(){
+  const vv=window.visualViewport;
+  return {
+    left:vv?.offsetLeft||0,
+    top:vv?.offsetTop||0,
+    width:vv?.width||innerWidth,
+    height:vv?.height||innerHeight
+  };
+}
+function clampMusicPlayer(){
+  if(!musicPlayer)return;
+  const v=viewportBox(),r=musicPlayer.getBoundingClientRect(),m=8;
+  let left=parseFloat(musicPlayer.style.left);
+  let top=parseFloat(musicPlayer.style.top);
+  if(!Number.isFinite(left)||!Number.isFinite(top))return;
+  const minX=v.left+m,minY=v.top+m;
+  const maxX=Math.max(minX,v.left+v.width-r.width-m);
+  const maxY=Math.max(minY,v.top+v.height-r.height-m);
+  left=Math.min(maxX,Math.max(minX,left));
+  top=Math.min(maxY,Math.max(minY,top));
+  musicPlayer.style.left=left+'px';
+  musicPlayer.style.top=top+'px';
+  musicPlayer.style.right='auto';
+  musicPlayer.style.bottom='auto';
+}
+function saveMusicPosition(){
+  if(!musicPlayer||!musicPlayer.style.top)return;
+  musicStorageSet('vo1d_music_position',{
+    left:parseFloat(musicPlayer.style.left)||8,
+    top:parseFloat(musicPlayer.style.top)||8
   });
 }
-
-musicToggle?.addEventListener('click',toggleMusic);
-document.addEventListener('pointerdown',()=>{
-  if(!musicUserPaused)tryStartMusic();
-},{once:true,passive:true});
-initSoundCloud();
-setTimeout(()=>{
-  if(!musicReady){
-    musicToggle?.classList.add('unavailable');
-    if(musicState)musicState.textContent='SLOWED · TAP TO RETRY';
+function restoreMusicPlayer(){
+  if(!musicPlayer)return;
+  const collapsed=!!musicStorageGet('vo1d_music_collapsed',false);
+  setMusicCollapsed(collapsed,false);
+  const pos=musicStorageGet('vo1d_music_position',null);
+  if(pos&&Number.isFinite(pos.left)&&Number.isFinite(pos.top)){
+    musicPlayer.style.left=pos.left+'px';
+    musicPlayer.style.top=pos.top+'px';
+    musicPlayer.style.right='auto';
+    musicPlayer.style.bottom='auto';
+    requestAnimationFrame(clampMusicPlayer);
   }
-},6500);
+}
+function beginMusicDrag(e){
+  if(!musicPlayer||e.button>0)return;
+  const r=musicPlayer.getBoundingClientRect();
+  musicDragState={
+    id:e.pointerId,
+    startX:e.clientX,startY:e.clientY,
+    originX:r.left,originY:r.top,
+    moved:false
+  };
+  musicPlayer.style.left=r.left+'px';
+  musicPlayer.style.top=r.top+'px';
+  musicPlayer.style.right='auto';
+  musicPlayer.style.bottom='auto';
+  musicPlayer.classList.add('dragging');
+  musicDrag.setPointerCapture?.(e.pointerId);
+  e.preventDefault();
+}
+function moveMusicDrag(e){
+  const d=musicDragState;
+  if(!d||e.pointerId!==d.id||!musicPlayer)return;
+  const dx=e.clientX-d.startX,dy=e.clientY-d.startY;
+  if(Math.abs(dx)+Math.abs(dy)>5)d.moved=true;
+  musicPlayer.style.left=(d.originX+dx)+'px';
+  musicPlayer.style.top=(d.originY+dy)+'px';
+  clampMusicPlayer();
+}
+function endMusicDrag(e){
+  const d=musicDragState;
+  if(!d||e.pointerId!==d.id)return;
+  musicPlayer?.classList.remove('dragging');
+  try{musicDrag?.releasePointerCapture?.(e.pointerId)}catch(err){}
+  if(!d.moved&&musicPlayer?.classList.contains('collapsed'))setMusicCollapsed(false);
+  else saveMusicPosition();
+  musicDragState=null;
+}
+function updateMusicProgress(){
+  if(!music||!musicProgress)return;
+  const pct=Number.isFinite(music.duration)&&music.duration>0?(music.currentTime/music.duration)*100:0;
+  musicProgress.style.width=Math.max(0,Math.min(100,pct))+'%';
+}
+
+music?.addEventListener('play',()=>syncMusicUI());
+music?.addEventListener('pause',()=>syncMusicUI());
+music?.addEventListener('canplay',()=>syncMusicUI(music.paused?'SLOWED · READY':'SLOWED · PLAYING'));
+music?.addEventListener('error',()=>syncMusicUI('SLOWED · TRACK NEEDED'));
+music?.addEventListener('timeupdate',updateMusicProgress);
+musicToggle?.addEventListener('click',toggleMusic);
+musicCollapse?.addEventListener('click',()=>setMusicCollapsed(!musicPlayer.classList.contains('collapsed')));
+musicDrag?.addEventListener('pointerdown',beginMusicDrag);
+musicDrag?.addEventListener('pointermove',moveMusicDrag);
+musicDrag?.addEventListener('pointerup',endMusicDrag);
+musicDrag?.addEventListener('pointercancel',endMusicDrag);
+musicDrag?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&musicPlayer?.classList.contains('collapsed')){e.preventDefault();setMusicCollapsed(false)}});
+addEventListener('resize',()=>requestAnimationFrame(clampMusicPlayer),{passive:true});
+visualViewport?.addEventListener('resize',()=>requestAnimationFrame(clampMusicPlayer),{passive:true});
+
+restoreMusicPlayer();
+syncMusicUI('SLOWED · LOADING');
+setTimeout(tryStartMusic,520);
+document.addEventListener('pointerdown',()=>{
+  if(music&&!musicUserPaused&&music.paused&&!music.error)tryStartMusic();
+},{once:true,passive:true});
 
 function telegramInit(){
   if(!tg)return;
