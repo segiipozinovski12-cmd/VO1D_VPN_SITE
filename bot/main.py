@@ -247,17 +247,33 @@ def init_db():
         for r in rows:
             c.execute("UPDATE users SET vpn_uuid=? WHERE id=?",(str(uuid.uuid4()),r["id"]))
 
-        builtins=[
-          ("VOID24","days",1,100),
-          ("GHOST48","days",2,60),
-          ("NIGHT3","days",3,40),
-          ("WELCOME50","balance",50,100),
-          ("LONDON1","days",1,100),
-        ]
-        for code,reward_type,reward_value,max_uses in builtins:
-            c.execute("""INSERT OR IGNORE INTO promo_codes
-              (code,reward_type,reward_value,max_uses,uses,expires_at,active,created_by,created_at)
-              VALUES(?,?,?,?,0,0,1,0,?)""",(code,reward_type,reward_value,max_uses,now()))
+        legacy_codes=("VOID24","GHOST48","NIGHT3","WELCOME50","LONDON1")
+        c.executemany("UPDATE promo_codes SET active=0 WHERE code=?",[(x,) for x in legacy_codes])
+        seeded=c.execute("SELECT value FROM meta WHERE key='private_promos_v2'").fetchone()
+        if not seeded:
+            rewards=[
+              ("days",1,100),
+              ("days",2,60),
+              ("days",3,40),
+              ("balance",50,100),
+              ("days",1,100),
+            ]
+            generated=[]
+            alphabet="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+            for reward_type,reward_value,max_uses in rewards:
+                while True:
+                    code="VOID-"+"".join(secrets.choice(alphabet) for _ in range(6))
+                    try:
+                        c.execute("""INSERT INTO promo_codes
+                          (code,reward_type,reward_value,max_uses,uses,expires_at,active,created_by,created_at)
+                          VALUES(?,?,?,?,0,0,1,0,?)""",
+                          (code,reward_type,reward_value,max_uses,now()))
+                        generated.append(code)
+                        break
+                    except sqlite3.IntegrityError:
+                        continue
+            c.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('private_promos_v2',?)",
+                      (json.dumps(generated),))
 init_db()
 
 def api(method, payload=None, timeout=70):
@@ -1019,6 +1035,33 @@ def manual_payment(uid,days,method):
       f"Тариф: {p['title']}\nМетод: {label}\nЦена: {money(p['usd'])}\n"
       f"Подтвердить: <code>/paid {pid}</code>")
 
+def fulfill_manual_payment(pid):
+    pid=int(pid)
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p=c.execute("SELECT * FROM payments WHERE id=?",(pid,)).fetchone()
+        if not p:return {"status":"missing"}
+        if p["status"]=="paid":return {"status":"duplicate"}
+        if p["status"]!="pending":return {"status":"invalid","payment_status":p["status"]}
+        u=c.execute("SELECT * FROM users WHERE id=?",(p["user_id"],)).fetchone()
+        if not u:return {"status":"user_missing"}
+        paid_at=now()
+        if int(p["plan_days"])>0:
+            days=int(p["plan_days"])
+            end=max(now(),int(u["sub_until"]))+days*86400
+            c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,p["user_id"]))
+            c.execute("UPDATE payments SET status='paid',paid_at=? WHERE id=?",(paid_at,pid))
+            c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                      (p["user_id"],days,f"manual:{p['method']}",paid_at,end))
+            return {"status":"ok","kind":"subscription","user_id":int(p["user_id"]),"days":days,"end":end}
+        cents=int(p["amount_usd_cents"])
+        new_balance=int(u["balance_cents"])+cents
+        c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,p["user_id"]))
+        c.execute("UPDATE payments SET status='paid',paid_at=? WHERE id=?",(paid_at,pid))
+        c.execute("INSERT INTO balance_transactions(user_id,kind,amount_cents,reference,created_at) VALUES(?,?,?,?,?)",
+                  (p["user_id"],"manual_topup",cents,f"payment:{pid}",paid_at))
+        return {"status":"ok","kind":"balance","user_id":int(p["user_id"]),"cents":cents,"balance":new_balance}
+
 def connect(uid):
     r=get_user(uid)
     if r["banned"]:
@@ -1151,20 +1194,18 @@ def handle_command(uid,text):
             send(uid,f"✅ Баланс <code>{target}</code> изменён на {money(cents)}. Теперь: <b>{money(new_balance)}</b>.")
         elif cmd=="/paid":
             pid=int(parts[1])
-            with db() as c:
-                p=c.execute("SELECT * FROM payments WHERE id=?",(pid,)).fetchone()
-                if not p:return send(uid,"Заявка не найдена.")
-                if p["status"]=="paid":return send(uid,"Эта заявка уже подтверждена.")
-                c.execute("UPDATE payments SET status='paid',paid_at=? WHERE id=?",(now(),pid))
-            if int(p["plan_days"])>0:
-                end=add_days(p["user_id"],p["plan_days"],f"manual:{p['method']}")
-                notify_referral_reward(p["user_id"])
-                send(uid,f"✅ Заявка #{pid} подтверждена. Доступ до {dt(end)}.")
-                send(p["user_id"],f"✅ <b>Оплата подтверждена.</b>\nНачислено {p['plan_days']} дней.\nАктивно до {dt(end)}.",main_kb(p["user_id"]))
+            result=fulfill_manual_payment(pid)
+            if result["status"]=="missing":return send(uid,"Заявка не найдена.")
+            if result["status"]=="duplicate":return send(uid,"Эта заявка уже подтверждена.")
+            if result["status"]!="ok":return send(uid,f"Не удалось подтвердить заявку: <code>{esc(result['status'])}</code>")
+            target=result["user_id"]
+            if result["kind"]=="subscription":
+                notify_referral_reward(target)
+                send(uid,f"✅ Заявка #{pid} подтверждена. Доступ до {dt(result['end'])}.")
+                send(target,f"✅ <b>Оплата подтверждена.</b>\nНачислено {result['days']} дней.\nАктивно до {dt(result['end'])}.",main_kb(target))
             else:
-                new_balance=change_balance(p["user_id"],p["amount_usd_cents"],"manual_topup",f"payment:{pid}")
-                send(uid,f"✅ Пополнение #{pid} подтверждено. Баланс пользователя: <b>{money(new_balance)}</b>.")
-                send(p["user_id"],f"✅ <b>Баланс пополнен на {money(p['amount_usd_cents'])}.</b>\nТеперь на балансе: <b>{money(new_balance)}</b>.",main_kb(p["user_id"]))
+                send(uid,f"✅ Пополнение #{pid} подтверждено. Баланс пользователя: <b>{money(result['balance'])}</b>.")
+                send(target,f"✅ <b>Баланс пополнен на {money(result['cents'])}.</b>\nТеперь на балансе: <b>{money(result['balance'])}</b>.",main_kb(target))
         elif cmd=="/broadcast":
             msg=text.split(maxsplit=1)[1]
             with db() as c: ids=[r["id"] for r in c.execute("SELECT id FROM users WHERE banned=0").fetchall()]
