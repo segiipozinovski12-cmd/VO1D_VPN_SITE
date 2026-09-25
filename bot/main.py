@@ -1684,6 +1684,8 @@ def personalize_node(node,row):
 
 def subscription_nodes(row):
     nodes=[personalize_node(node,row) for node in VPN_NODES]
+    if PINNED_RU_URI:
+        nodes.append(PINNED_RU_URI)
     nodes.extend(RU_VPN_NODES)
     if COMMUNITY_POOL.enabled:
         snap=COMMUNITY_POOL.snapshot()
@@ -1691,7 +1693,12 @@ def subscription_nodes(row):
             if cc=="RU":
                 continue
             nodes.extend(snap["countries"].get(cc,[]))
-    return nodes
+    out=[];seen=set()
+    for node in nodes:
+        key=node.split("#",1)[0]
+        if key in seen:continue
+        seen.add(key);out.append(node)
+    return out
 
 def xray_clients_payload():
     with db() as c:
