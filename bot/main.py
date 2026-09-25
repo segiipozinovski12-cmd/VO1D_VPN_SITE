@@ -230,6 +230,7 @@ def init_db():
         ensure_column(c,"users","notifications","INTEGER NOT NULL DEFAULT 1")
         ensure_column(c,"users","welcome_done","INTEGER NOT NULL DEFAULT 0")
         ensure_column(c,"payments","reference","TEXT NOT NULL DEFAULT ''")
+        c.execute("UPDATE users SET auto_renew=0")
         rows=c.execute("SELECT id FROM users WHERE vpn_uuid='' OR vpn_uuid IS NULL").fetchall()
         for r in rows:
             c.execute("UPDATE users SET vpn_uuid=? WHERE id=?",(str(uuid.uuid4()),r["id"]))
@@ -614,7 +615,7 @@ def servers_screen(uid):
       "Статус проверяется реальным TCP-соединением.",kb)
 
 def diagnostics(uid):
-    r=get_user(uid); idx=int(r["preferred_node"] or 0)
+    r=get_user(uid); idx=0
     online,lat=probe_node(idx)
     checks=[
       ("Подписка","OK" if active(r) else "OFF"),
@@ -680,10 +681,9 @@ def more_menu(uid):
     r=get_user(uid)
     send(uid,
       "<b>⚙️ VO1D Control</b>\nВыбери раздел:",
-      [[button("♻️ Автопродление","autorenew"),button("🌐 Серверы","servers")],
-       [button("🧪 Диагностика","diagnostics"),button("📱 Устройства","devices")],
-       [button("🎟 Промокод","promo"),button("👥 Рефералы","referral")],
-       [button("🎁 Подарки","gifts"),button("🕘 История подписки","sub_history")],
+      [[button("🧪 Диагностика","diagnostics"),button("🎟 Промокод","promo")],
+       [button("👥 Рефералы","referral"),button("🎁 Подарки","gifts")],
+       [button("🕘 История подписки","sub_history")],
        [button("🔔 Уведомления: "+("ON" if r["notifications"] else "OFF"),"notifications")],
        [button("🔐 Сбросить доступ","reset_access")],
        [button("◀️ Меню","menu")]])
@@ -774,11 +774,9 @@ def start_screen(uid,first=""):
         if CHANNEL_URL: rows.append([button("📢 Подписаться на канал",url=CHANNEL_URL)])
         rows.append([button("✅ Я подписался","check_sub")])
         text=(f"<b>VO1D_VPN</b>\n\nДобро пожаловать, {esc(first)}.\n"
-              "Чтобы получить доступ к сервису и бонусной пробной подписке, подпишись на канал.")
+              "Чтобы получить доступ к сервису и пробной подписке, подпишись на канал.")
         return send(uid,text,rows)
-    if r and not r["welcome_done"]:
-        return welcome_screen(uid,1)
-    send(uid,"<b>VO1D_VPN</b>\n\nСистема готова. Управление доступом — прямо здесь.",main_kb(uid))
+    send(uid,"<b>VO1D_VPN</b>\n\nСистема готова.",main_kb(uid))
 
 def is_member(uid):
     if not CHANNEL_ID:return True
@@ -1176,22 +1174,10 @@ def handle_callback(q):
     if data=="sub_history":return subscription_history(uid)
     if data=="promo":return promo_prompt(uid)
     if data=="referral":return referral_screen(uid)
-    if data=="autorenew":return auto_renew_screen(uid)
-    if data=="servers":return servers_screen(uid)
     if data=="diagnostics":return diagnostics(uid)
-    if data=="devices":return devices_screen(uid)
     if data=="gifts":return gifts_screen(uid)
     if data=="gift_direct":return gift_plan_menu(uid,"giftplan")
     if data=="gift_code":return gift_plan_menu(uid,"gcodeplan")
-    if data=="device_add":
-        set_pending(uid,"device_add")
-        return send(uid,f"<b>📱 Новое устройство</b>\n\nОтправь название, например <code>iPhone</code> или <code>PC</code>.\nЛимит: {DEVICE_LIMIT}.",[[button("❌ Отмена","devices")]])
-    if data.startswith("device_del:"):
-        try:
-            did=int(data.split(":")[1])
-            with db() as cc:cc.execute("DELETE FROM devices WHERE id=? AND user_id=?",(did,uid))
-            return devices_screen(uid)
-        except:return
     if data=="notifications":
         with db() as cc:cc.execute("UPDATE users SET notifications=CASE notifications WHEN 1 THEN 0 ELSE 1 END WHERE id=?",(uid,))
         return more_menu(uid)
@@ -1199,27 +1185,6 @@ def handle_callback(q):
         return send(uid,"<b>🔐 Сбросить доступ?</b>\n\nБудет создана новая subscription-ссылка и новый персональный ключ.",[[button("✅ Да, сбросить","reset_access_confirm")],[button("❌ Отмена","more")]])
     if data=="reset_access_confirm":
         return send(uid,reset_access(uid),[[button("⚡ Получить новую ссылку","connect")],[button("◀️ Ещё","more")]])
-    if data.startswith("welcome:"):
-        try:return welcome_screen(uid,int(data.split(":")[1]))
-        except:return
-    if data.startswith("autorenew:"):
-        val=data.split(":",1)[1]
-        if val=="toggle":
-            with db() as cc:cc.execute("UPDATE users SET auto_renew=CASE auto_renew WHEN 1 THEN 0 ELSE 1 END WHERE id=?",(uid,))
-        else:
-            try:
-                days=int(val)
-                if days in PLANS:
-                    with db() as cc:cc.execute("UPDATE users SET auto_renew_days=? WHERE id=?",(days,uid))
-            except:pass
-        return auto_renew_screen(uid)
-    if data.startswith("server:"):
-        try:
-            idx=int(data.split(":")[1])
-            if 0<=idx<len(VPN_NODES):
-                with db() as cc:cc.execute("UPDATE users SET preferred_node=? WHERE id=?",(idx,uid))
-            return servers_screen(uid)
-        except:return
     if data.startswith("giftplan:"):
         try:
             days=int(data.split(":")[1])
@@ -1264,7 +1229,6 @@ def handle_callback(q):
             kb.append([button("🔄 Проверить","check_sub")])
             return send(uid,"Подписка пока не обнаружена. Подпишись на канал и нажми проверку ещё раз.",kb)
         r=get_user(uid)
-        if r and not r["welcome_done"]:return welcome_screen(uid,1)
         if not r["trial_claimed"]:
             return send(uid,"✅ Подписка подтверждена.\n\nТебе доступна пробная подписка на <b>24 часа</b>.",
               [[button("🎁 Активировать 1 день","activate_trial")]])
@@ -1438,11 +1402,6 @@ def handle_update(u):
             ok,msg=redeem_code(uid,text)
             clear_pending(uid)
             return send(uid,msg,[[button("◀️ Ещё","more")]])
-        if pending and pending["action"]=="device_add":
-            ok,msg=add_device(uid,text)
-            clear_pending(uid)
-            send(uid,("✅ " if ok else "⚠️ ")+msg)
-            return devices_screen(uid)
         if pending and pending["action"]=="gift_recipient":
             try:
                 data=json.loads(pending["data"] or "{}");days=int(data["days"]);target=int(str(text).strip())
@@ -1466,11 +1425,7 @@ def personalize_node(node,row):
 
 def subscription_nodes(row):
     if not VPN_NODES:return []
-    preferred=int(row["preferred_node"] or 0) if row else 0
-    order=list(range(len(VPN_NODES)))
-    if 0<=preferred<len(order):
-        order.remove(preferred);order.insert(0,preferred)
-    return [personalize_node(VPN_NODES[i],row) for i in order]
+    return [personalize_node(node,row) for node in VPN_NODES]
 
 def xray_clients_payload():
     with db() as c:
@@ -1815,32 +1770,12 @@ def refresh_node_statuses(notify_changes=True):
             except Exception:pass
 
 def maintenance_once():
-    refresh_node_statuses(True)
     with db() as c:
         users=c.execute("""SELECT * FROM users
-          WHERE banned=0 AND (sub_until>? OR auto_renew=1)""",(now()-86400,)).fetchall()
+          WHERE banned=0 AND notifications=1 AND sub_until>?""",(now(),)).fetchall()
     for u in users:
         uid=int(u["id"]); end=int(u["sub_until"]); left=end-now()
-        if 0<left<=86400 and u["auto_renew"]:
-            days=int(u["auto_renew_days"] or 30)
-            if days not in PLANS:days=30
-            result,status=buy_with_balance(uid,days)
-            if status=="ok":
-                notify_referral_reward(uid)
-                send_once(uid,f"autorenew:{end}",
-                  f"♻️ <b>Автопродление выполнено.</b>\n"
-                  f"Списано: <b>{money(PLANS[days]['usd'])}</b>\n"
-                  f"Новый срок: <b>{dt(result['end'])}</b>\n"
-                  f"Баланс: <b>{money(result['balance'])}</b>.")
-                continue
-            if status=="insufficient":
-                missing=max(0,int(PLANS[days]["usd"])-int(result or 0))
-                send_once(uid,f"autorenew_fail:{end}",
-                  f"⚠️ <b>Не хватает средств для автопродления.</b>\n"
-                  f"Не хватает: <b>{money(missing)}</b>.",
-                  [[button("➕ Пополнить баланс","topup")]])
-
-        if not u["notifications"] or left<=0:continue
+        if left<=0:continue
         if left<=3600:
             key,label="1h","1 часа"
         elif left<=86400:
@@ -1852,7 +1787,7 @@ def maintenance_once():
         send_once(uid,f"expiry:{end}:{key}",
           f"⏳ <b>Подписка VO1D скоро закончится.</b>\nОсталось меньше {label}.\n"
           f"Активна до: <b>{dt(end)}</b>.",
-          [[button("💎 Продлить","plans")],[button("♻️ Автопродление","autorenew")]])
+          [[button("💎 Продлить","plans")]])
 
 def maintenance_worker():
     last_backup=0
