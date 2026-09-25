@@ -5,6 +5,10 @@ SOURCE_TEMPLATE=os.getenv(
     "COMMUNITY_SOURCE_TEMPLATE",
     "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/by-country/v2ray-base64-{country}.txt"
 )
+RU_SOURCE_TEMPLATE=os.getenv(
+    "COMMUNITY_RU_SOURCE",
+    "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/country/RU/v2ray-base64-0001.txt"
+)
 COUNTRY_NAMES={
     "JP":"Japan","US":"United States","NL":"Netherlands","SG":"Singapore",
     "DE":"Germany","GB":"United Kingdom","FR":"France","PL":"Poland",
@@ -46,9 +50,9 @@ def _tcp_alive(uri,timeout=1.4):
     ep=_endpoint(uri)
     if not ep:return False
     if scheme in ("hy2","hysteria2"):
-        # Hysteria2 is QUIC/UDP, so a TCP dial would incorrectly mark a healthy node dead.
-        # The source feed already exports verified nodes; here we keep the preferred RU HY2 entry.
-        return True
+        # We cannot validate a QUIC/Hysteria2 tunnel with a TCP probe.
+        # Do not publish it as "healthy" until we have a protocol-aware end-to-end check.
+        return False
     try:
         with socket.create_connection(ep,timeout=timeout):
             return True
@@ -67,6 +71,37 @@ def _hy2_score(uri):
         return score
     except Exception:
         return 0
+
+def _candidate_score(uri,cc=""):
+    try:
+        scheme=uri.split("://",1)[0].lower()
+        score={"vless":70,"trojan":55,"vmess":45,"ss":35,"hy2":5,"hysteria2":5}.get(scheme,0)
+        if scheme=="vless":
+            p=urllib.parse.urlsplit(uri)
+            q=urllib.parse.parse_qs(p.query)
+            security=(q.get("security") or [""])[0].lower()
+            transport=(q.get("type") or [""])[0].lower()
+            flow=(q.get("flow") or [""])[0].lower()
+            if security=="reality":score+=35
+            if transport in ("tcp",""):score+=15
+            if "vision" in flow:score+=10
+        if cc=="RU" and scheme in ("hy2","hysteria2"):
+            score-=1000
+        return score
+    except Exception:
+        return 0
+
+def _dedupe_endpoints(items,cc=""):
+    best={}
+    passthrough=[]
+    for uri in items:
+        ep=_endpoint(uri)
+        if not ep:
+            passthrough.append(uri);continue
+        old=best.get(ep)
+        if old is None or _candidate_score(uri,cc)>_candidate_score(old,cc):
+            best[ep]=uri
+    return passthrough+list(best.values())
 
 def _prefer_same_endpoint(items):
     out=[]; hy2={}
@@ -139,24 +174,31 @@ class CommunityPool:
         return out
 
     def _fetch_country(self,cc):
-        url=SOURCE_TEMPLATE.format(country=cc)
+        url=RU_SOURCE_TEMPLATE if cc=="RU" else SOURCE_TEMPLATE.format(country=cc)
         req=urllib.request.Request(url,headers={"User-Agent":"VO1D-Community-Pool/1.0"})
         with urllib.request.urlopen(req,timeout=20) as r:
             raw=r.read(2_500_000)
         decoded=_b64decode_text(raw.decode())
         unique=[]
         seen=set()
+        limit=max(self.candidate_limit,60) if cc=="RU" else self.candidate_limit
         for line in decoded.splitlines():
             uri=line.strip()
             if "://" not in uri:continue
             scheme=uri.split("://",1)[0].lower()
             if scheme not in ALLOWED_SCHEMES:continue
+            if cc=="RU" and scheme in ("hy2","hysteria2"):
+                continue
             key=uri.split("#",1)[0]
             if key in seen:continue
             seen.add(key);unique.append(uri)
-            if len(unique)>=self.candidate_limit:break
+            if len(unique)>=limit:break
         if not unique:return []
-        unique=_prefer_same_endpoint(unique)
+        unique=_dedupe_endpoints(unique,cc)
+        if cc=="RU":
+            unique.sort(key=lambda u:_candidate_score(u,cc),reverse=True)
+        else:
+            unique=_prefer_same_endpoint(unique)
         workers=min(12,len(unique))
         with ThreadPoolExecutor(max_workers=workers) as ex:
             alive=list(ex.map(_tcp_alive,unique))
