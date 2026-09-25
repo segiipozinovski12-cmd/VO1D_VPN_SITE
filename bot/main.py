@@ -656,6 +656,22 @@ def reset_access(uid):
         return "✅ Ссылка и персональный VPN-ключ заменены. После синхронизации Xray старый ключ перестанет работать."
     return "✅ Персональная subscription-ссылка заменена. Старый импортированный VPN-конфиг пока не отключается сервером — для этого нужен режим персональных Xray-ключей."
 
+def claim_trial(uid):
+    uid=int(uid)
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        r=c.execute("SELECT trial_claimed,sub_until,banned FROM users WHERE id=?",(uid,)).fetchone()
+        if not r:return None,"missing"
+        if r["banned"]:return None,"banned"
+        if r["trial_claimed"] or c.execute("SELECT 1 FROM trial_claims WHERE user_id=?",(uid,)).fetchone():
+            return int(r["sub_until"]),"used"
+        end=max(now(),int(r["sub_until"]))+TRIAL_HOURS*3600
+        c.execute("UPDATE users SET trial_claimed=1,sub_until=? WHERE id=?",(end,uid))
+        c.execute("INSERT INTO trial_claims(user_id,claimed_at) VALUES(?,?)",(uid,now()))
+        c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
+                  (uid,max(1,TRIAL_HOURS//24),"trial",now(),end))
+        return end,"ok"
+
 def more_menu(uid):
     r=get_user(uid)
     send(uid,
@@ -741,21 +757,24 @@ def main_kb(uid):
     rows += [
       [button("👤 Профиль","profile"),button("💳 Баланс","balance")],
       [button("💎 Подписка","plans"),button("⚡ Подключить","connect")],
-      [button("📖 Инструкция","guide"),button("🛟 Поддержка",url=SUPPORT_URL)],
+      [button("⚙️ Ещё","more"),button("📖 Инструкция","guide")],
+      [button("🛟 Поддержка",url=SUPPORT_URL)],
     ]
     if uid==ADMIN_ID: rows.append([button("🛠 Админ-панель","admin")])
     return rows
 
 def start_screen(uid,first=""):
-    if CHANNEL_ID:
+    r=get_user(uid)
+    if CHANNEL_ID and not is_member(uid):
         rows=[]
         if CHANNEL_URL: rows.append([button("📢 Подписаться на канал",url=CHANNEL_URL)])
         rows.append([button("✅ Я подписался","check_sub")])
         text=(f"<b>VO1D_VPN</b>\n\nДобро пожаловать, {esc(first)}.\n"
               "Чтобы получить доступ к сервису и бонусной пробной подписке, подпишись на канал.")
-        send(uid,text,rows)
-    else:
-        send(uid,"<b>VO1D_VPN</b>\n\nСистема готова. Управление доступом — прямо здесь.",main_kb(uid))
+        return send(uid,text,rows)
+    if r and not r["welcome_done"]:
+        return welcome_screen(uid,1)
+    send(uid,"<b>VO1D_VPN</b>\n\nСистема готова. Управление доступом — прямо здесь.",main_kb(uid))
 
 def is_member(uid):
     if not CHANNEL_ID:return True
@@ -788,6 +807,7 @@ def balance_screen(uid):
       "Баланс можно пополнять и использовать для покупки любой подписки VO1D. "
       "Внутренний баланс не выводится обратно в деньги.",
       [[button("➕ Пополнить баланс","topup")],
+       [button("🧾 История операций","balance_history")],
        [button("💎 Купить подписку","plans")],
        [button("◀️ Меню","menu")]])
 
