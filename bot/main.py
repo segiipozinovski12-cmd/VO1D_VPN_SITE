@@ -39,10 +39,10 @@ VOLUME_AUDIO_PATH=os.getenv("AUDIO_PATH",(mount.rstrip("/")+"/leaveamsg-slowed.m
 BACKUP_DIR=os.getenv("BACKUP_DIR",(mount.rstrip("/")+"/backups") if mount else os.path.join(BASE_DIR,"backups"))
 
 PLANS={
-  30: {"title":"1 месяц","usd":399,"stars":250},
-  90: {"title":"3 месяца","usd":999,"stars":650},
-  180:{"title":"6 месяцев","usd":1699,"stars":1100},
-  365:{"title":"12 месяцев","usd":2799,"stars":1800},
+  30: {"title":"1 месяц","usd":199,"stars":130},
+  90: {"title":"3 месяца","usd":499,"stars":325},
+  180:{"title":"6 месяцев","usd":899,"stars":585},
+  365:{"title":"12 месяцев","usd":1499,"stars":975},
 }
 
 # Внутренний баланс VO1D. Эти суммы — только быстрые кнопки:
