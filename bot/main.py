@@ -23,6 +23,7 @@ DB_PATH=os.getenv("DB_PATH",(mount.rstrip("/")+"/vo1d.db") if mount else "vo1d.d
 os.makedirs(os.path.dirname(DB_PATH) or ".",exist_ok=True)
 BASE_DIR=os.path.dirname(os.path.abspath(__file__))
 WEBAPP_DIR=os.path.join(BASE_DIR,"webapp")
+AUDIO_PATH=os.getenv("AUDIO_PATH",(mount.rstrip("/")+"/leaveamsg-slowed.mp3") if mount else os.path.join(WEBAPP_DIR,"audio","leaveamsg-slowed.mp3"))
 
 PLANS={
   30: {"title":"1 месяц","usd":399,"stars":250},
@@ -588,7 +589,7 @@ class Web(BaseHTTPRequestHandler):
         }
         name=mapping.get(path)
         if not name:return False
-        full=os.path.join(WEBAPP_DIR,name)
+        full=AUDIO_PATH if name=="audio/leaveamsg-slowed.mp3" else os.path.join(WEBAPP_DIR,name)
         try:
             with open(full,"rb") as f:data=f.read()
             ctype=mimetypes.guess_type(full)[0] or "application/octet-stream"
