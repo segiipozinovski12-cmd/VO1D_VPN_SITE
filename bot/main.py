@@ -1,5 +1,6 @@
 import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 TOKEN=os.getenv("BOT_TOKEN","").strip()
@@ -33,8 +34,11 @@ PLANS={
   365:{"title":"12 месяцев","usd":2799,"stars":1800},
 }
 
-# Внутренний баланс VO1D: пополнение фиксированными пакетами.
-# Баланс используется только внутри сервиса для покупки подписок и не является выводимыми деньгами.
+# Внутренний баланс VO1D. Эти суммы — только быстрые кнопки:
+# пользователь также может ввести произвольную сумму вручную.
+TOPUP_STARS_PER_USD=Decimal("65")
+TOPUP_MIN_CENTS=10
+TOPUP_MAX_CENTS=10000
 TOPUPS={
   500: {"title":"$5.00","stars":325},
   1000:{"title":"$10.00","stars":650},
@@ -48,6 +52,38 @@ def dt(ts):
     return datetime.fromtimestamp(ts,timezone.utc).strftime("%d.%m.%Y %H:%M UTC") if ts else "—"
 def money(c): return "$"+f"{c/100:.2f}"
 def esc(s): return html.escape(str(s or ""))
+
+def valid_topup_cents(cents):
+    try:cents=int(cents)
+    except:return False
+    return TOPUP_MIN_CENTS<=cents<=TOPUP_MAX_CENTS
+
+def topup_stars(cents):
+    cents=int(cents)
+    return int((Decimal(cents)*TOPUP_STARS_PER_USD/Decimal(100)).quantize(Decimal("1"),rounding=ROUND_CEILING))
+
+def parse_topup_amount(raw):
+    s=str(raw or "").strip().replace("$","").replace("USD","").replace("usd","").replace(" ","").replace(",",".")
+    try:
+        value=Decimal(s)
+    except InvalidOperation:
+        return None
+    if not value.is_finite():return None
+    cents=int((value*100).quantize(Decimal("1"),rounding=ROUND_HALF_UP))
+    return cents if valid_topup_cents(cents) else None
+
+def set_pending(uid,action,data=""):
+    with db() as c:
+        c.execute("""INSERT INTO pending_actions(user_id,action,data,created_at) VALUES(?,?,?,?)
+          ON CONFLICT(user_id) DO UPDATE SET action=excluded.action,data=excluded.data,created_at=excluded.created_at""",
+          (int(uid),str(action),str(data or ""),now()))
+
+def get_pending(uid):
+    with db() as c:return c.execute("SELECT * FROM pending_actions WHERE user_id=?",(int(uid),)).fetchone()
+
+def clear_pending(uid):
+    with db() as c:c.execute("DELETE FROM pending_actions WHERE user_id=?",(int(uid),))
+
 
 def configured_node_ips():
     out=[]
@@ -101,6 +137,12 @@ def init_db():
           kind TEXT NOT NULL,
           amount_cents INTEGER NOT NULL,
           reference TEXT DEFAULT '',
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pending_actions(
+          user_id INTEGER PRIMARY KEY,
+          action TEXT NOT NULL,
+          data TEXT DEFAULT '',
           created_at INTEGER NOT NULL
         );
         """)
@@ -329,6 +371,7 @@ def profile(uid):
       [[button("💳 Пополнить баланс","topup")],[button("💎 Купить подписку","plans")],[button("⚡ Подключить","connect")],[button("◀️ Меню","menu")]])
 
 def balance_screen(uid):
+    clear_pending(uid)
     r=get_user(uid)
     if not r:return
     send(uid,
@@ -342,6 +385,7 @@ def balance_screen(uid):
 
 def topup_menu(uid):
     r=get_user(uid)
+    set_pending(uid,"topup_amount")
     kb=[]
     row=[]
     for cents,p in TOPUPS.items():
@@ -349,22 +393,31 @@ def topup_menu(uid):
         if len(row)==2:
             kb.append(row);row=[]
     if row:kb.append(row)
-    kb.append([button("◀️ Баланс","balance")])
+    kb.append([button("❌ Отмена","balance")])
     send(uid,
       f"<b>➕ Пополнение баланса</b>\n\n"
-      f"Сейчас: <b>{money(r['balance_cents'])}</b>\n"
-      "Выбери сумму пополнения:",kb)
+      f"Сейчас: <b>{money(r['balance_cents'])}</b>\n\n"
+      f"Отправь <b>любую сумму одним сообщением</b>, например:\n"
+      f"<code>7.50</code> или <code>12</code>\n\n"
+      f"Допустимый диапазон: <b>{money(TOPUP_MIN_CENTS)}–{money(TOPUP_MAX_CENTS)}</b>.\n"
+      "Либо используй быструю кнопку:",kb)
 
 def topup_methods(uid,cents):
-    p=TOPUPS.get(int(cents))
-    if not p:return
+    cents=int(cents)
+    if not valid_topup_cents(cents):
+        return send(uid,"Некорректная сумма пополнения.",[[button("↩️ Ввести другую сумму","topup")]])
+    stars=topup_stars(cents)
+    clear_pending(uid)
     send(uid,
-      f"<b>Пополнение {p['title']}</b>\n\n"
-      f"Telegram Stars: <b>{p['stars']} ⭐</b>\n\n"
-      "После оплаты сумма появится на внутреннем балансе VO1D.",
-      [[button(f"⭐ Оплатить {p['stars']} Stars",f"topup_pay:{cents}:stars")],
+      f"<b>Пополнение баланса</b>\n\n"
+      f"На баланс: <b>{money(cents)}</b>\n"
+      f"Итог через Telegram Stars: <b>{stars} ⭐</b>\n"
+      f"Карта / криптовалюта: <b>{money(cents)}</b>\n\n"
+      "Выбери способ оплаты:",
+      [[button(f"⭐ Оплатить {stars} Stars",f"topup_pay:{cents}:stars")],
        [button("₿ Криптовалюта",f"topup_pay:{cents}:crypto"),button("💳 Карта",f"topup_pay:{cents}:card")],
-       [button("◀️ Назад","topup")]])
+       [button("✍️ Другая сумма","topup")],
+       [button("◀️ Баланс","balance")]])
 
 def plans(uid):
     kb=[]
@@ -410,19 +463,22 @@ def star_invoice(uid,days):
     },30)
 
 def topup_star_invoice(uid,cents):
-    p=TOPUPS[cents]
-    payload=f"bal:{uid}:{cents}:{p['stars']}:{secrets.token_hex(6)}"
+    cents=int(cents)
+    if not valid_topup_cents(cents):return
+    stars=topup_stars(cents)
+    payload=f"bal:{uid}:{cents}:{stars}:{secrets.token_hex(6)}"
     api("sendInvoice",{
       "chat_id":uid,
-      "title":f"VO1D Balance +{p['title']}",
+      "title":f"VO1D Balance +{money(cents)}",
       "description":"Пополнение внутреннего баланса VO1D для покупки подписок.",
       "payload":payload,
       "currency":"XTR",
-      "prices":[{"label":f"Баланс +{p['title']}","amount":p["stars"]}]
+      "prices":[{"label":f"Баланс +{money(cents)}","amount":stars}]
     },30)
 
 def manual_topup(uid,cents,method):
-    p=TOPUPS[cents]
+    cents=int(cents)
+    if not valid_topup_cents(cents):return
     method_name="topup_crypto" if method=="crypto" else "topup_card"
     pid=record_payment(uid,method_name,0,0,cents,"pending","")
     label="криптовалютой" if method=="crypto" else "банковской картой"
@@ -602,12 +658,12 @@ def handle_callback(q):
     if data.startswith("topup:"):
         try:
             cents=int(data.split(":")[1])
-            if cents in TOPUPS:return topup_methods(uid,cents)
+            if valid_topup_cents(cents):return topup_methods(uid,cents)
         except:return
     if data.startswith("topup_pay:"):
         try:
             _,amount,method=data.split(":"); cents=int(amount)
-            if cents not in TOPUPS:return
+            if not valid_topup_cents(cents):return
             if method=="stars":return topup_star_invoice(uid,cents)
             if method in ("crypto","card"):return manual_topup(uid,cents,method)
         except Exception as e:return send(uid,f"Ошибка пополнения: <code>{esc(e)}</code>")
@@ -663,7 +719,7 @@ def successful_payment(msg):
             return
         if kind=="bal":
             cents=int(parts[2]); expected_stars=int(parts[3])
-            if cents not in TOPUPS or TOPUPS[cents]["stars"]!=expected_stars:return
+            if not valid_topup_cents(cents) or topup_stars(cents)!=expected_stars:return
             if int(sp.get("total_amount",0))!=expected_stars:return
             pid=record_payment(uid,"stars_topup",0,expected_stars,cents,"paid",charge)
             new_balance=change_balance(uid,cents,"stars_topup",f"payment:{pid}")
@@ -692,7 +748,7 @@ def handle_update(u):
                     ok=days in PLANS and int(q.get("total_amount",0))==PLANS[days]["stars"]
                 elif parts[0]=="bal" and len(parts)>=5:
                     cents=int(parts[2]); stars=int(parts[3])
-                    ok=cents in TOPUPS and TOPUPS[cents]["stars"]==stars and int(q.get("total_amount",0))==stars
+                    ok=valid_topup_cents(cents) and topup_stars(cents)==stars and int(q.get("total_amount",0))==stars
             api("answerPreCheckoutQuery",{"pre_checkout_query_id":q["id"],"ok":bool(ok),**({} if ok else {"error_message":err})},15)
         except Exception:
             try: api("answerPreCheckoutQuery",{"pre_checkout_query_id":q["id"],"ok":False,"error_message":err},15)
@@ -707,6 +763,15 @@ def handle_update(u):
         text=msg.get("text","")
         if text.startswith("/"):return handle_command(uid,text)
         if row["banned"]:return
+        pending=get_pending(uid)
+        if pending and pending["action"]=="topup_amount":
+            cents=parse_topup_amount(text)
+            if cents is None:
+                return send(uid,
+                  f"Не понял сумму. Отправь число от <b>{money(TOPUP_MIN_CENTS)}</b> до <b>{money(TOPUP_MAX_CENTS)}</b>.\n"
+                  "Например: <code>7.50</code>",
+                  [[button("❌ Отмена","balance")]])
+            return topup_methods(uid,cents)
         return send(uid,"<b>VO1D_VPN</b>\nИспользуй меню ниже.",main_kb(uid))
     q=u.get("callback_query")
     if q:
