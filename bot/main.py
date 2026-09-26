@@ -17,7 +17,7 @@ if not PUBLIC_URL and os.getenv("RAILWAY_PUBLIC_DOMAIN"):
     PUBLIC_URL="https://"+os.getenv("RAILWAY_PUBLIC_DOMAIN","").strip()
 SUPPORT_URL=os.getenv("SUPPORT_URL",f"https://t.me/{ADMIN_USERNAME}")
 MINI_APP_URL=os.getenv("MINI_APP_URL",(PUBLIC_URL+"/app") if PUBLIC_URL else "").rstrip("/")
-TRIAL_HOURS=int(os.getenv("TRIAL_HOURS","168"))
+TRIAL_HOURS=7*24
 PORT=int(os.getenv("PORT","8080"))
 VPN_NODES=[x.strip() for x in os.getenv("VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
 RU_VPN_NODES=[x.strip() for x in os.getenv("RU_VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
