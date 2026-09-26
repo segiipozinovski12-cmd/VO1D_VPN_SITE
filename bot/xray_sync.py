@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, json, time, shutil, tempfile, subprocess, urllib.request
+import os, json, time, shutil, tempfile, subprocess, urllib.request, urllib.parse, html
 
 API_URL=os.getenv("VO1D_API_URL","").rstrip("/")
 SYNC_SECRET=os.getenv("XRAY_SYNC_SECRET","")
@@ -9,6 +9,29 @@ INBOUND_TAG=os.getenv("XRAY_INBOUND_TAG","")
 FLOW=os.getenv("XRAY_FLOW","xtls-rprx-vision")
 INTERVAL=max(15,int(os.getenv("XRAY_SYNC_INTERVAL","60")))
 PRESERVE_UNMANAGED=os.getenv("XRAY_PRESERVE_UNMANAGED","1").strip().lower() in ("1","true","yes","on")
+ALERT_BOT_TOKEN=os.getenv("ALERT_BOT_TOKEN",os.getenv("BOT_TOKEN","")).strip()
+ALERT_CHAT_ID=os.getenv("ALERT_CHAT_ID",os.getenv("ADMIN_ID","")).strip()
+ALERT_AFTER=max(1,int(os.getenv("XRAY_ALERT_AFTER","2")))
+
+def telegram_alert(text):
+    if not ALERT_BOT_TOKEN or not ALERT_CHAT_ID:return False
+    data=urllib.parse.urlencode({
+        "chat_id":ALERT_CHAT_ID,
+        "text":text,
+        "parse_mode":"HTML",
+        "disable_web_page_preview":"true",
+    }).encode()
+    req=urllib.request.Request(
+        f"https://api.telegram.org/bot{ALERT_BOT_TOKEN}/sendMessage",
+        data=data,
+        headers={"Content-Type":"application/x-www-form-urlencoded","User-Agent":"VO1D-Xray-Sync/1.1"},
+    )
+    try:
+        with urllib.request.urlopen(req,timeout=12) as r:
+            return 200<=getattr(r,"status",200)<300
+    except Exception as e:
+        print("alert error:",repr(e),flush=True)
+        return False
 
 def fetch_clients():
     if not API_URL or not SYNC_SECRET:
@@ -97,13 +120,27 @@ def apply_clients(rows):
 
 def main():
     print("VO1D Xray sync started",flush=True)
+    failures=0
+    alerted=False
     while True:
         try:
             rows=fetch_clients()
             changed=apply_clients(rows)
             print(f"clients={len(rows)} changed={changed}",flush=True)
+            if alerted:
+                telegram_alert("✅ <b>VO1D XRAY SYNC RECOVERED</b>\nСинхронизация клиентов снова работает.")
+            failures=0
+            alerted=False
         except Exception as e:
+            failures+=1
             print("sync error:",repr(e),flush=True)
+            if failures>=ALERT_AFTER and not alerted:
+                telegram_alert(
+                    "🚨 <b>VO1D XRAY SYNC DOWN</b>\n"
+                    f"Ошибок подряд: <b>{failures}</b>\n"
+                    f"<code>{html.escape(str(e)[:900])}</code>"
+                )
+                alerted=True
         time.sleep(INTERVAL)
 
 if __name__=="__main__":

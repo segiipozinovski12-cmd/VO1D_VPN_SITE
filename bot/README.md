@@ -69,3 +69,46 @@ The main /sub/<token> feed always places configured VPN_NODES first, then the su
 - Pending manual requests expire automatically after `MANUAL_PAYMENT_TTL_HOURS`.
 - Auto-renewal uses the user's internal VO1D balance and runs when less than 24 hours remain.
 
+
+
+## Admin outage alerts
+
+VO1D has two alert layers:
+
+1. The bot itself sends the admin alerts when a configured VPN node changes state, a maintenance subsystem fails, Xray sync fails, or the service starts again.
+2. `watchdog.py` is an independent monitor for outages where the main bot cannot alert because it is already down.
+
+Run the watchdog as a **separate service/process** from the main bot. For stronger protection, host it on a different machine/provider from the service it monitors.
+
+Example environment:
+
+```
+BOT_TOKEN=<same Telegram bot token, or a dedicated alert bot token>
+ADMIN_ID=<your Telegram ID>
+WATCH_PROJECT_URL=https://your-vo1d-bot.example
+WATCH_INTERVAL=60
+WATCH_FAILURE_THRESHOLD=3
+WATCH_RECOVERY_THRESHOLD=1
+WATCH_STATE_PATH=/data/vo1d-watchdog.json
+```
+
+If `VPN_NODES` is also present, the watchdog automatically monitors each configured VPN endpoint by TCP.
+
+Extra VPS or service checks can be added with `WATCH_TARGETS`, one target per line:
+
+```
+tcp|RU-01|203.0.113.10|443
+tcp|RU-01-SSH|203.0.113.10|22
+health|VO1D PANEL|https://panel.example.com/health
+http|PUBLIC STATUS|https://status.example.com/
+```
+
+The monitor waits for `WATCH_FAILURE_THRESHOLD` consecutive failures before sending **DOWN**, then sends one **RECOVERED** message when the target works again. It does not send the same outage alert on every check.
+
+For a separate Railway watchdog service, use the same repository with root directory `/bot` and start command:
+
+```
+python watchdog.py
+```
+
+A monitor running inside the same process cannot report that process's death, which is why the external watchdog is intentionally separate.

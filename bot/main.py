@@ -40,6 +40,13 @@ except Exception:
     MANUAL_PAYMENT_TIMEZONE="UTC"
     MANUAL_PAYMENT_ZONE=timezone.utc
 
+ALERT_COOLDOWN_SECONDS=max(60,int(os.getenv("ALERT_COOLDOWN_SECONDS","1800")))
+PROCESS_STARTED_AT=int(time.time())
+POLL_HEARTBEAT_AT=0
+MAINT_HEARTBEAT_AT=0
+_ALERT_LAST={}
+_ALERT_LOCK=threading.Lock()
+
 mount=os.getenv("RAILWAY_VOLUME_MOUNT_PATH","").strip()
 DB_PATH=os.getenv("DB_PATH",(mount.rstrip("/")+"/vo1d.db") if mount else "vo1d.db")
 os.makedirs(os.path.dirname(DB_PATH) or ".",exist_ok=True)
@@ -522,6 +529,21 @@ def send(chat_id,text,kb=None,disable_preview=True):
        "disable_web_page_preview":disable_preview}
     if kb: p["reply_markup"]={"inline_keyboard":kb}
     return api("sendMessage",p)
+
+
+def admin_alert(key,text,cooldown=None):
+    cooldown=max(0,int(ALERT_COOLDOWN_SECONDS if cooldown is None else cooldown))
+    ts=now()
+    with _ALERT_LOCK:
+        previous=int(_ALERT_LAST.get(str(key),0) or 0)
+        if previous and ts-previous<cooldown:return False
+        _ALERT_LAST[str(key)]=ts
+    try:
+        send(ADMIN_ID,text)
+        return True
+    except Exception as e:
+        print("admin alert error",repr(e),flush=True)
+        return False
 
 def answer_cb(cid,text="",alert=False):
     try: api("answerCallbackQuery",{"callback_query_id":cid,"text":text,"show_alert":alert},20)
@@ -1918,6 +1940,28 @@ def database_healthy():
     except Exception:
         return False
 
+def service_health():
+    ts=now()
+    db_ok=database_healthy()
+    startup_age=max(0,ts-PROCESS_STARTED_AT)
+    poll_age=(ts-POLL_HEARTBEAT_AT) if POLL_HEARTBEAT_AT else None
+    maintenance_age=(ts-MAINT_HEARTBEAT_AT) if MAINT_HEARTBEAT_AT else None
+    polling_ok=(poll_age is not None and poll_age<=150) or (poll_age is None and startup_age<=150)
+    maintenance_ok=(maintenance_age is not None and maintenance_age<=720) or (maintenance_age is None and startup_age<=120)
+    components={
+      "database":"ok" if db_ok else "error",
+      "telegram_polling":"ok" if polling_ok else "stale",
+      "maintenance":"ok" if maintenance_ok else "stale",
+    }
+    return {
+      "ok":bool(db_ok and polling_ok and maintenance_ok),
+      "service":"VO1D_VPNbot",
+      "uptime_seconds":startup_age,
+      "components":components,
+      "poll_age_seconds":poll_age,
+      "maintenance_age_seconds":maintenance_age,
+    }
+
 class Web(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
 
@@ -2078,8 +2122,8 @@ class Web(BaseHTTPRequestHandler):
         path=parsed.path
 
         if path=="/health":
-            healthy=database_healthy()
-            return self.reply_json(200 if healthy else 503,{"ok":healthy,"service":"VO1D_VPNbot","database":"ok" if healthy else "error"})
+            health=service_health()
+            return self.reply_json(200 if health["ok"] else 503,health)
 
         if path=="/api/ping":
             return self.reply_json(200,{"ok":True,"time":now(),"service":"VO1D_VPN"})
@@ -2326,11 +2370,17 @@ def process_auto_renewals():
 
 def maintenance_once():
     try:refresh_node_statuses(True)
-    except Exception as e:print("node probe error",repr(e),flush=True)
+    except Exception as e:
+        print("node probe error",repr(e),flush=True)
+        admin_alert("maintenance:node_probe",f"🚨 <b>VO1D ALERT · NODE PROBE ERROR</b>\n<code>{esc(e)}</code>")
     try:expire_stale_payments()
-    except Exception as e:print("payment expiry error",repr(e),flush=True)
+    except Exception as e:
+        print("payment expiry error",repr(e),flush=True)
+        admin_alert("maintenance:payment_expiry",f"🚨 <b>VO1D ALERT · PAYMENT MAINTENANCE</b>\n<code>{esc(e)}</code>")
     try:process_auto_renewals()
-    except Exception as e:print("auto renew error",repr(e),flush=True)
+    except Exception as e:
+        print("auto renew error",repr(e),flush=True)
+        admin_alert("maintenance:auto_renew",f"🚨 <b>VO1D ALERT · AUTO RENEW ERROR</b>\n<code>{esc(e)}</code>")
     with db() as c:
         users=c.execute("""SELECT * FROM users
           WHERE banned=0 AND notifications=1 AND sub_until>?""",(now(),)).fetchall()
@@ -2351,6 +2401,7 @@ def maintenance_once():
           [[button("💎 Продлить","plans")]])
 
 def maintenance_worker():
+    global MAINT_HEARTBEAT_AT
     last_backup=0
     time.sleep(8)
     while True:
@@ -2359,14 +2410,17 @@ def maintenance_worker():
                 backup_db("scheduled")
                 last_backup=now()
             maintenance_once()
+            MAINT_HEARTBEAT_AT=now()
         except Exception as e:
             print("maintenance error",repr(e),flush=True)
+            admin_alert("maintenance:worker",f"🚨 <b>VO1D ALERT · MAINTENANCE WORKER</b>\n<code>{esc(e)}</code>")
         time.sleep(300)
 
 def web_thread():
     ThreadingHTTPServer(("0.0.0.0",PORT),Web).serve_forever()
 
 def run():
+    global POLL_HEARTBEAT_AT
     if not TOKEN: raise SystemExit("Set BOT_TOKEN in Railway Variables")
     threading.Thread(target=web_thread,daemon=True).start()
     threading.Thread(target=maintenance_worker,daemon=True).start()
@@ -2385,15 +2439,24 @@ def run():
         except Exception as e:
             print("mini app menu error",repr(e),flush=True)
     print("VO1D_VPNbot started; db:",DB_PATH,"web port:",PORT,flush=True)
+    try:
+        send(ADMIN_ID,"🟢 <b>VO1D PROJECT ONLINE</b>\nБот запущен, web health endpoint поднят.")
+    except Exception as e:
+        print("startup alert error",repr(e),flush=True)
     offset=0
     while True:
         try:
             updates=api("getUpdates",{"offset":offset,"timeout":50,"allowed_updates":["message","callback_query","pre_checkout_query"]},65)
+            POLL_HEARTBEAT_AT=now()
             for u in updates:
                 offset=max(offset,int(u["update_id"])+1)
                 try:handle_update(u)
-                except Exception as e:print("update error",repr(e),flush=True)
+                except Exception as e:
+                    print("update error",repr(e),flush=True)
+                    admin_alert("bot:update_error",f"🚨 <b>VO1D ALERT · UPDATE ERROR</b>\n<code>{esc(e)}</code>")
         except Exception as e:
-            print("poll error",repr(e),flush=True);time.sleep(3)
+            print("poll error",repr(e),flush=True)
+            admin_alert("bot:poll_error",f"⚠️ <b>VO1D ALERT · TELEGRAM POLLING</b>\n<code>{esc(e)}</code>")
+            time.sleep(3)
 
 if __name__=="__main__":run()
