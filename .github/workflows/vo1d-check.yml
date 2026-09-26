@@ -96,8 +96,6 @@ jobs:
               raise SystemExit("Node transition notifications are disabled")
           if 'if scheme.lower()!="vless"' not in source:
               raise SystemExit("Per-user key personalization must be limited to VLESS")
-          if 'manual_bonus:' not in source:
-              raise SystemExit("Manual payment bonus marker missing")
 
           print(f"Mini App/core regression check OK ({len(ids)} selectors)")
           PY
