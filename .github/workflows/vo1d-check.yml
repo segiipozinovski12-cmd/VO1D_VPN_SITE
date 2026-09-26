@@ -21,10 +21,12 @@ jobs:
           node-version: "22"
 
       - name: Check Python
-        run: python -m py_compile bot/main.py bot/xray_sync.py bot/community_nodes.py bot/test_ru_e2e.py bot/pinned_ru.py
+        run: python -m py_compile bot/main.py bot/xray_sync.py bot/watchdog.py bot/community_nodes.py bot/test_ru_e2e.py bot/pinned_ru.py
 
       - name: Core bot regression tests
-        run: python bot/test_core.py
+        run: |
+          python bot/test_core.py
+          python bot/test_watchdog.py
 
       - name: Pinned RU parser test
         run: |
