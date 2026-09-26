@@ -17,7 +17,7 @@ if not PUBLIC_URL and os.getenv("RAILWAY_PUBLIC_DOMAIN"):
     PUBLIC_URL="https://"+os.getenv("RAILWAY_PUBLIC_DOMAIN","").strip()
 SUPPORT_URL=os.getenv("SUPPORT_URL",f"https://t.me/{ADMIN_USERNAME}")
 MINI_APP_URL=os.getenv("MINI_APP_URL",(PUBLIC_URL+"/app") if PUBLIC_URL else "").rstrip("/")
-TRIAL_HOURS=int(os.getenv("TRIAL_HOURS","24"))
+TRIAL_HOURS=int(os.getenv("TRIAL_HOURS","168"))
 PORT=int(os.getenv("PORT","8080"))
 VPN_NODES=[x.strip() for x in os.getenv("VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
 RU_VPN_NODES=[x.strip() for x in os.getenv("RU_VPN_NODES","").replace("\\n","\n").splitlines() if x.strip()]
@@ -1427,8 +1427,8 @@ def handle_callback(q):
             return send(uid,"Подписка пока не обнаружена. Подпишись на канал и нажми проверку ещё раз.",kb)
         r=get_user(uid)
         if not r["trial_claimed"]:
-            return send(uid,"✅ Подписка подтверждена.\n\nТебе доступна пробная подписка на <b>24 часа</b>.",
-              [[button("🎁 Активировать 1 день","activate_trial")]])
+            return send(uid,"✅ Подписка подтверждена.\n\nТебе доступна пробная подписка на <b>7 дней</b>.",
+              [[button("🎁 Активировать 7 дней","activate_trial")]])
         return send(uid,"✅ Подписка подтверждена.",main_kb(uid))
     if data=="activate_trial":
         if CHANNEL_ID and not is_member(uid):return send(uid,"Сначала подпишись на канал.",[[button("📢 Канал",url=CHANNEL_URL)]])
