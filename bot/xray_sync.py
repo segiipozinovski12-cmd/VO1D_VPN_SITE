@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, json, time, shutil, tempfile, subprocess, urllib.request, urllib.parse
+import os, json, time, shutil, tempfile, subprocess, urllib.request, urllib.parse, html
 
 API_URL=os.getenv("VO1D_API_URL","").rstrip("/")
 SYNC_SECRET=os.getenv("XRAY_SYNC_SECRET","")
@@ -138,7 +138,7 @@ def main():
                 telegram_alert(
                     "🚨 <b>VO1D XRAY SYNC DOWN</b>\n"
                     f"Ошибок подряд: <b>{failures}</b>\n"
-                    f"<code>{str(e)[:900]}</code>"
+                    f"<code>{html.escape(str(e)[:900])}</code>"
                 )
                 alerted=True
         time.sleep(INTERVAL)
