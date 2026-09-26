@@ -433,15 +433,6 @@ function render(me){
   $('#networkFlow').textContent='VISION';
   $('#networkTransport').textContent=safeText(infra.transport,'TCP / 443');
 
-  const manual=me.manual_payment||{};
-  const manualHint=$('#manualPayHint'),manualBtn=$('#supportPayBtn');
-  if(manualHint){
-    manualHint.textContent=manual.open
-      ?`Прямая оплата доступна до ${String(manual.end_hour).padStart(2,'0')}:00 · +${manual.bonus_days||0} дней к подписке.`
-      :`Прямая оплата: ${String(manual.start_hour??9).padStart(2,'0')}:00–${String(manual.end_hour??20).padStart(2,'0')}:00. Telegram Stars работают 24/7.`;
-  }
-  if(manualBtn)manualBtn.textContent=manual.open?'ОПЛАТА НАПРЯМУЮ · BONUS ↗':'ОТКРЫТЬ ОПЛАТУ В БОТЕ ↗';
-
   renderServers(network);
   renderPlans(me.plans||[],infra);
 }
@@ -649,7 +640,7 @@ $('#refreshBtn')?.addEventListener('click',async()=>{
 });
 $('#pingCard')?.addEventListener('click',()=>{haptic('light');measurePing()});
 $('#supportBtn')?.addEventListener('click',()=>openTelegramUrl(state.me?.links?.support||'https://t.me/vo1d_root'));
-$('#supportPayBtn')?.addEventListener('click',()=>openTelegramUrl(state.me?.links?.payment||state.me?.links?.bot||'https://t.me/VO1D_VPNbot?start=plans'));
+$('#supportPayBtn')?.addEventListener('click',()=>openTelegramUrl(state.me?.links?.support||'https://t.me/vo1d_root'));
 $('#openBotBtn')?.addEventListener('click',()=>openTelegramUrl(state.me?.links?.bot||'https://t.me/VO1D_VPNbot'));
 $('#createPromoBtn')?.addEventListener('click',createAdminPromo);
 $('#grantBtn')?.addEventListener('click',adminGrant);
