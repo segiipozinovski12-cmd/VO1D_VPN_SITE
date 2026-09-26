@@ -15,7 +15,7 @@ Deploy this folder as a second Railway service.
    SITE_URL=https://your-site.up.railway.app
    PUBLIC_URL=https://your-bot-service.up.railway.app
    SUPPORT_URL=https://t.me/vo1d_root
-   TRIAL_HOURS=24
+   TRIAL_HOURS=168
    DB_PATH=/data/vo1d.db
    VPN_NODES=<one permitted VPN config URI per line>
 
