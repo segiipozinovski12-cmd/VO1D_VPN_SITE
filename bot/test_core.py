@@ -2,18 +2,12 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
 
 _TMP=tempfile.TemporaryDirectory()
 os.environ["DB_PATH"]=os.path.join(_TMP.name,"vo1d-test.db")
 os.environ["BOT_TOKEN"]="test-token"
 os.environ["ADMIN_ID"]="1"
 os.environ["COMMUNITY_ENABLED"]="0"
-os.environ["MANUAL_PAYMENT_TIMEZONE"]="UTC"
-os.environ["MANUAL_PAYMENT_START_HOUR"]="9"
-os.environ["MANUAL_PAYMENT_END_HOUR"]="20"
-os.environ["MANUAL_PAYMENT_BONUS_DAYS"]="7"
-os.environ["MANUAL_PAYMENT_TTL_HOURS"]="24"
 
 import main as app
 
@@ -42,25 +36,16 @@ class CoreLogicTests(unittest.TestCase):
                 ),
             )
 
-    def test_manual_payment_window(self):
-        ten=int(datetime(2026,1,1,10,0,tzinfo=timezone.utc).timestamp())
-        late=int(datetime(2026,1,1,21,0,tzinfo=timezone.utc).timestamp())
-        self.assertTrue(app.manual_payment_status(ten)["open"])
-        self.assertEqual(app.manual_payment_status(ten)["bonus_days"],7)
-        self.assertFalse(app.manual_payment_status(late)["open"])
-
-    def test_manual_bonus_is_frozen_in_payment(self):
+    def test_manual_payment_grants_exact_plan_days(self):
         self.add_user()
-        pid=app.make_payment(100,"card",30,reference="manual_bonus:7")
+        pid=app.make_payment(100,"card",30)
         result=app.fulfill_manual_payment(pid)
         self.assertEqual(result["status"],"ok")
-        self.assertEqual(result["base_days"],30)
-        self.assertEqual(result["bonus_days"],7)
-        self.assertEqual(result["days"],37)
+        self.assertEqual(result["days"],30)
         with app.db() as c:
             event=c.execute("SELECT days,source FROM subscription_events WHERE user_id=100").fetchone()
-        self.assertEqual(event["days"],37)
-        self.assertIn("bonus7",event["source"])
+        self.assertEqual(event["days"],30)
+        self.assertEqual(event["source"],"manual:card")
 
     def test_auto_renew_survives_database_init(self):
         self.add_user(auto_renew=1)
@@ -87,16 +72,6 @@ class CoreLogicTests(unittest.TestCase):
         self.assertEqual(user["balance_cents"],500-app.PLANS[30]["usd"])
         self.assertGreaterEqual(user["sub_until"],old_end+30*86400)
         self.assertEqual(payments,1)
-
-    def test_stale_manual_payment_expires(self):
-        self.add_user()
-        pid=app.make_payment(100,"crypto",30,reference="manual_bonus:7")
-        with app.db() as c:
-            c.execute("UPDATE payments SET created_at=? WHERE id=?",(app.now()-25*3600,pid))
-        app.expire_stale_payments()
-        with app.db() as c:
-            status=c.execute("SELECT status FROM payments WHERE id=?",(pid,)).fetchone()["status"]
-        self.assertEqual(status,"expired")
 
     def test_only_vless_credentials_are_personalized(self):
         old=app.PER_USER_KEYS

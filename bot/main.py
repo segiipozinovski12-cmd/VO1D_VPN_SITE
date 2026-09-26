@@ -1,6 +1,5 @@
 import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress, uuid, socket, shutil, glob, base64
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from community_nodes import COMMUNITY_POOL, community_worker
@@ -28,17 +27,6 @@ BOT_USERNAME=os.getenv("BOT_USERNAME","VO1D_VPNbot").lstrip("@")
 REFERRAL_REWARD_CENTS=max(0,int(os.getenv("REFERRAL_REWARD_CENTS","100")))
 PER_USER_KEYS=os.getenv("PER_USER_KEYS","0").strip().lower() in ("1","true","yes","on")
 XRAY_SYNC_SECRET=os.getenv("XRAY_SYNC_SECRET","").strip()
-
-MANUAL_PAYMENT_TIMEZONE=os.getenv("MANUAL_PAYMENT_TIMEZONE","Europe/Moscow").strip() or "Europe/Moscow"
-MANUAL_PAYMENT_START_HOUR=max(0,min(23,int(os.getenv("MANUAL_PAYMENT_START_HOUR","9"))))
-MANUAL_PAYMENT_END_HOUR=max(1,min(24,int(os.getenv("MANUAL_PAYMENT_END_HOUR","20"))))
-MANUAL_PAYMENT_BONUS_DAYS=max(0,min(90,int(os.getenv("MANUAL_PAYMENT_BONUS_DAYS","7"))))
-MANUAL_PAYMENT_TTL_HOURS=max(1,min(168,int(os.getenv("MANUAL_PAYMENT_TTL_HOURS","24"))))
-try:
-    MANUAL_PAYMENT_ZONE=ZoneInfo(MANUAL_PAYMENT_TIMEZONE)
-except Exception:
-    MANUAL_PAYMENT_TIMEZONE="UTC"
-    MANUAL_PAYMENT_ZONE=timezone.utc
 
 ALERT_COOLDOWN_SECONDS=max(60,int(os.getenv("ALERT_COOLDOWN_SECONDS","1800")))
 PROCESS_STARTED_AT=int(time.time())
@@ -81,30 +69,6 @@ def dt(ts):
     return datetime.fromtimestamp(ts,timezone.utc).strftime("%d.%m.%Y %H:%M UTC") if ts else "—"
 def money(c): return "$"+f"{c/100:.2f}"
 def esc(s): return html.escape(str(s or ""))
-
-def manual_payment_status(ts=None):
-    local=datetime.fromtimestamp(int(ts or now()),MANUAL_PAYMENT_ZONE)
-    hour=local.hour
-    start=MANUAL_PAYMENT_START_HOUR
-    end=MANUAL_PAYMENT_END_HOUR
-    if start<end:
-        opened=start<=hour<end
-    else:
-        opened=hour>=start or hour<end
-    return {
-      "open":opened,
-      "bonus_days":MANUAL_PAYMENT_BONUS_DAYS if opened else 0,
-      "start_hour":start,
-      "end_hour":end,
-      "timezone":MANUAL_PAYMENT_TIMEZONE,
-      "local_time":local.strftime("%H:%M"),
-    }
-
-def manual_bonus_from_reference(reference):
-    raw=str(reference or "")
-    if not raw.startswith("manual_bonus:"):return 0
-    try:return max(0,min(90,int(raw.split(":",1)[1])))
-    except Exception:return 0
 
 def valid_topup_cents(cents):
     try:cents=int(cents)
@@ -502,11 +466,9 @@ def webapp_user_payload(tg_user,row):
         {"days":days,"title":p["title"],"stars":p["stars"],"usd":money(p["usd"])}
         for days,p in PLANS.items()
       ],
-      "manual_payment":manual_payment_status(),
       "links":{
         "support":SUPPORT_URL,
         "bot":"https://t.me/"+BOT_USERNAME,
-        "payment":"https://t.me/"+BOT_USERNAME+"?start=plans",
         "channel":CHANNEL_URL,
         "site":SITE_URL,
       }
@@ -984,20 +946,16 @@ def topup_methods(uid,cents):
         return send(uid,"Некорректная сумма пополнения.",[[button("↩️ Ввести другую сумму","topup")]])
     stars=topup_stars(cents)
     clear_pending(uid)
-    manual=manual_payment_status()
-    kb=[[button(f"⭐ Оплатить {stars} Stars",f"topup_pay:{cents}:stars")]]
-    if manual["open"]:
-        kb.append([button("₿ Криптовалюта",f"topup_pay:{cents}:crypto"),button("💳 Карта",f"topup_pay:{cents}:card")])
-    kb += [[button("✍️ Другая сумма","topup")],[button("◀️ Баланс","balance")]]
-    manual_note=(f"\nПрямая оплата доступна сейчас до <b>{manual['end_hour']:02d}:00</b>."
-                 if manual["open"] else
-                 f"\nПрямая оплата доступна <b>{manual['start_hour']:02d}:00–{manual['end_hour']:02d}:00</b> ({esc(manual['timezone'])}).")
     send(uid,
       f"<b>Пополнение баланса</b>\n\n"
       f"На баланс: <b>{money(cents)}</b>\n"
       f"Итог через Telegram Stars: <b>{stars} ⭐</b>\n"
-      f"{manual_note}\n\n"
-      "Выбери способ оплаты:",kb)
+      f"Карта / криптовалюта: <b>{money(cents)}</b>\n\n"
+      "Выбери способ оплаты:",
+      [[button(f"⭐ Оплатить {stars} Stars",f"topup_pay:{cents}:stars")],
+       [button("₿ Криптовалюта",f"topup_pay:{cents}:crypto"),button("💳 Карта",f"topup_pay:{cents}:card")],
+       [button("✍️ Другая сумма","topup")],
+       [button("◀️ Баланс","balance")]])
 
 def plans(uid):
     kb=[]
@@ -1013,23 +971,14 @@ def plans(uid):
 def payment_methods(uid,days):
     p=PLANS.get(days)
     if not p:return
-    manual=manual_payment_status()
-    kb=[
-      [button(f"💰 С баланса · {money(p['usd'])}",f"pay:{days}:balance")],
-      [button("⭐ Telegram Stars · 24/7",f"pay:{days}:stars")],
-    ]
-    if manual["open"]:
-        bonus=f" +{manual['bonus_days']} дн." if manual["bonus_days"] else ""
-        kb.append([button("₿ Криптовалюта"+bonus,f"pay:{days}:crypto"),button("💳 Карта"+bonus,f"pay:{days}:card")])
-        note=(f"\n🔥 Прямая оплата сейчас доступна до <b>{manual['end_hour']:02d}:00</b>. "
-              f"При подтверждении заявки: <b>+{manual['bonus_days']} дней</b> к тарифу." if manual["bonus_days"] else "")
-    else:
-        note=(f"\nПрямая оплата администратору доступна <b>{manual['start_hour']:02d}:00–{manual['end_hour']:02d}:00</b> "
-              f"({esc(manual['timezone'])}). Автоматическая оплата Stars работает 24/7.")
     send(uid,
       f"<b>{p['title']}</b>\nЦена: <b>{money(p['usd'])}</b> или <b>{p['stars']} ⭐</b>\n\n"
-      f"Баланс: <b>{money(get_user(uid)['balance_cents'])}</b>{note}\n\n"
-      "Выбери способ оплаты:",kb+[[button("◀️ Назад","plans")]])
+      f"Баланс: <b>{money(get_user(uid)['balance_cents'])}</b>\n\n"
+      "Выбери способ оплаты:",
+      [[button(f"💰 С баланса · {money(p['usd'])}",f"pay:{days}:balance")],
+       [button("⭐ Telegram Stars",f"pay:{days}:stars")],
+       [button("₿ Криптовалюта",f"pay:{days}:crypto"),button("💳 Банковская карта",f"pay:{days}:card")],
+       [button("◀️ Назад","plans")]])
 
 def record_payment(uid,method,days=0,amount_stars=0,amount_cents=0,status="pending",charge="",reference=""):
     with db() as c:
@@ -1132,11 +1081,6 @@ def topup_star_invoice(uid,cents):
 def manual_topup(uid,cents,method):
     cents=int(cents)
     if not valid_topup_cents(cents):return
-    if not manual_payment_status()["open"]:
-        return send(uid,
-          f"Прямая оплата сейчас закрыта. Доступна с <b>{MANUAL_PAYMENT_START_HOUR:02d}:00</b> до <b>{MANUAL_PAYMENT_END_HOUR:02d}:00</b> "
-          f"({esc(MANUAL_PAYMENT_TIMEZONE)}). Telegram Stars работают 24/7.",
-          [[button("⭐ Оплатить Stars",f"topup_pay:{cents}:stars")],[button("◀️ Баланс","balance")]])
     method_name="topup_crypto" if method=="crypto" else "topup_card"
     pid=record_payment(uid,method_name,0,0,cents,"pending","")
     label="криптовалютой" if method=="crypto" else "банковской картой"
@@ -1153,29 +1097,19 @@ def manual_topup(uid,cents,method):
       f"Подтвердить: <code>/paid {pid}</code>")
 
 def manual_payment(uid,days,method):
-    window=manual_payment_status()
-    if not window["open"]:
-        return send(uid,
-          f"Прямая оплата доступна <b>{window['start_hour']:02d}:00–{window['end_hour']:02d}:00</b> "
-          f"({esc(window['timezone'])}).\nАвтоматическая оплата Telegram Stars работает 24/7.",
-          [[button("⭐ Telegram Stars",f"pay:{days}:stars")],[button("◀️ Тарифы","plans")]])
-    bonus=int(window["bonus_days"])
-    pid=make_payment(uid,method,days,reference=f"manual_bonus:{bonus}")
+    pid=make_payment(uid,method,days)
     p=PLANS[days]
     label="криптовалютой" if method=="crypto" else "банковской картой"
-    bonus_text=f" + {bonus} бонусных дней" if bonus else ""
-    draft=f"VO1D_VPN | Заявка #{pid}\nХочу купить {p['title']} ({days} дней){bonus_text} {label}.\nTelegram ID: {uid}\nЦена: {money(p['usd'])}"
+    draft=f"VO1D_VPN | Заявка #{pid}\nХочу купить {p['title']} ({days} дней) {label}.\nTelegram ID: {uid}\nЦена: {money(p['usd'])}"
     url=f"https://t.me/{ADMIN_USERNAME}?text="+urllib.parse.quote(draft)
     send(uid,
       f"<b>Заявка #{pid} создана</b>\n\n"
-      f"Тариф: {p['title']}\nЦена: {money(p['usd'])}\nСпособ: {label}\n"
-      f"{('Бонус: <b>+'+str(bonus)+' дней</b>\n') if bonus else ''}\n"
-      "Бонус закреплён за этой заявкой. Нажми кнопку ниже — сообщение администратору уже подготовлено.",
+      f"Тариф: {p['title']}\nЦена: {money(p['usd'])}\nСпособ: {label}\n\n"
+      "Нажми кнопку ниже — сообщение администратору уже подготовлено.",
       [[button("💬 Открыть @"+ADMIN_USERNAME,url=url)],[button("◀️ Меню","menu")]])
     send(ADMIN_ID,
       f"<b>💳 Новая заявка #{pid}</b>\nUser: <code>{uid}</code>\n"
       f"Тариф: {p['title']}\nМетод: {label}\nЦена: {money(p['usd'])}\n"
-      f"{('Бонус: +'+str(bonus)+' дней\n') if bonus else ''}"
       f"Подтвердить: <code>/paid {pid}</code>")
 
 def fulfill_manual_payment(pid):
@@ -1190,17 +1124,13 @@ def fulfill_manual_payment(pid):
         if not u:return {"status":"user_missing"}
         paid_at=now()
         if int(p["plan_days"])>0:
-            base_days=int(p["plan_days"])
-            bonus_days=manual_bonus_from_reference(p["reference"])
-            total_days=base_days+bonus_days
-            end=max(now(),int(u["sub_until"]))+total_days*86400
+            days=int(p["plan_days"])
+            end=max(now(),int(u["sub_until"]))+days*86400
             c.execute("UPDATE users SET sub_until=? WHERE id=?",(end,p["user_id"]))
             c.execute("UPDATE payments SET status='paid',paid_at=? WHERE id=?",(paid_at,pid))
-            source=f"manual:{p['method']}" + (f":bonus{bonus_days}" if bonus_days else "")
             c.execute("INSERT INTO subscription_events(user_id,days,source,created_at,sub_until) VALUES(?,?,?,?,?)",
-                      (p["user_id"],total_days,source,paid_at,end))
-            return {"status":"ok","kind":"subscription","user_id":int(p["user_id"]),
-                    "days":total_days,"base_days":base_days,"bonus_days":bonus_days,"end":end}
+                      (p["user_id"],days,f"manual:{p['method']}",paid_at,end))
+            return {"status":"ok","kind":"subscription","user_id":int(p["user_id"]),"days":days,"end":end}
         cents=int(p["amount_usd_cents"])
         new_balance=int(u["balance_cents"])+cents
         c.execute("UPDATE users SET balance_cents=? WHERE id=?",(new_balance,p["user_id"]))
@@ -1289,8 +1219,7 @@ def admin_payments():
     with db() as c: rows=c.execute("SELECT * FROM payments ORDER BY id DESC LIMIT 15").fetchall()
     text="<b>💳 Последние оплаты</b>\n\n"
     for r in rows:
-        bonus=manual_bonus_from_reference(r["reference"])
-        duration=(f"{r['plan_days']}d"+(f"+{bonus}" if bonus else "")) if int(r["plan_days"]) else "balance"
+        duration=f"{r['plan_days']}d" if int(r["plan_days"]) else "balance"
         amount=money(r["amount_usd_cents"]) if int(r["amount_usd_cents"]) else (f"{r['amount_stars']}⭐" if int(r["amount_stars"]) else "—")
         text+=f"#{r['id']} · <code>{r['user_id']}</code> · {esc(r['method'])} · {duration} · {amount} · <b>{esc(r['status'])}</b>\n"
     text+="\nПодтвердить manual: <code>/paid PAYMENT_ID</code>"
@@ -1389,10 +1318,8 @@ def handle_command(uid,text):
             target=result["user_id"]
             if result["kind"]=="subscription":
                 notify_referral_reward(target)
-                bonus=int(result.get("bonus_days",0))
-                bonus_note=f" (+{bonus} бонусных)" if bonus else ""
-                send(uid,f"✅ Заявка #{pid} подтверждена. Начислено {result['days']} дней{bonus_note}. Доступ до {dt(result['end'])}.")
-                send(target,f"✅ <b>Оплата подтверждена.</b>\nНачислено {result['days']} дней{bonus_note}.\nАктивно до {dt(result['end'])}.",main_kb(target))
+                send(uid,f"✅ Заявка #{pid} подтверждена. Начислено {result['days']} дней. Доступ до {dt(result['end'])}.")
+                send(target,f"✅ <b>Оплата подтверждена.</b>\nНачислено {result['days']} дней.\nАктивно до {dt(result['end'])}.",main_kb(target))
             else:
                 send(uid,f"✅ Пополнение #{pid} подтверждено. Баланс пользователя: <b>{money(result['balance'])}</b>.")
                 send(target,f"✅ <b>Баланс пополнен на {money(result['cents'])}.</b>\nТеперь на балансе: <b>{money(result['balance'])}</b>.",main_kb(target))
@@ -2338,12 +2265,6 @@ def refresh_node_statuses(notify_changes=True):
             send(ADMIN_ID,f"<b>🌐 {esc(node_name(i))}</b> {status}{latency}")
         except Exception:pass
 
-def expire_stale_payments():
-    cutoff=now()-MANUAL_PAYMENT_TTL_HOURS*3600
-    with db() as c:
-        c.execute("""UPDATE payments SET status='expired'
-          WHERE status='pending' AND method IN ('crypto','card','topup_crypto','topup_card') AND created_at<?""",(cutoff,))
-
 def process_auto_renewals():
     horizon=now()+86400
     with db() as c:
@@ -2373,10 +2294,6 @@ def maintenance_once():
     except Exception as e:
         print("node probe error",repr(e),flush=True)
         admin_alert("maintenance:node_probe",f"🚨 <b>VO1D ALERT · NODE PROBE ERROR</b>\n<code>{esc(e)}</code>")
-    try:expire_stale_payments()
-    except Exception as e:
-        print("payment expiry error",repr(e),flush=True)
-        admin_alert("maintenance:payment_expiry",f"🚨 <b>VO1D ALERT · PAYMENT MAINTENANCE</b>\n<code>{esc(e)}</code>")
     try:process_auto_renewals()
     except Exception as e:
         print("auto renew error",repr(e),flush=True)
