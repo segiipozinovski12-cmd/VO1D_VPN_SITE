@@ -23,6 +23,16 @@ targets:
       - path: VO1DVPN
     info:
       path: VO1DVPN/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: VO1D_VPN
+        CFBundleName: VO1D_VPN
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        VO1D_API_BASE_URL: "$(VO1D_API_BASE_URL)"
+        CFBundleURLTypes:
+          - CFBundleURLName: com.vo1d.vpn
+            CFBundleURLSchemes:
+              - vo1dvpn
     entitlements:
       path: VO1DVPN/Resources/VO1D_VPN.entitlements
     settings:
@@ -43,6 +53,14 @@ targets:
       - path: PacketTunnel
     info:
       path: PacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: VO1D Tunnel
+        CFBundleName: VO1D_PacketTunnel
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).PacketTunnelProvider"
     entitlements:
       path: PacketTunnel/VO1D_PacketTunnel.entitlements
     settings:

@@ -57,7 +57,8 @@ final class AppViewModel: ObservableObject {
         defer { isActivating = false }
 
         do {
-            let response = try await api.activate(key: clean)
+            let resolvedKey = try AppConfig.resolveActivation(clean)
+            let response = try await api.activate(key: resolvedKey)
             KeychainStore.saveToken(response.token)
             sessionToken = response.token
             apply(account: response.account, serverCollection: response.servers)
