@@ -1,0 +1,82 @@
+name: iOS native build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+jobs:
+  native-ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Resolve Swift packages
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project VO1D_VPN.xcodeproj \
+            -scheme VO1D_VPN
+
+      - name: Build native iPhone app
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project VO1D_VPN.xcodeproj \
+            -scheme VO1D_VPN \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            SWIFT_VERSION=5 \
+            SWIFT_STRICT_CONCURRENCY=minimal \
+            VO1D_API_BASE_URL="${VO1D_API_BASE_URL:-https://REPLACE_ME.invalid}" \
+            build
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          APP="build/DerivedData/Build/Products/Release-iphoneos/VO1D_VPN.app"
+          test -d "$APP"
+          rm -rf build/Payload build/VO1D_VPN-unsigned.ipa
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          cd build
+          zip -qry VO1D_VPN-unsigned.ipa Payload
+          shasum -a 256 VO1D_VPN-unsigned.ipa > VO1D_VPN-unsigned.ipa.sha256
+
+      - name: Upload native IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VO1D_VPN-unsigned-ipa
+          path: |
+            ios/build/VO1D_VPN-unsigned.ipa
+            ios/build/VO1D_VPN-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14

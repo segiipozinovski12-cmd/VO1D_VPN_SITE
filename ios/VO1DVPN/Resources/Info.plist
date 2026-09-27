@@ -11,6 +11,6 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>VO1D_API_BASE_URL</key>
-    <string>https://REPLACE_ME.invalid</string>
+    <string>$(VO1D_API_BASE_URL)</string>
 </dict>
 </plist>

@@ -1,7 +1,7 @@
 import NetworkExtension
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
-    private var core: TunnelCoreAdapter = PlaceholderTunnelCore()
+    private var core: TunnelCoreAdapter = XrayTunnelCore()
 
     override func startTunnel(
         options: [String : NSObject]? = nil,
@@ -18,28 +18,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     domain: "VO1D.PacketTunnel",
                     code: 400,
                     userInfo: [
-                        NSLocalizedDescriptionKey: "Missing tunnel configuration."
+                        NSLocalizedDescriptionKey:
+                            "Missing VO1D tunnel configuration."
                     ]
                 )
             )
             return
         }
 
-        let settings = NEPacketTunnelNetworkSettings(
-            tunnelRemoteAddress: "VO1D"
+        let settings = makeNetworkSettings(
+            remoteAddress: proto.serverAddress ?? "VO1D"
         )
-
-        let ipv4 = NEIPv4Settings(
-            addresses: ["198.18.0.2"],
-            subnetMasks: ["255.255.255.0"]
-        )
-        ipv4.includedRoutes = [NEIPv4Route.default()]
-
-        settings.ipv4Settings = ipv4
-        settings.dnsSettings = NEDNSSettings(
-            servers: ["1.1.1.1", "1.0.0.1"]
-        )
-        settings.mtu = 1400
 
         setTunnelNetworkSettings(settings) { [weak self] error in
             if let error {
@@ -51,7 +40,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 completionHandler(
                     NSError(
                         domain: "VO1D.PacketTunnel",
-                        code: 500
+                        code: 500,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "VO1D tunnel provider was released."
+                        ]
                     )
                 )
                 return
@@ -88,4 +81,35 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func wake() {}
+
+    private func makeNetworkSettings(
+        remoteAddress: String
+    ) -> NEPacketTunnelNetworkSettings {
+        let settings = NEPacketTunnelNetworkSettings(
+            tunnelRemoteAddress: remoteAddress
+        )
+
+        let ipv4 = NEIPv4Settings(
+            addresses: ["198.18.0.2"],
+            subnetMasks: ["255.255.255.252"]
+        )
+        ipv4.includedRoutes = [NEIPv4Route.default()]
+        settings.ipv4Settings = ipv4
+
+        let ipv6 = NEIPv6Settings(
+            addresses: ["fd00:1::2"],
+            networkPrefixLengths: [64]
+        )
+        ipv6.includedRoutes = [NEIPv6Route.default()]
+        settings.ipv6Settings = ipv6
+
+        settings.dnsSettings = NEDNSSettings(
+            servers: [
+                "1.1.1.1",
+                "2606:4700:4700::1111"
+            ]
+        )
+        settings.mtu = 1360
+        return settings
+    }
 }
