@@ -32,7 +32,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview
-        PRODUCT_NAME: VO1D_VPN
+        PRODUCT_NAME: VO1D_VPN_PREVIEW
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
         TARGETED_DEVICE_FAMILY: "1"
