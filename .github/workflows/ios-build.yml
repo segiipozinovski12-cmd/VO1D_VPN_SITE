@@ -53,6 +53,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            SWIFT_VERSION=5 \
+            SWIFT_STRICT_CONCURRENCY=minimal \
             VO1D_API_BASE_URL="${VO1D_API_BASE_URL:-https://REPLACE_ME.invalid}" \
             build
 
