@@ -1,5 +1,8 @@
 name: iOS preview IPA
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [feature/ios-preview-shell]
@@ -48,3 +51,16 @@ jobs:
           path: ios-preview/build/VO1D_VPN-preview.ipa
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="ios-preview-v0.1.0"
+          IPA="ios-preview/build/VO1D_VPN-preview.ipa"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$IPA" --clobber
+          else
+            gh release create "$TAG" "$IPA"               --target "$GITHUB_SHA"               --title "VO1D_VPN iOS Preview 0.1.0"               --notes "Native SwiftUI interface preview for VO1D_VPN. No Network Extension and no VPN traffic. Intended only for sideloading the UI preview."
+          fi
