@@ -806,6 +806,12 @@ def generate_app_key():
     raw="".join(secrets.choice(APP_KEY_ALPHABET) for _ in range(16))
     return "VOID-"+raw[0:4]+"-"+raw[4:8]+"-"+raw[8:12]+"-"+raw[12:16]
 
+def app_activation_code(key):
+    if not PUBLIC_URL:
+        return key
+    encoded=base64.urlsafe_b64encode(PUBLIC_URL.encode()).decode().rstrip("=")
+    return f"VO1D1.{encoded}.{key}"
+
 def issue_app_key(uid):
     key=generate_app_key()
     key_hash=_secret_hash(normalize_app_key(key))
@@ -838,9 +844,10 @@ def app_key_screen(uid,rotate=False):
         return send(uid,"Не удалось создать ключ приложения.",[[button("◀️ Профиль","profile")]])
     return send(uid,
       "<b>📱 VO1D_VPN · ключ активации</b>\n\n"
-      "Введи этот ключ в приложении iPhone:\n\n"
-      f"<code>{esc(key)}</code>\n\n"
-      "Не отправляй его другим людям. Если потеряешь — создай новый ключ в профиле.",
+      "Скопируй код целиком и вставь в приложение iPhone:\n\n"
+      f"<code>{esc(app_activation_code(key))}</code>\n\n"
+      "Приложение само найдёт VO1D API. Не отправляй код другим людям. "
+      "Если потеряешь — создай новый ключ в профиле.",
       [[button("🔄 Сбросить ключ","app_key_reset")],[button("◀️ Профиль","profile")]])
 
 def activate_app_key(raw_key,device_id="",device_name=""):
