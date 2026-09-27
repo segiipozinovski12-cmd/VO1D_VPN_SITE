@@ -14,6 +14,9 @@ targets:
     platform: iOS
     sources:
       - path: ../ios/VO1DVPN
+        excludes:
+          - Resources/Info.plist
+          - Resources/VO1D_VPN.entitlements
     info:
       path: PreviewInfo.plist
       properties:
