@@ -33,6 +33,10 @@ final class VPNManager: ObservableObject {
     }
 
     func prepare() async throws {
+#if targetEnvironment(simulator)
+        status = .disconnected
+        return
+#else
         let managers = try await NETunnelProviderManager.loadAllFromPreferences()
         let existing = managers.first {
             ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier ==
@@ -55,6 +59,7 @@ final class VPNManager: ObservableObject {
         }
 
         refreshStatus()
+#endif
     }
 
     func connect(tunnel: TunnelResponse, killSwitch: Bool) async throws {
@@ -95,11 +100,35 @@ final class VPNManager: ObservableObject {
     }
 
     func disconnect() {
+#if targetEnvironment(simulator)
+        status = .disconnecting
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(280))
+            status = .disconnected
+        }
+#else
         manager?.connection.stopVPNTunnel()
         refreshStatus()
+#endif
     }
 
+#if targetEnvironment(simulator)
+    func connectDemo() async {
+        guard !isConnected else { return }
+
+        status = .connecting
+        try? await Task.sleep(for: .milliseconds(950))
+        status = .connected
+    }
+#endif
+
     private func refreshStatus() {
+#if targetEnvironment(simulator)
+        if status == .invalid {
+            status = .disconnected
+        }
+#else
         status = manager?.connection.status ?? .invalid
+#endif
     }
 }
