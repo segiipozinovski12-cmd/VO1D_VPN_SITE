@@ -18,7 +18,7 @@ class CoreLogicTests(unittest.TestCase):
             for table in (
                 "payment_receipts","balance_transactions","subscription_events",
                 "referral_rewards","reminders","trial_claims","pending_actions",
-                "devices","gift_codes","promo_redemptions","payments","users",
+                "app_sessions","devices","gift_codes","promo_redemptions","payments","users",
             ):
                 c.execute(f"DELETE FROM {table}")
 
@@ -87,6 +87,27 @@ class CoreLogicTests(unittest.TestCase):
 
     def test_database_health(self):
         self.assertTrue(app.database_healthy())
+
+    def test_app_key_auth_roundtrip(self):
+        self.add_user(sub_until=app.now()+7*86400)
+        key,status=app.issue_app_key(100)
+        self.assertEqual(status,"ok")
+        self.assertTrue(key.startswith("VOID-"))
+        token,row,status=app.activate_app_key(key,"iphone-test","iPhone")
+        self.assertEqual(status,"ok")
+        self.assertTrue(token)
+        self.assertEqual(int(row["id"]),100)
+        session=app.app_session_user(token)
+        self.assertIsNotNone(session)
+        self.assertEqual(int(session["id"]),100)
+        app.revoke_app_session(token)
+        self.assertIsNone(app.app_session_user(token))
+
+    def test_app_key_requires_active_subscription(self):
+        self.add_user(sub_until=app.now()-1)
+        key,status=app.issue_app_key(100)
+        self.assertIsNone(key)
+        self.assertEqual(status,"inactive")
 
 
 if __name__=="__main__":
