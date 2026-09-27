@@ -109,6 +109,21 @@ class CoreLogicTests(unittest.TestCase):
         self.assertIsNone(key)
         self.assertEqual(status,"inactive")
 
+    def test_app_activation_code_carries_backend(self):
+        old=app.PUBLIC_URL
+        app.PUBLIC_URL="https://vpn.example.test"
+        try:
+            key="VOID-ABCD-EFGH-JKLM-NPQR"
+            code=app.app_activation_code(key)
+            self.assertTrue(code.startswith("VO1D1."))
+            _,encoded,returned=code.split(".",2)
+            import base64
+            encoded += "="*((4-len(encoded)%4)%4)
+            self.assertEqual(base64.urlsafe_b64decode(encoded).decode(),"https://vpn.example.test")
+            self.assertEqual(returned,key)
+        finally:
+            app.PUBLIC_URL=old
+
 
 if __name__=="__main__":
     unittest.main(verbosity=2)
