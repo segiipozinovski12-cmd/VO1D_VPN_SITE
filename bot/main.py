@@ -239,6 +239,15 @@ def init_db():
           user_id INTEGER PRIMARY KEY,
           claimed_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS app_sessions(
+          token_hash TEXT PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          device_id TEXT NOT NULL,
+          device_name TEXT NOT NULL DEFAULT '',
+          created_at INTEGER NOT NULL,
+          last_seen INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_app_sessions_user ON app_sessions(user_id);
         CREATE TABLE IF NOT EXISTS meta(
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -252,6 +261,8 @@ def init_db():
         ensure_column(c,"users","preferred_node","INTEGER NOT NULL DEFAULT 0")
         ensure_column(c,"users","notifications","INTEGER NOT NULL DEFAULT 1")
         ensure_column(c,"users","welcome_done","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"users","app_key_hash","TEXT NOT NULL DEFAULT ''")
+        ensure_column(c,"users","app_key_created_at","INTEGER NOT NULL DEFAULT 0")
         ensure_column(c,"payments","reference","TEXT NOT NULL DEFAULT ''")
         rows=c.execute("SELECT id FROM users WHERE vpn_uuid='' OR vpn_uuid IS NULL").fetchall()
         for r in rows:
@@ -781,6 +792,156 @@ def reset_access(uid):
         return "✅ Ссылка и персональный VPN-ключ заменены. После синхронизации Xray старый ключ перестанет работать."
     return "✅ Персональная subscription-ссылка заменена. Старый импортированный VPN-конфиг пока не отключается сервером — для этого нужен режим персональных Xray-ключей."
 
+APP_KEY_ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+def _secret_hash(value):
+    return hashlib.sha256(str(value or "").encode()).hexdigest()
+
+def normalize_app_key(value):
+    raw="".join(ch for ch in str(value or "").upper() if ch.isalnum())
+    if raw.startswith("VOID"):raw=raw[4:]
+    return raw
+
+def generate_app_key():
+    raw="".join(secrets.choice(APP_KEY_ALPHABET) for _ in range(16))
+    return "VOID-"+raw[0:4]+"-"+raw[4:8]+"-"+raw[8:12]+"-"+raw[12:16]
+
+def issue_app_key(uid):
+    key=generate_app_key()
+    key_hash=_secret_hash(normalize_app_key(key))
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        row=c.execute("SELECT id,banned,sub_until FROM users WHERE id=?",(int(uid),)).fetchone()
+        if not row:return None,"missing"
+        if row["banned"]:return None,"banned"
+        if int(row["sub_until"])<=now():return None,"inactive"
+        c.execute("UPDATE users SET app_key_hash=?,app_key_created_at=? WHERE id=?",(key_hash,now(),int(uid)))
+        c.execute("DELETE FROM app_sessions WHERE user_id=?",(int(uid),))
+    return key,"ok"
+
+def app_key_screen(uid,rotate=False):
+    r=get_user(uid)
+    if not r:return
+    if not active(r):
+        return send(uid,
+          "<b>📱 VO1D for iPhone</b>\n\nСначала активируй пробный период или подписку.",
+          [[button("💎 Подписка","plans")],[button("◀️ Профиль","profile")]])
+    has_key=bool(r["app_key_hash"])
+    if has_key and not rotate:
+        return send(uid,
+          "<b>📱 Ключ приложения уже создан.</b>\n\n"
+          "Он не хранится в открытом виде, поэтому показать его повторно нельзя. "
+          "Если потерял ключ — создай новый. Старые сессии приложения будут отключены.",
+          [[button("🔄 Создать новый ключ","app_key_reset")],[button("◀️ Профиль","profile")]])
+    key,status=issue_app_key(uid)
+    if status!="ok":
+        return send(uid,"Не удалось создать ключ приложения.",[[button("◀️ Профиль","profile")]])
+    return send(uid,
+      "<b>📱 VO1D_VPN · ключ активации</b>\n\n"
+      "Введи этот ключ в приложении iPhone:\n\n"
+      f"<code>{esc(key)}</code>\n\n"
+      "Не отправляй его другим людям. Если потеряешь — создай новый ключ в профиле.",
+      [[button("🔄 Сбросить ключ","app_key_reset")],[button("◀️ Профиль","profile")]])
+
+def activate_app_key(raw_key,device_id="",device_name=""):
+    normalized=normalize_app_key(raw_key)
+    if len(normalized)!=16:return None,None,"invalid_key"
+    key_hash=_secret_hash(normalized)
+    device_id=str(device_id or "").strip()[:128] or secrets.token_hex(8)
+    device_name=str(device_name or "").strip()[:80]
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        row=c.execute("SELECT * FROM users WHERE app_key_hash=?",(key_hash,)).fetchone()
+        if not row:return None,None,"invalid_key"
+        if row["banned"]:return None,None,"blocked"
+        token=secrets.token_urlsafe(32)
+        token_hash=_secret_hash(token)
+        c.execute("DELETE FROM app_sessions WHERE user_id=? AND device_id=?",(int(row["id"]),device_id))
+        c.execute("""INSERT INTO app_sessions(token_hash,user_id,device_id,device_name,created_at,last_seen)
+          VALUES(?,?,?,?,?,?)""",(token_hash,int(row["id"]),device_id,device_name,now(),now()))
+        return token,row,"ok"
+
+def app_session_user(raw_token):
+    token=str(raw_token or "").strip()
+    if len(token)<24:return None
+    token_hash=_secret_hash(token)
+    with db() as c:
+        row=c.execute("""SELECT u.* FROM app_sessions s
+          JOIN users u ON u.id=s.user_id WHERE s.token_hash=?""",(token_hash,)).fetchone()
+        if not row:return None
+        if row["banned"]:
+            c.execute("DELETE FROM app_sessions WHERE token_hash=?",(token_hash,))
+            return None
+        c.execute("UPDATE app_sessions SET last_seen=? WHERE token_hash=?",(now(),token_hash))
+        return row
+
+def revoke_app_session(raw_token):
+    token_hash=_secret_hash(str(raw_token or "").strip())
+    with db() as c:c.execute("DELETE FROM app_sessions WHERE token_hash=?",(token_hash,))
+
+def _app_node_endpoint(node):
+    try:
+        p=urllib.parse.urlsplit(node)
+        if p.hostname and p.port:return p.hostname,int(p.port)
+    except Exception:
+        pass
+    return "",0
+
+def app_servers_payload(row):
+    countries=[]
+    by_code={}
+    for node in subscription_nodes(row):
+        code=_node_country_code(node)
+        if not code:continue
+        host,port=_app_node_endpoint(node)
+        if code not in by_code:
+            ui=SERVER_COUNTRY_UI.get(code,{"name":code,"flag":"◌"})
+            item={
+              "id":code,
+              "code":code,
+              "name":ui["name"],
+              "flag":ui["flag"],
+              "label":_node_display_label(node) or f"VO1D · {code}",
+              "nodes":0,
+              "probe_host":host,
+              "probe_port":port,
+              "protocol_name":node.split("://",1)[0].lower() if "://" in node else "",
+            }
+            by_code[code]=item;countries.append(item)
+        by_code[code]["nodes"]+=1
+        if not by_code[code]["probe_host"] and host:
+            by_code[code]["probe_host"]=host;by_code[code]["probe_port"]=port
+    return {"countries":countries,"total_countries":len(countries)}
+
+def app_tunnel_payload(row,country):
+    code=str(country or "").strip().upper()
+    if not code:return None
+    candidates=[node for node in subscription_nodes(row) if _node_country_code(node)==code]
+    if not candidates:return None
+    node=candidates[0]
+    return {
+      "country":code,
+      "uri":node,
+      "label":_node_display_label(node) or f"VO1D · {code}",
+      "issued_at":now(),
+      "expires_at":int(row["sub_until"]),
+    }
+
+def app_user_payload(row):
+    seconds=max(0,int(row["sub_until"])-now())
+    return {
+      "ok":True,
+      "account":{
+        "id":int(row["id"]),
+        "active":active(row),
+        "banned":bool(row["banned"]),
+        "until":int(row["sub_until"]),
+        "remaining_seconds":seconds,
+      },
+      "servers":app_servers_payload(row),
+      "support_url":SUPPORT_URL,
+    }
+
 def claim_trial(uid):
     uid=int(uid)
     with db() as c:
@@ -905,7 +1066,9 @@ def profile(uid):
       f"До: <b>{dt(r['sub_until'])}</b>\n"
       f"Осталось: <b>{remaining(r['sub_until'])}</b>\n"
       f"Баланс: <b>{money(r['balance_cents'])}</b>",
-      [[button("💳 Пополнить баланс","topup")],[button("💎 Купить подписку","plans")],[button("⚡ Подключить","connect")],[button("◀️ Меню","menu")]])
+      [[button("📱 Ключ для iPhone","app_key")],
+       [button("💳 Пополнить баланс","topup")],[button("💎 Купить подписку","plans")],
+       [button("⚡ Подключить","connect")],[button("◀️ Меню","menu")]])
 
 def balance_screen(uid):
     clear_pending(uid)
@@ -1359,6 +1522,8 @@ def handle_callback(q):
                 return auto_renew_screen(uid)
         except Exception:return
     if data=="diagnostics":return diagnostics(uid)
+    if data=="app_key":return app_key_screen(uid,False)
+    if data=="app_key_reset":return app_key_screen(uid,True)
     if data=="gifts":return gifts_screen(uid)
     if data=="gift_direct":return gift_plan_menu(uid,"giftplan")
     if data=="gift_code":return gift_plan_menu(uid,"gcodeplan")
@@ -1972,6 +2137,18 @@ class Web(BaseHTTPRequestHandler):
             self.reply_json(401,{"ok":False,"error":"telegram_auth_failed","message":"Открой Mini App заново из Telegram."})
             return None
 
+    def auth_app_user(self):
+        raw=self.headers.get("Authorization","").strip()
+        if not raw.lower().startswith("bearer "):
+            self.reply_json(401,{"ok":False,"error":"app_auth_required"})
+            return None
+        token=raw.split(" ",1)[1].strip()
+        row=app_session_user(token)
+        if not row:
+            self.reply_json(401,{"ok":False,"error":"app_session_invalid"})
+            return None
+        return token,row
+
     def auth_admin(self):
         auth=self.auth_user()
         if not auth:return None
@@ -2067,6 +2244,30 @@ class Web(BaseHTTPRequestHandler):
             tg_user,row=auth
             return self.reply_json(200,{"ok":True,**server_network_payload(row)})
 
+        if path=="/api/app/me":
+            auth=self.auth_app_user()
+            if not auth:return
+            token,row=auth
+            return self.reply_json(200,app_user_payload(row))
+
+        if path=="/api/app/servers":
+            auth=self.auth_app_user()
+            if not auth:return
+            token,row=auth
+            return self.reply_json(200,{"ok":True,**app_servers_payload(row)})
+
+        if path=="/api/app/tunnel":
+            auth=self.auth_app_user()
+            if not auth:return
+            token,row=auth
+            if not active(row):
+                return self.reply_json(403,{"ok":False,"error":"subscription_inactive"})
+            query=urllib.parse.parse_qs(parsed.query)
+            country=(query.get("country") or [""])[0]
+            payload=app_tunnel_payload(row,country)
+            if not payload:return self.reply_json(404,{"ok":False,"error":"country_unavailable"})
+            return self.reply_json(200,{"ok":True,**payload})
+
         if path=="/api/admin/overview":
             auth=self.auth_admin()
             if not auth:return
@@ -2125,8 +2326,24 @@ class Web(BaseHTTPRequestHandler):
         parsed=urllib.parse.urlparse(self.path)
         path=parsed.path
 
-        if path not in ("/api/trial","/api/invoice","/api/admin/promo","/api/admin/grant"):
+        if path not in ("/api/trial","/api/invoice","/api/admin/promo","/api/admin/grant","/api/app/activate","/api/app/logout"):
             return self.reply_json(404,{"ok":False,"error":"not_found"})
+
+        if path=="/api/app/activate":
+            body=self.read_json()
+            token,row,status=activate_app_key(body.get("key",""),body.get("device_id",""),body.get("device_name",""))
+            if status=="invalid_key":
+                return self.reply_json(401,{"ok":False,"error":"invalid_key","message":"Неверный ключ VO1D."})
+            if status=="blocked":
+                return self.reply_json(403,{"ok":False,"error":"blocked","message":"Доступ заблокирован."})
+            return self.reply_json(200,{"ok":True,"token":token,**app_user_payload(row)})
+
+        if path=="/api/app/logout":
+            app_auth=self.auth_app_user()
+            if not app_auth:return
+            token,row=app_auth
+            revoke_app_session(token)
+            return self.reply_json(200,{"ok":True})
 
         if path.startswith("/api/admin/"):
             auth=self.auth_admin()
