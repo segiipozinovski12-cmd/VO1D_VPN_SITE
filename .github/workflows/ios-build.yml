@@ -42,6 +42,21 @@ jobs:
             -project VO1D_VPN.xcodeproj \
             -scheme VO1D_VPN
 
+      - name: Build Simulator preview
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project VO1D_VPN.xcodeproj \
+            -scheme VO1D_VPN_PREVIEW \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build/PreviewDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
       - name: Build native iPhone app
         working-directory: ios
         run: |
