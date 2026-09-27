@@ -3,7 +3,7 @@ import Network
 
 actor PingService {
     func ping(host: String, port: Int, timeout: TimeInterval = 2.0) async -> Int? {
-        guard !host.isEmpty, port > 0, let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
+        guard !host.isEmpty, port > 0, port <= 65535, let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
             return nil
         }
 
