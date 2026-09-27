@@ -49,7 +49,8 @@ final class PreviewUITests: XCTestCase {
         let settings = app.buttons["profile.settings"]
         if !settings.isHittable { app.swipeUp() }
         settings.tap()
-        XCTAssertTrue(app.scrollViews["settings.screen"].waitForExistence(timeout: 5))
+        let settingsScreen = app.descendants(matching: .any)["settings.screen"]
+        XCTAssertTrue(settingsScreen.waitForExistence(timeout: 5))
         let autoConnect = app.descendants(matching: .any)["settings.autoConnect"]
         XCTAssertTrue(autoConnect.waitForExistence(timeout: 3))
         capture("08-settings", app: app)
