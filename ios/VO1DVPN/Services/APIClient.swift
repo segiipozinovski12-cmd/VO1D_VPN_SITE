@@ -74,7 +74,8 @@ final class APIClient {
         token: String?,
         as: Response.Type
     ) async throws -> Response {
-        guard var components = URLComponents(url: AppConfig.apiBaseURL, resolvingAgainstBaseURL: false) else {
+        guard let baseURL = AppConfig.apiBaseURL,
+              var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw APIClientError.badURL
         }
 
