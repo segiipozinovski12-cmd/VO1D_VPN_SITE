@@ -24,6 +24,15 @@ final class VPNManager: ObservableObject {
     var isConnected: Bool { status == .connected }
     var isBusy: Bool { status == .connecting || status == .disconnecting || status == .reasserting }
     var connectedDate: Date? { manager?.connection.connectedDate }
+    var currentCountry: String? {
+        (manager?.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration?["country"] as? String
+    }
+    var currentOptions: ConnectionOptions? {
+        guard let proto = manager?.protocolConfiguration as? NETunnelProviderProtocol else { return nil }
+        return ConnectionOptions(killSwitch: proto.includeAllNetworks,
+                                 secureDNS: proto.providerConfiguration?["secureDNS"] as? Bool ?? true,
+                                 ipv6Protection: proto.providerConfiguration?["ipv6Protection"] as? Bool ?? true)
+    }
 
     /// Read preferences at launch; ask to install a VPN configuration only on Connect.
     func prepare(createIfMissing: Bool = false) async throws {

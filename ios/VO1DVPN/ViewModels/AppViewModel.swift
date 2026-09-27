@@ -11,6 +11,7 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var activeServer: VO1DServer?
     @Published private(set) var phase: ConnectionPhase = .ready
     @Published private(set) var isActivating = false
+    @Published private(set) var isRefreshingAccount = false
     @Published private(set) var isBootstrapping = true
     @Published private(set) var favoriteCodes: Set<String>
     @Published private(set) var appliedOptions: ConnectionOptions?
@@ -111,7 +112,9 @@ final class AppViewModel: ObservableObject {
 
     func refresh() async {
         #if !targetEnvironment(simulator)
-        guard let token = sessionToken else { return }
+        guard let token = sessionToken, !isRefreshingAccount else { return }
+        isRefreshingAccount = true
+        defer { isRefreshingAccount = false }
         let revision = authRevision
         do {
             let response = try await api.me(token: token)
@@ -138,7 +141,11 @@ final class AppViewModel: ObservableObject {
     func connectFastest() async {
         guard !phase.isBusy else { return }
         if fastestServer == nil { await pings.refresh() }
-        guard !phase.isBusy, let server = fastestServer else { return }
+        guard !phase.isBusy else { return }
+        guard let server = fastestServer else {
+            errorMessage = "No route responded to the ping check. Try again or select a location manually."
+            return
+        }
         if vpn.isConnected, activeServer?.code == server.code { return }
         beginConnection(to: server)
     }
@@ -290,6 +297,13 @@ final class AppViewModel: ObservableObject {
         pings.configure(servers)
     }
     private func chooseInitialServer() {
+        if vpn.isConnected, let country = vpn.currentCountry,
+           let route = servers.first(where: { $0.code == country }) {
+            selectedServer = route
+            activeServer = route
+            appliedOptions = vpn.currentOptions
+            return
+        }
         if selectedServer == nil, !preferences.autoFastest,
            let code = defaults.string(forKey: "vo1d.selectedServer") {
             selectedServer = servers.first { $0.code == code }

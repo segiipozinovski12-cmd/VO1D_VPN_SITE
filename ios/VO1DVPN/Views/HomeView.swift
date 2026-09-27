@@ -27,6 +27,11 @@ struct HomeView: View {
                 }
                 QuickActions()
                 SelectedRouteCard(action: openLocations)
+                if !model.isDemoMode && model.account == nil {
+                    PrimaryButton(title: model.isRefreshingAccount ? "Syncing account…" : "Retry account sync", icon: "arrow.clockwise") {
+                        Task { await model.refresh() }
+                    }.disabled(model.isRefreshingAccount)
+                }
                 if model.isConnected {
                     ConnectionDashboard()
                         .transition(.opacity.combined(with: .move(edge: .bottom)))

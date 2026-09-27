@@ -59,7 +59,7 @@ private struct LaunchNetwork: Shape {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         for index in 0..<8 {
             let angle = Double(index) * .pi / 4
-            let end = CGPoint(x: center.x + cos(angle) * rect.width / 2, y: center.y + sin(angle) * rect.height / 2)
+            let end = CGPoint(x: center.x + CGFloat(cos(angle) as Double) * rect.width / 2, y: center.y + CGFloat(sin(angle) as Double) * rect.height / 2)
             path.move(to: center)
             path.addLine(to: end)
             path.addEllipse(in: CGRect(x: end.x - 2, y: end.y - 2, width: 4, height: 4))

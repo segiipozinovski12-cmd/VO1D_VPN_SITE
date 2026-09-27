@@ -29,11 +29,13 @@ final class APIClient {
     private init() {}
 
     func activate(key: String) async throws -> ActivateResponse {
-        let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        let (deviceID, deviceName) = await MainActor.run {
+            (UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString, UIDevice.current.name)
+        }
         let body: [String: String] = [
             "key": key,
             "device_id": deviceID,
-            "device_name": UIDevice.current.name
+            "device_name": deviceName
         ]
         return try await request(
             path: "/api/app/activate",

@@ -19,7 +19,7 @@ struct ConnectionOrb: View {
             Circle().stroke(.white.opacity(connected ? 0.86 : 0.22), lineWidth: connected ? 1.6 : 0.7).padding(39)
             Circle().stroke(.white.opacity(0.10), lineWidth: 0.7).padding(47)
             if phase.isBusy {
-                OrbitSegments(animated: motion).padding(28)
+                OrbitSegments(animated: motion).id(motion).padding(28)
                     .transition(.opacity)
             } else {
                 Circle().trim(from: 0.57, to: 0.68).stroke(.white.opacity(0.72), style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).padding(24)
@@ -76,7 +76,6 @@ private struct OrbitSegments: View {
         .onAppear {
             if animated { withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) { rotation = true } }
         }
-        .id(animated)
         .allowsHitTesting(false)
     }
 }
@@ -88,8 +87,8 @@ private struct OrbTicks: Shape {
         for tick in 0..<60 {
             let angle = Double(tick) * .pi / 30
             let inner = radius - (tick % 5 == 0 ? 7 : 3)
-            path.move(to: CGPoint(x: rect.midX + cos(angle) * inner, y: rect.midY + sin(angle) * inner))
-            path.addLine(to: CGPoint(x: rect.midX + cos(angle) * radius, y: rect.midY + sin(angle) * radius))
+            path.move(to: CGPoint(x: rect.midX + CGFloat(cos(angle) as Double) * inner, y: rect.midY + CGFloat(sin(angle) as Double) * inner))
+            path.addLine(to: CGPoint(x: rect.midX + CGFloat(cos(angle) as Double) * radius, y: rect.midY + CGFloat(sin(angle) as Double) * radius))
         }
         return path
     }

@@ -13,6 +13,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.10"
+    TARGETED_DEVICE_FAMILY: "1"
     DEVELOPMENT_TEAM: ""
 
 targets:
@@ -29,6 +30,8 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         VO1D_API_BASE_URL: "$(VO1D_API_BASE_URL)"
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
         CFBundleURLTypes:
           - CFBundleURLName: com.vo1d.vpn
             CFBundleURLSchemes:
@@ -40,8 +43,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn
         PRODUCT_NAME: VO1D_VPN
         INFOPLIST_KEY_CFBundleDisplayName: VO1D_VPN
-        MARKETING_VERSION: 0.2.0
-        CURRENT_PROJECT_VERSION: 2
+        MARKETING_VERSION: 0.3.0
+        CURRENT_PROJECT_VERSION: 3
         VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
         DEVELOPMENT_TEAM: "$(VO1D_TEAM_ID)"
         CODE_SIGN_STYLE: Manual
@@ -55,12 +58,15 @@ targets:
     platform: iOS
     sources:
       - path: VO1DVPN
+        excludes:
+          - Resources/Info.plist
+          - Resources/VO1D_VPN.entitlements
     info:
-      path: VO1DVPN/Resources/Info.plist
+      path: ../ios-preview/PreviewInfo.plist
       properties:
         CFBundleDisplayName: VO1D_VPN
         CFBundleName: VO1D_VPN
-        CFBundleShortVersionString: "0.2.0-preview"
+        CFBundleShortVersionString: "0.3.0"
         CFBundleVersion: "1"
         VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
     settings:
@@ -71,6 +77,7 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
         DEVELOPMENT_TEAM: ""
+        TARGETED_DEVICE_FAMILY: "1"
 
   VO1D_PacketTunnel:
     type: app-extension
@@ -93,8 +100,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.PacketTunnel
         PRODUCT_NAME: VO1D_PacketTunnel
-        MARKETING_VERSION: 0.2.0
-        CURRENT_PROJECT_VERSION: 2
+        MARKETING_VERSION: 0.3.0
+        CURRENT_PROJECT_VERSION: 3
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
         DEVELOPMENT_TEAM: "$(VO1D_TEAM_ID)"

@@ -101,12 +101,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         settings.ipv4Settings = ipv4
 
         if ipv6Protection {
-        let ipv6 = NEIPv6Settings(
-            addresses: ["fd00:1::2"],
-            networkPrefixLengths: [64]
-        )
-        ipv6.includedRoutes = [NEIPv6Route.default()]
-        settings.ipv6Settings = ipv6
+            let ipv6 = NEIPv6Settings(
+                addresses: ["fd00:1::2"],
+                networkPrefixLengths: [64]
+            )
+            ipv6.includedRoutes = [NEIPv6Route.default()]
+            settings.ipv6Settings = ipv6
         }
 
         if secureDNS {
