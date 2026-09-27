@@ -49,17 +49,18 @@ final class PreviewUITests: XCTestCase {
         let settings = app.buttons["profile.settings"]
         if !settings.isHittable { app.swipeUp() }
         settings.tap()
-        let settingsScreen = app.descendants(matching: .any)["settings.screen"]
-        XCTAssertTrue(settingsScreen.waitForExistence(timeout: 5))
-        let autoConnect = app.descendants(matching: .any)["settings.autoConnect"]
+        let settingsTitle = app.staticTexts["Fine-tune\nyour connection."]
+        XCTAssertTrue(settingsTitle.waitForExistence(timeout: 5))
+        let autoConnect = app.switches.matching(NSPredicate(format: "label CONTAINS[c] %@", "Auto Connect")).firstMatch
         XCTAssertTrue(autoConnect.waitForExistence(timeout: 3))
         capture("08-settings", app: app)
         if autoConnect.isHittable { autoConnect.tap() }
         app.swipeUp()
-        let reduceMotion = app.descendants(matching: .any)["settings.reduceMotion"]
-        if reduceMotion.exists && reduceMotion.isHittable { reduceMotion.tap() }
-        let compactServers = app.descendants(matching: .any)["settings.compactServers"]
-        if compactServers.exists && compactServers.isHittable { compactServers.tap() }
+        let switches = app.switches
+        if switches.count > 0 {
+            let last = switches.element(boundBy: switches.count - 1)
+            if last.isHittable { last.tap() }
+        }
         capture("09-interface", app: app)
     }
     @MainActor
