@@ -18,13 +18,6 @@ struct VO1DServer: Codable, Identifiable, Hashable {
     let probeHost: String
     let probePort: Int
     let protocolName: String
-
-    enum CodingKeys: String, CodingKey {
-        case id, code, name, flag, label, nodes
-        case probeHost = "probe_host"
-        case probePort = "probe_port"
-        case protocolName = "protocol"
-    }
 }
 
 struct ServerCollection: Codable {
