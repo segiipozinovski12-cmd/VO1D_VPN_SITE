@@ -1,0 +1,50 @@
+name: iOS preview IPA
+
+on:
+  push:
+    branches: [feature/ios-preview-shell]
+    paths:
+      - "ios-preview/**"
+      - ".github/workflows/ios-preview-build.yml"
+  workflow_dispatch:
+
+jobs:
+  preview:
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        working-directory: ios-preview
+        run: xcodegen generate
+
+      - name: Build unsigned preview app
+        working-directory: ios-preview
+        run: |
+          set -euo pipefail
+          xcodebuild             -project VO1D_VPN_PREVIEW.xcodeproj             -scheme VO1D_VPN             -configuration Release             -sdk iphoneos             -destination "generic/platform=iOS"             -derivedDataPath build/DerivedData             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             build
+
+      - name: Package IPA
+        working-directory: ios-preview
+        run: |
+          set -euo pipefail
+          APP="build/DerivedData/Build/Products/Release-iphoneos/VO1D_VPN.app"
+          test -d "$APP"
+          rm -rf build/Payload build/VO1D_VPN-preview.ipa
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          cd build
+          zip -qry VO1D_VPN-preview.ipa Payload
+
+      - name: Upload preview IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: VO1D_VPN-preview-ipa
+          path: ios-preview/build/VO1D_VPN-preview.ipa
+          if-no-files-found: error
+          retention-days: 14
