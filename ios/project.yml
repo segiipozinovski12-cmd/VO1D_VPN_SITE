@@ -32,6 +32,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: VO1D_VPN
         MARKETING_VERSION: 0.2.0
         CURRENT_PROJECT_VERSION: 2
+        VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
     dependencies:
       - target: VO1D_PacketTunnel
 
