@@ -50,6 +50,28 @@ targets:
     dependencies:
       - target: VO1D_PacketTunnel
 
+  VO1D_VPN_PREVIEW:
+    type: application
+    platform: iOS
+    sources:
+      - path: VO1DVPN
+    info:
+      path: VO1DVPN/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: VO1D_VPN
+        CFBundleName: VO1D_VPN
+        CFBundleShortVersionString: "0.2.0-preview"
+        CFBundleVersion: "1"
+        VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview
+        PRODUCT_NAME: VO1D_VPN
+        INFOPLIST_KEY_CFBundleDisplayName: VO1D_VPN
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        DEVELOPMENT_TEAM: ""
+
   VO1D_PacketTunnel:
     type: app-extension
     platform: iOS
