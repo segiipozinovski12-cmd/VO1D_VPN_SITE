@@ -58,3 +58,12 @@ struct APIErrorEnvelope: Codable {
     let error: String?
     let message: String?
 }
+
+
+struct LiveStats: Equatable {
+    var downloadMbps: Double = 0
+    var uploadMbps: Double = 0
+    var downloadedMB: Double = 0
+    var uploadedMB: Double = 0
+    var sessionSeconds: Int = 0
+}

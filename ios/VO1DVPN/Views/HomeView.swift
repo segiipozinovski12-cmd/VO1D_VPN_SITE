@@ -4,32 +4,46 @@ import NetworkExtension
 struct HomeView: View {
     @EnvironmentObject private var model: AppViewModel
 
-    @State private var rotateRing = false
+    @AppStorage("vo1d.reduceAnimations") private var reduceAnimations = false
+    @AppStorage("vo1d.showLivePing") private var showLivePing = true
+
+    @State private var ringSpin = false
+    @State private var connectedPulse = false
     @State private var connectedAt: Date?
 
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                background
 
                 ScrollView {
                     VStack(spacing: 0) {
                         header
                             .padding(.top, 8)
 
-                        connectionArea
-                            .padding(.top, 26)
+                        connectionHero
+                            .padding(.top, 20)
 
-                        if model.vpn.isConnected {
-                            connectedPanel
-                                .padding(.top, 28)
-                        } else {
-                            serverPreview
-                                .padding(.top, 28)
+                        quickControls
+                            .padding(.top, 22)
+
+                        Group {
+                            if model.vpn.isConnected {
+                                connectedDashboard
+                            } else {
+                                serverPreview
+                            }
                         }
+                        .padding(.top, 20)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                removal: .opacity
+                            )
+                        )
                     }
                     .padding(.horizontal, 18)
-                    .padding(.bottom, 26)
+                    .padding(.bottom, 30)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -52,23 +66,73 @@ struct HomeView: View {
                 }
             }
             .onChange(of: model.vpn.status) { _, status in
-                updateAnimation(for: status)
-                if status == .connected {
-                    connectedAt = Date()
-                } else if status == .disconnected || status == .invalid {
-                    connectedAt = nil
+                withAnimation(.snappy(duration: 0.34)) {
+                    updateAnimation(for: status)
+                    if status == .connected {
+                        connectedAt = Date()
+                    } else if status == .disconnected || status == .invalid {
+                        connectedAt = nil
+                    }
                 }
             }
+            .animation(.snappy(duration: 0.34), value: model.vpn.status)
         }
     }
 
+    private var background: some View {
+        ZStack {
+            Color.black
+
+            LinearGradient(
+                colors: [
+                    .white.opacity(model.vpn.isConnected ? 0.035 : 0.018),
+                    .clear,
+                    .white.opacity(0.012)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .ignoresSafeArea()
+    }
+
     private var header: some View {
-        HStack {
-            Text("VO1D_VPN")
-                .font(.system(size: 23, weight: .bold, design: .monospaced))
-                .tracking(1.2)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("VO1D_VPN")
+                    .font(.system(size: 23, weight: .bold, design: .monospaced))
+                    .tracking(1.2)
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(statusDotColor)
+                        .frame(width: 6, height: 6)
+
+                    Text(statusSmallText)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .tracking(0.9)
+                        .foregroundStyle(.white.opacity(0.42))
+                }
+            }
 
             Spacer()
+
+            if model.isDemoMode {
+                Text("DEMO")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(1)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(.white.opacity(0.07))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(.white.opacity(0.10), lineWidth: 1)
+                    )
+                    .foregroundStyle(.white.opacity(0.58))
+            }
 
             NavigationLink {
                 ProfileView()
@@ -76,112 +140,232 @@ struct HomeView: View {
                 ZStack {
                     Circle()
                         .fill(.white.opacity(0.08))
-                        .frame(width: 34, height: 34)
+                        .frame(width: 36, height: 36)
 
                     Image(systemName: "person.fill")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ScaleButtonStyle())
         }
     }
 
-    private var connectionArea: some View {
-        VStack(spacing: 14) {
+    private var connectionHero: some View {
+        VStack(spacing: 15) {
             ZStack {
                 Circle()
                     .fill(
                         RadialGradient(
                             colors: [
-                                .white.opacity(model.vpn.isConnected ? 0.08 : 0.045),
-                                .black.opacity(0.15)
+                                .white.opacity(model.vpn.isConnected ? 0.085 : 0.035),
+                                .white.opacity(0.01),
+                                .clear
                             ],
                             center: .center,
-                            startRadius: 0,
-                            endRadius: 100
+                            startRadius: 5,
+                            endRadius: 115
                         )
                     )
-                    .frame(width: 188, height: 188)
+                    .frame(width: 230, height: 230)
 
                 Circle()
-                    .stroke(.white.opacity(model.vpn.isConnected ? 0.95 : 0.16), lineWidth: model.vpn.isConnected ? 4 : 2)
-                    .frame(width: 188, height: 188)
-                    .shadow(
-                        color: .white.opacity(model.vpn.isConnected ? 0.58 : 0.07),
-                        radius: model.vpn.isConnected ? 20 : 5
-                    )
+                    .stroke(.white.opacity(0.055), lineWidth: 1)
+                    .frame(width: 214, height: 214)
+
+                if model.vpn.isConnected {
+                    Circle()
+                        .stroke(.white.opacity(connectedPulse ? 0.11 : 0.34), lineWidth: 1)
+                        .frame(width: connectedPulse ? 228 : 202, height: connectedPulse ? 228 : 202)
+
+                    Circle()
+                        .stroke(.white.opacity(0.92), lineWidth: 3.5)
+                        .frame(width: 184, height: 184)
+                        .shadow(color: .white.opacity(0.36), radius: 14)
+                } else {
+                    Circle()
+                        .stroke(.white.opacity(0.15), lineWidth: 1.5)
+                        .frame(width: 184, height: 184)
+                }
 
                 if model.vpn.isBusy {
                     Circle()
-                        .trim(from: 0.02, to: 0.28)
+                        .trim(from: 0.02, to: 0.30)
                         .stroke(
                             .white,
-                            style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                            style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
                         )
-                        .frame(width: 200, height: 200)
-                        .rotationEffect(.degrees(rotateRing ? 360 : 0))
+                        .frame(width: 202, height: 202)
+                        .rotationEffect(.degrees(ringSpin ? 360 : 0))
 
                     Circle()
-                        .trim(from: 0.49, to: 0.67)
+                        .trim(from: 0.52, to: 0.69)
                         .stroke(
-                            .white.opacity(0.42),
-                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                            .white.opacity(0.38),
+                            style: StrokeStyle(lineWidth: 2.2, lineCap: .round)
                         )
-                        .frame(width: 174, height: 174)
-                        .rotationEffect(.degrees(rotateRing ? -360 : 0))
+                        .frame(width: 170, height: 170)
+                        .rotationEffect(.degrees(ringSpin ? -360 : 0))
                 }
 
                 Button {
                     Task { await model.toggleConnection() }
                 } label: {
-                    Image(systemName: "power")
-                        .font(.system(size: 43, weight: .light))
-                        .foregroundStyle(.white)
-                        .frame(width: 145, height: 145)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
+                    ZStack {
+                        Circle()
+                            .fill(.white.opacity(model.vpn.isConnected ? 0.09 : 0.04))
+                            .frame(width: 145, height: 145)
 
-            VStack(spacing: 4) {
+                        Image(systemName: model.vpn.isConnected ? "checkmark" : "power")
+                            .font(.system(size: 43, weight: .light))
+                            .foregroundStyle(.white)
+                    }
+                    .contentShape(Circle())
+                }
+                .buttonStyle(ScaleButtonStyle(scale: 0.92))
+                .disabled(model.vpn.isBusy)
+            }
+            .frame(height: 230)
+
+            VStack(spacing: 5) {
                 Text(connectionTitle)
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 20, weight: .semibold))
+                    .contentTransition(.opacity)
 
                 if model.vpn.isConnected, let connectedAt {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(durationText(from: connectedAt, to: context.date))
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.46))
+                    HStack(spacing: 8) {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(durationText(from: connectedAt, to: context.date))
+                                .contentTransition(.numericText())
+                        }
+
+                        Text("•")
+                            .foregroundStyle(.white.opacity(0.25))
+
+                        Text(model.selectedServer?.name ?? "—")
                     }
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.48))
                 } else {
                     Text(connectionSubtitle)
                         .font(.system(size: 11))
                         .foregroundStyle(.white.opacity(0.46))
                 }
+
+                if showLivePing, let server = model.selectedServer {
+                    HStack(spacing: 5) {
+                        Text(server.flag)
+                        Text(server.code)
+                        Text("•")
+                        Text(pingText(for: server))
+                            .contentTransition(.numericText())
+                    }
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.34))
+                    .padding(.top, 2)
+                }
             }
         }
+    }
+
+    private var quickControls: some View {
+        HStack(spacing: 8) {
+            quickButton(
+                icon: "bolt.fill",
+                title: "FASTEST",
+                subtitle: fastestSubtitle
+            ) {
+                Task { await model.connectFastest() }
+            }
+
+            quickButton(
+                icon: "arrow.clockwise",
+                title: "PING",
+                subtitle: model.isRefreshingPings ? "CHECKING" : "REFRESH"
+            ) {
+                Task { await model.refreshPingsNow() }
+            }
+
+            quickButton(
+                icon: model.autoConnect ? "a.circle.fill" : "a.circle",
+                title: "AUTO",
+                subtitle: model.autoConnect ? "ON" : "OFF"
+            ) {
+                withAnimation(.snappy(duration: 0.25)) {
+                    model.autoConnect.toggle()
+                }
+            }
+        }
+    }
+
+    private func quickButton(
+        icon: String,
+        title: String,
+        subtitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .symbolEffect(.pulse, value: model.isRefreshingPings && title == "PING")
+
+                Text(title)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.7)
+
+                Text(subtitle)
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.38))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(.white.opacity(0.88))
+            .frame(maxWidth: .infinity)
+            .frame(height: 72)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(.white.opacity(0.075), lineWidth: 1)
+            )
+        }
+        .buttonStyle(ScaleButtonStyle(scale: 0.96))
     }
 
     private var serverPreview: some View {
         VStack(spacing: 10) {
             HStack {
-                Text("Servers")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Servers")
+                        .font(.system(size: 14, weight: .semibold))
+
+                    Text("Choose a location or use Fastest")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.32))
+                }
 
                 Spacer()
 
                 NavigationLink {
                     ServersView()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.48))
-                        .frame(width: 28, height: 28)
+                    HStack(spacing: 5) {
+                        Text("ALL")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.52))
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(
+                        Capsule()
+                            .fill(.white.opacity(0.055))
+                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ScaleButtonStyle())
             }
 
             VStack(spacing: 0) {
@@ -189,50 +373,36 @@ struct HomeView: View {
                     Button {
                         Task { await model.select(server) }
                     } label: {
-                        serverRow(server, compact: true)
+                        serverRow(server)
                     }
                     .buttonStyle(.plain)
 
                     if index < min(model.servers.count, 5) - 1 {
                         Divider()
-                            .overlay(.white.opacity(0.07))
+                            .overlay(.white.opacity(0.055))
                             .padding(.leading, 42)
                     }
                 }
-
-                if model.servers.isEmpty {
-                    Text("No locations available")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.4))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 24)
-                }
             }
             .padding(.horizontal, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.white.opacity(0.045))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(.white.opacity(0.07), lineWidth: 1)
-            )
+            .background(cardBackground)
         }
     }
 
-    private var connectedPanel: some View {
-        VStack(spacing: 13) {
+    private var connectedDashboard: some View {
+        VStack(spacing: 12) {
+            statsGrid
+
             NavigationLink {
                 ServersView()
             } label: {
                 HStack(spacing: 12) {
                     Text(model.selectedServer?.flag ?? "◌")
-                        .font(.system(size: 25))
+                        .font(.system(size: 26))
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(model.selectedServer?.name ?? "Location")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
 
                         Text(
                             model.selectedServer.map {
@@ -240,77 +410,137 @@ struct HomeView: View {
                             } ?? "—"
                         )
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.white.opacity(0.40))
                     }
 
                     Spacer()
 
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.35))
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(model.connectionQuality)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(qualityColor)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.30))
+                    }
                 }
+                .foregroundStyle(.white)
                 .padding(.horizontal, 14)
-                .frame(height: 66)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(.white.opacity(0.055))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(.white.opacity(0.08), lineWidth: 1)
-                )
+                .frame(height: 68)
+                .background(cardBackground)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ScaleButtonStyle(scale: 0.98))
 
             VStack(spacing: 0) {
-                infoRow("Your IP", value: "Protected")
-                divider
-                infoRow("Location", value: model.selectedServer?.name ?? "—")
+                infoRow("Your IP", value: model.isDemoMode ? "185.83.24.112" : "Protected")
                 divider
                 infoRow("Protocol", value: protocolLabel)
                 divider
                 infoRow("DNS", value: "Secure route")
+                divider
+                infoRow("Kill Switch", value: model.killSwitch ? "Enabled" : "Disabled")
             }
             .padding(.horizontal, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.white.opacity(0.04))
+            .background(cardBackground)
+        }
+    }
+
+    private var statsGrid: some View {
+        HStack(spacing: 8) {
+            statCard(
+                icon: "arrow.down",
+                value: String(format: "%.1f", model.liveStats.downloadMbps),
+                unit: "Mbps",
+                title: "DOWNLOAD"
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(.white.opacity(0.065), lineWidth: 1)
+
+            statCard(
+                icon: "arrow.up",
+                value: String(format: "%.1f", model.liveStats.uploadMbps),
+                unit: "Mbps",
+                title: "UPLOAD"
+            )
+
+            statCard(
+                icon: "waveform.path.ecg",
+                value: model.currentPing.map(String.init) ?? "—",
+                unit: "ms",
+                title: "PING"
             )
         }
     }
 
-    private func serverRow(_ server: VO1DServer, compact: Bool) -> some View {
+    private func statCard(
+        icon: String,
+        value: String,
+        unit: String,
+        title: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.48))
+                Spacer()
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .contentTransition(.numericText())
+
+                Text(unit)
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.36))
+            }
+
+            Text(title)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .tracking(0.6)
+                .foregroundStyle(.white.opacity(0.34))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(cardBackground)
+    }
+
+    private func serverRow(_ server: VO1DServer) -> some View {
         let selected = model.selectedServer?.code == server.code
 
         return HStack(spacing: 11) {
             Text(server.flag)
-                .font(.system(size: compact ? 19 : 23))
+                .font(.system(size: 19))
 
-            Text(server.name)
-                .font(.system(size: compact ? 12 : 14, weight: .medium))
-                .foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(server.name)
+                    .font(.system(size: 12, weight: .medium))
+
+                Text(server.label)
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.27))
+            }
 
             Spacer()
 
-            Text(pingText(for: server))
-                .font(.system(size: compact ? 10 : 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(pingColor(for: server))
+            if model.isFavorite(server) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.white.opacity(0.38))
+            }
 
-            Circle()
-                .fill(selected ? .white : .white.opacity(0.12))
-                .frame(width: compact ? 6 : 8, height: compact ? 6 : 8)
-                .overlay {
-                    if !selected {
-                        Circle()
-                            .stroke(.white.opacity(0.22), lineWidth: 1)
-                    }
-                }
+            if showLivePing {
+                Text(pingText(for: server))
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(pingColor(for: server))
+                    .contentTransition(.numericText())
+            }
+
+            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 13))
+                .foregroundStyle(selected ? .white : .white.opacity(0.18))
         }
-        .frame(height: compact ? 38 : 48)
+        .frame(height: 44)
         .contentShape(Rectangle())
     }
 
@@ -318,43 +548,62 @@ struct HomeView: View {
         HStack {
             Text(label)
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(.white.opacity(0.42))
 
             Spacer()
 
             Text(value)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.84))
+                .foregroundStyle(.white.opacity(0.82))
         }
         .frame(height: 40)
     }
 
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 14)
+            .fill(.white.opacity(0.038))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(.white.opacity(0.065), lineWidth: 1)
+            )
+    }
+
     private var divider: some View {
         Divider()
-            .overlay(.white.opacity(0.065))
+            .overlay(.white.opacity(0.055))
+    }
+
+    private var statusSmallText: String {
+        switch model.vpn.status {
+        case .connected: return "SECURE CONNECTION"
+        case .connecting, .reasserting: return "ESTABLISHING TUNNEL"
+        case .disconnecting: return "CLOSING TUNNEL"
+        default: return "READY"
+        }
+    }
+
+    private var statusDotColor: Color {
+        switch model.vpn.status {
+        case .connected: return Color(red: 0.38, green: 0.88, blue: 0.48)
+        case .connecting, .reasserting, .disconnecting: return .white.opacity(0.75)
+        default: return .white.opacity(0.24)
+        }
     }
 
     private var connectionTitle: String {
         switch model.vpn.status {
-        case .connected:
-            return "Connect!"
-        case .connecting, .reasserting:
-            return "Connecting..."
-        case .disconnecting:
-            return "Disconnecting..."
-        default:
-            return "Disconnected"
+        case .connected: return "Connected"
+        case .connecting, .reasserting: return "Connecting..."
+        case .disconnecting: return "Disconnecting..."
+        default: return "Disconnected"
         }
     }
 
     private var connectionSubtitle: String {
         switch model.vpn.status {
-        case .connecting, .reasserting:
-            return "Establishing secure tunnel"
-        case .disconnecting:
-            return "Closing secure tunnel"
-        default:
-            return "Tap to connect"
+        case .connecting, .reasserting: return "Establishing secure tunnel"
+        case .disconnecting: return "Closing secure tunnel"
+        default: return "Tap to connect"
         }
     }
 
@@ -363,6 +612,20 @@ struct HomeView: View {
             return "VLESS"
         }
         return raw.uppercased()
+    }
+
+    private var fastestSubtitle: String {
+        guard let server = model.fastestServer else { return "FIND" }
+        return server.code
+    }
+
+    private var qualityColor: Color {
+        switch model.connectionQuality {
+        case "EXCELLENT": return Color(red: 0.38, green: 0.88, blue: 0.48)
+        case "GOOD": return Color(red: 0.60, green: 0.86, blue: 0.46)
+        case "FAIR": return Color(red: 0.93, green: 0.78, blue: 0.34)
+        default: return Color(red: 0.94, green: 0.40, blue: 0.40)
+        }
     }
 
     private func pingText(for server: VO1DServer) -> String {
@@ -374,7 +637,7 @@ struct HomeView: View {
 
     private func pingColor(for server: VO1DServer) -> Color {
         guard let wrapped = model.pingByCode[server.code], let ping = wrapped else {
-            return .white.opacity(0.35)
+            return .white.opacity(0.32)
         }
 
         if ping < 70 { return Color(red: 0.38, green: 0.86, blue: 0.46) }
@@ -395,15 +658,25 @@ struct HomeView: View {
     }
 
     private func updateAnimation(for status: NEVPNStatus) {
+        ringSpin = false
+        connectedPulse = false
+
+        guard !reduceAnimations else { return }
+
         if status == .connecting || status == .reasserting || status == .disconnecting {
-            rotateRing = false
             DispatchQueue.main.async {
-                withAnimation(.linear(duration: 1.05).repeatForever(autoreverses: false)) {
-                    rotateRing = true
+                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                    ringSpin = true
                 }
             }
-        } else {
-            rotateRing = false
+        }
+
+        if status == .connected {
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 1.7).repeatForever(autoreverses: true)) {
+                    connectedPulse = true
+                }
+            }
         }
     }
 }
