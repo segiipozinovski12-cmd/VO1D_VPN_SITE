@@ -5,26 +5,20 @@ struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showKeyHelp = false
+    @State private var avatarPulse = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 0) {
+                VStack(spacing: 16) {
                     topBar
-
-                    avatarBlock
-                        .padding(.top, 18)
-
+                    identityCard
                     subscriptionCard
-                        .padding(.top, 20)
-
+                    sessionCard
                     preferencesCard
-                        .padding(.top, 14)
-
                     actionsCard
-                        .padding(.top, 14)
                 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, 28)
@@ -37,12 +31,17 @@ struct ProfileView: View {
         } message: {
             Text("Create a new iPhone key in the VO1D Telegram bot, then log out and activate the app with the new key.")
         }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                avatarPulse = true
+            }
+        }
     }
 
     private var topBar: some View {
         ZStack {
             Text("Profile")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
 
             HStack {
                 Button {
@@ -53,97 +52,197 @@ struct ProfileView: View {
                         .foregroundStyle(.white)
                         .frame(width: 34, height: 34)
                 }
+                .buttonStyle(ScaleButtonStyle())
 
                 Spacer()
             }
         }
-        .frame(height: 38)
+        .frame(height: 42)
         .padding(.top, 6)
     }
 
-    private var avatarBlock: some View {
-        VStack(spacing: 10) {
+    private var identityCard: some View {
+        HStack(spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(.white.opacity(0.08))
-                    .frame(width: 62, height: 62)
+                    .stroke(.white.opacity(avatarPulse ? 0.05 : 0.18), lineWidth: 1)
+                    .frame(width: avatarPulse ? 64 : 56, height: avatarPulse ? 64 : 56)
+
+                Circle()
+                    .fill(.white.opacity(0.07))
+                    .frame(width: 52, height: 52)
 
                 Image(systemName: "person.fill")
-                    .font(.system(size: 28, weight: .medium))
+                    .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(.white)
             }
+            .frame(width: 64, height: 64)
 
-            TextField("Nickname", text: $model.nickname)
-                .multilineTextAlignment(.center)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 180)
+            VStack(alignment: .leading, spacing: 5) {
+                TextField("Nickname", text: $model.nickname)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
 
-            Text("ID \(model.account?.id ?? 0)")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.38))
-
-            Text("VOID-••••-••••-••••")
+                HStack(spacing: 7) {
+                    Text("ID \(model.account?.id ?? 0)")
+                    Text("•")
+                    Text(model.isDemoMode ? "SIMULATOR" : "IPHONE")
+                }
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.28))
+                .foregroundStyle(.white.opacity(0.33))
+
+                Text("VOID-••••-••••-••••")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.24))
+            }
+
+            Spacer()
         }
+        .padding(14)
+        .background(cardBackground)
     }
 
     private var subscriptionCard: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Subscription")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.52))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("SUBSCRIPTION")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.36))
+
+                    Text(model.account?.active == true ? "Active" : "Inactive")
+                        .font(.system(size: 15, weight: .semibold))
+                }
 
                 Spacer()
 
-                Text(model.account?.active == true ? "Active" : "Inactive")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(model.account?.active == true ? activeGreen : .red.opacity(0.85))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(
-                                model.account?.active == true
-                                ? activeGreen.opacity(0.13)
-                                : Color.red.opacity(0.12)
-                            )
-                    )
+                Image(systemName: model.account?.active == true ? "checkmark.shield.fill" : "xmark.shield")
+                    .font(.system(size: 24))
+                    .foregroundStyle(model.account?.active == true ? activeGreen : .red.opacity(0.75))
             }
-            .frame(height: 44)
+            .padding(.vertical, 13)
 
             divider
 
             HStack {
-                Text("Expires")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.52))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("EXPIRES")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(0.7)
+                        .foregroundStyle(.white.opacity(0.32))
+
+                    Text(expiryText)
+                        .font(.system(size: 12, weight: .medium))
+                }
 
                 Spacer()
 
-                Text(expiryText)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.8))
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("REMAINING")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(0.7)
+                        .foregroundStyle(.white.opacity(0.32))
+
+                    Text(remainingText)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                }
             }
-            .frame(height: 44)
+            .padding(.vertical, 13)
         }
         .padding(.horizontal, 14)
         .background(cardBackground)
     }
 
+    private var sessionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("CURRENT SESSION")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(.white.opacity(0.36))
+
+                Spacer()
+
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(model.vpn.isConnected ? activeGreen : .white.opacity(0.20))
+                        .frame(width: 6, height: 6)
+
+                    Text(model.vpn.isConnected ? "CONNECTED" : "OFFLINE")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.48))
+                }
+            }
+
+            HStack(spacing: 8) {
+                miniStat(
+                    title: "LOCATION",
+                    value: model.selectedServer?.code ?? "—",
+                    icon: "mappin.and.ellipse"
+                )
+
+                miniStat(
+                    title: "TRAFFIC",
+                    value: trafficText,
+                    icon: "arrow.up.arrow.down"
+                )
+
+                miniStat(
+                    title: "FAVORITES",
+                    value: "\(model.favoriteCodes.count)",
+                    icon: "star.fill"
+                )
+            }
+        }
+        .padding(14)
+        .background(cardBackground)
+    }
+
+    private func miniStat(
+        title: String,
+        value: String,
+        icon: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.42))
+
+            Text(value)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text(title)
+                .font(.system(size: 7, weight: .bold, design: .monospaced))
+                .tracking(0.5)
+                .foregroundStyle(.white.opacity(0.30))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 11)
+                .fill(.white.opacity(0.035))
+        )
+    }
+
     private var preferencesCard: some View {
         VStack(spacing: 0) {
-            toggleRow("Auto-connect", isOn: $model.autoConnect)
+            toggleRow("Auto-connect", icon: "bolt.horizontal.fill", isOn: $model.autoConnect)
             divider
-            toggleRow("Kill Switch", isOn: $model.killSwitch)
+            toggleRow("Kill Switch", icon: "shield.fill", isOn: $model.killSwitch)
             divider
 
             NavigationLink {
                 SettingsView()
             } label: {
-                HStack {
+                HStack(spacing: 12) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.50))
+                        .frame(width: 19)
+
                     Text("Settings")
                         .font(.system(size: 13))
                         .foregroundStyle(.white)
@@ -152,9 +251,9 @@ struct ProfileView: View {
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .foregroundStyle(.white.opacity(0.28))
                 }
-                .frame(height: 46)
+                .frame(height: 50)
             }
             .buttonStyle(.plain)
         }
@@ -167,7 +266,7 @@ struct ProfileView: View {
             Button {
                 showKeyHelp = true
             } label: {
-                actionRow("Change Key", destructive: false)
+                actionRow("Change Key", icon: "key.fill", destructive: false)
             }
             .buttonStyle(.plain)
 
@@ -179,7 +278,7 @@ struct ProfileView: View {
                     dismiss()
                 }
             } label: {
-                actionRow("Log out", destructive: true)
+                actionRow("Log out", icon: "rectangle.portrait.and.arrow.right", destructive: true)
             }
             .buttonStyle(.plain)
         }
@@ -187,11 +286,19 @@ struct ProfileView: View {
         .background(cardBackground)
     }
 
-    private func toggleRow(_ label: String, isOn: Binding<Bool>) -> some View {
-        HStack {
+    private func toggleRow(
+        _ label: String,
+        icon: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.50))
+                .frame(width: 19)
+
             Text(label)
                 .font(.system(size: 13))
-                .foregroundStyle(.white)
 
             Spacer()
 
@@ -200,39 +307,49 @@ struct ProfileView: View {
                 .tint(.white)
                 .scaleEffect(0.78)
         }
-        .frame(height: 46)
+        .frame(height: 50)
     }
 
-    private func actionRow(_ title: String, destructive: Bool) -> some View {
-        HStack {
+    private func actionRow(
+        _ title: String,
+        icon: String,
+        destructive: Bool
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+                .foregroundStyle(destructive ? .red.opacity(0.82) : .white.opacity(0.50))
+                .frame(width: 19)
+
             Text(title)
                 .font(.system(size: 13))
-                .foregroundStyle(destructive ? .red.opacity(0.9) : .white)
+                .foregroundStyle(destructive ? .red.opacity(0.88) : .white)
 
             Spacer()
 
             if !destructive {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(.white.opacity(0.28))
             }
         }
-        .frame(height: 46)
+        .frame(height: 50)
         .contentShape(Rectangle())
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(.white.opacity(0.045))
+        RoundedRectangle(cornerRadius: 14)
+            .fill(.white.opacity(0.038))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(.white.opacity(0.07), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(.white.opacity(0.065), lineWidth: 1)
             )
     }
 
     private var divider: some View {
         Divider()
-            .overlay(.white.opacity(0.065))
+            .overlay(.white.opacity(0.055))
+            .padding(.leading, 31)
     }
 
     private var activeGreen: Color {
@@ -246,5 +363,22 @@ struct ProfileView: View {
 
         return Date(timeIntervalSince1970: TimeInterval(until))
             .formatted(.dateTime.day().month(.abbreviated).year())
+    }
+
+    private var remainingText: String {
+        guard let seconds = model.account?.remainingSeconds else {
+            return "—"
+        }
+
+        let days = max(0, seconds) / 86_400
+        return "\(days)d"
+    }
+
+    private var trafficText: String {
+        let total = model.liveStats.downloadedMB + model.liveStats.uploadedMB
+        if total < 1024 {
+            return String(format: "%.0f MB", total)
+        }
+        return String(format: "%.1f GB", total / 1024)
     }
 }
