@@ -905,7 +905,7 @@ def app_servers_payload(row):
               "nodes":0,
               "probe_host":host,
               "probe_port":port,
-              "protocol":node.split("://",1)[0].lower() if "://" in node else "",
+              "protocol_name":node.split("://",1)[0].lower() if "://" in node else "",
             }
             by_code[code]=item;countries.append(item)
         by_code[code]["nodes"]+=1
