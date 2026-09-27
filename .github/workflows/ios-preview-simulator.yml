@@ -1,0 +1,40 @@
+name: iOS Simulator preview
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "ios/VO1DVPN/**"
+      - "ios-preview/**"
+      - ".github/workflows/ios-preview-simulator.yml"
+  workflow_dispatch:
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate preview project
+        working-directory: ios-preview
+        run: xcodegen generate
+
+      - name: Build VO1D preview for Simulator
+        working-directory: ios-preview
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project VO1D_VPN_PREVIEW.xcodeproj \
+            -scheme VO1D_VPN_PREVIEW \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
