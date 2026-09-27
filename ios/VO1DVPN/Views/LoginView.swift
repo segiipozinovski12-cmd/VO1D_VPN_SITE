@@ -5,86 +5,90 @@ struct LoginView: View {
     @State private var key = ""
 
     var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-            VStack(spacing: 8) {
+            VStack(spacing: 0) {
+                Spacer(minLength: 72)
+
                 Text("VO1D_VPN")
-                    .font(.system(size: 38, weight: .black, design: .rounded))
-                    .tracking(3)
+                    .font(.system(size: 24, weight: .bold, design: .monospaced))
+                    .tracking(1.6)
+                    .foregroundStyle(.white)
 
-                Text("PRIVATE / SECURE / BORDERLESS")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.gray)
-                    .tracking(2)
-            }
+                Spacer()
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("ACCESS KEY")
-                    .font(.caption.monospaced().weight(.semibold))
-                    .foregroundStyle(.gray)
+                VStack(spacing: 18) {
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 43, weight: .medium))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.white)
 
-                TextField("VOID-XXXX-XXXX-XXXX-XXXX", text: $key)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .font(.system(.body, design: .monospaced))
-                    .padding(16)
-                    .background(
-                        Color.white.opacity(0.07),
-                        in: RoundedRectangle(cornerRadius: 16)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.12))
-                    )
-            }
+                    Text("Enter Your Key")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.white)
 
-            Button {
-                Task {
-                    await model.activate(key: key)
+                    Text("Enter the key you received from our Telegram bot.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.48))
+                        .multilineTextAlignment(.center)
                 }
-            } label: {
-                HStack {
-                    if model.isActivating {
-                        ProgressView()
-                            .tint(.black)
+
+                VStack(spacing: 12) {
+                    TextField("VOID-XXXX-XXXX-XXXX-XXXX", text: $key)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .padding(.horizontal, 16)
+                        .frame(height: 48)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9)
+                                .fill(Color.white.opacity(0.055))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9)
+                                .stroke(.white.opacity(0.14), lineWidth: 1)
+                        )
+
+                    Button {
+                        Task { await model.activate(key: key) }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if model.isActivating {
+                                ProgressView()
+                                    .tint(.black)
+                            }
+
+                            Text(model.isActivating ? "Activating..." : "Activate")
+                                .font(.system(size: 15, weight: .bold))
+                        }
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 9))
                     }
-
-                    Text(model.isActivating ? "ACTIVATING…" : "ACTIVATE")
-                        .font(.headline.monospaced().weight(.bold))
+                    .disabled(model.isActivating)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .foregroundStyle(.black)
-                .background(
-                    .white,
-                    in: RoundedRectangle(cornerRadius: 16)
-                )
+                .padding(.horizontal, 24)
+                .padding(.top, 34)
+
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red.opacity(0.85))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 26)
+                        .padding(.top, 14)
+                }
+
+                Text("No key? Get it in our Telegram bot.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.38))
+                    .padding(.top, 17)
+
+                Spacer()
+                Spacer()
             }
-            .disabled(model.isActivating)
-
-            if let error = model.errorMessage {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.gray)
-                    .multilineTextAlignment(.center)
-            }
-
-            Text("Ключ выдаётся в Telegram после активации подписки.")
-                .font(.footnote)
-                .foregroundStyle(.gray)
-                .multilineTextAlignment(.center)
-
-            Spacer()
         }
-        .padding(24)
-        .background(
-            LinearGradient(
-                colors: [.black, Color(white: 0.08), .black],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
     }
 }
