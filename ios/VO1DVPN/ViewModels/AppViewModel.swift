@@ -36,6 +36,12 @@ final class AppViewModel: ObservableObject {
     }
 
     func bootstrap() async {
+#if targetEnvironment(simulator)
+        setupSimulatorDemo()
+        try? await vpn.prepare()
+        startPingLoop()
+        return
+#else
         sessionToken = KeychainStore.loadToken()
 
         do {
@@ -46,9 +52,15 @@ final class AppViewModel: ObservableObject {
 
         guard let token = sessionToken else { return }
         await refresh(token: token)
+#endif
     }
 
     func activate(key: String) async {
+#if targetEnvironment(simulator)
+        setupSimulatorDemo()
+        startPingLoop()
+        return
+#else
         let clean = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
 
@@ -66,9 +78,14 @@ final class AppViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+#endif
     }
 
     func refresh(token: String? = nil) async {
+#if targetEnvironment(simulator)
+        if account == nil { setupSimulatorDemo() }
+        return
+#else
         guard let token = token ?? sessionToken else { return }
 
         do {
@@ -90,6 +107,7 @@ final class AppViewModel: ObservableObject {
             stopPingLoop()
             errorMessage = error.localizedDescription
         }
+#endif
     }
 
     func toggleConnection() async {
@@ -108,11 +126,15 @@ final class AppViewModel: ObservableObject {
             return
         }
 
+#if targetEnvironment(simulator)
+        await vpn.connectDemo()
+#else
         do {
             try await connect(to: selectedServer)
         } catch {
             errorMessage = error.localizedDescription
         }
+#endif
     }
 
     func select(_ server: VO1DServer) async {
@@ -122,15 +144,25 @@ final class AppViewModel: ObservableObject {
             vpn.disconnect()
             try? await Task.sleep(for: .milliseconds(450))
 
+#if targetEnvironment(simulator)
+            await vpn.connectDemo()
+#else
             do {
                 try await connect(to: server)
             } catch {
                 errorMessage = error.localizedDescription
             }
+#endif
         }
     }
 
     func logout() async {
+#if targetEnvironment(simulator)
+        vpn.disconnect()
+        setupSimulatorDemo()
+        startPingLoop()
+        return
+#else
         if let sessionToken {
             await api.logout(token: sessionToken)
         }
@@ -142,15 +174,20 @@ final class AppViewModel: ObservableObject {
         servers = []
         selectedServer = nil
         stopPingLoop()
+#endif
     }
 
     private func connect(to server: VO1DServer) async throws {
+#if targetEnvironment(simulator)
+        await vpn.connectDemo()
+#else
         guard let token = sessionToken else {
             throw APIClientError.server("Session expired.")
         }
 
         let tunnel = try await api.tunnel(token: token, country: server.code)
         try await vpn.connect(tunnel: tunnel, killSwitch: killSwitch)
+#endif
     }
 
     private func apply(account: AccountState, serverCollection: ServerCollection) {
@@ -185,6 +222,17 @@ final class AppViewModel: ObservableObject {
     }
 
     private func refreshPings() async {
+#if targetEnvironment(simulator)
+        let base: [String: Int] = [
+            "RU": 32, "DE": 48, "NL": 51, "FI": 62, "UK": 67,
+            "FR": 71, "TR": 78, "US": 82, "CA": 86, "SG": 121, "JP": 132
+        ]
+
+        for server in servers {
+            let basePing = base[server.code] ?? 75
+            pingByCode[server.code] = max(8, basePing + Int.random(in: -4...5))
+        }
+#else
         let current = servers
 
         await withTaskGroup(of: (String, Int?).self) { group in
@@ -202,5 +250,62 @@ final class AppViewModel: ObservableObject {
                 pingByCode[code] = value
             }
         }
+#endif
     }
+
+#if targetEnvironment(simulator)
+    private func setupSimulatorDemo() {
+        let expiry = Int64(Date().addingTimeInterval(90 * 24 * 60 * 60).timeIntervalSince1970)
+        let remaining = max(0, expiry - Int64(Date().timeIntervalSince1970))
+
+        sessionToken = "VO1D-SIMULATOR-DEMO"
+        account = AccountState(
+            id: 1024,
+            active: true,
+            banned: false,
+            until: expiry,
+            remainingSeconds: remaining
+        )
+
+        servers = [
+            demoServer("RU", "Russia", "🇷🇺", "VLESS (Reality)"),
+            demoServer("DE", "Germany", "🇩🇪", "VLESS (Reality)"),
+            demoServer("NL", "Netherlands", "🇳🇱", "VLESS (Reality)"),
+            demoServer("FI", "Finland", "🇫🇮", "VLESS (Reality)"),
+            demoServer("UK", "United Kingdom", "🇬🇧", "VLESS (Reality)"),
+            demoServer("FR", "France", "🇫🇷", "VLESS (Reality)"),
+            demoServer("TR", "Turkey", "🇹🇷", "VLESS (Reality)"),
+            demoServer("US", "United States", "🇺🇸", "VLESS (Reality)"),
+            demoServer("CA", "Canada", "🇨🇦", "VLESS (Reality)"),
+            demoServer("SG", "Singapore", "🇸🇬", "VLESS (Reality)"),
+            demoServer("JP", "Japan", "🇯🇵", "VLESS (Reality)")
+        ]
+
+        if let current = selectedServer,
+           let same = servers.first(where: { $0.code == current.code }) {
+            selectedServer = same
+        } else {
+            selectedServer = servers.first
+        }
+    }
+
+    private func demoServer(
+        _ code: String,
+        _ name: String,
+        _ flag: String,
+        _ protocolName: String
+    ) -> VO1DServer {
+        VO1DServer(
+            id: code,
+            code: code,
+            name: name,
+            flag: flag,
+            label: "VO1D · \(code)",
+            nodes: 1,
+            probeHost: "demo.local",
+            probePort: 443,
+            protocolName: protocolName
+        )
+    }
+#endif
 }
