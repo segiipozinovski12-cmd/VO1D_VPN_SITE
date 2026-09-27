@@ -8,7 +8,7 @@ options:
 packages:
   SwiftyXrayKit:
     url: https://github.com/dima-u/SwiftyXrayKit.git
-    from: 1.1.0
+    revision: 3c5405521ae547de110f6ea65df00b1c05f6a0bc
 
 settings:
   base:
