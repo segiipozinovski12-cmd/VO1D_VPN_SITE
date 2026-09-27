@@ -1,0 +1,31 @@
+name: VO1D_VPN_PREVIEW
+
+options:
+  bundleIdPrefix: com.vo1d
+  deploymentTarget:
+    iOS: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+
+targets:
+  VO1D_VPN:
+    type: application
+    platform: iOS
+    sources:
+      - path: VO1DPreview
+    info:
+      path: VO1DPreview/Info.plist
+      properties:
+        CFBundleDisplayName: VO1D_VPN
+        CFBundleName: VO1D_VPN
+        CFBundleShortVersionString: "0.1.0-preview"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview
+        PRODUCT_NAME: VO1D_VPN
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
