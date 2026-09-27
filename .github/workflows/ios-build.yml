@@ -1,5 +1,8 @@
 name: iOS native build
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main]
@@ -80,3 +83,18 @@ jobs:
             ios/build/VO1D_VPN-unsigned.ipa.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish stable GitHub Release download
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="ios-v0.2.0"
+          IPA="ios/build/VO1D_VPN-unsigned.ipa"
+          HASH="ios/build/VO1D_VPN-unsigned.ipa.sha256"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$IPA" "$HASH" --clobber
+          else
+            gh release create "$TAG" "$IPA" "$HASH"               --title "VO1D_VPN iOS 0.2.0"               --notes "Native VO1D_VPN iPhone build with Packet Tunnel + Xray/VLESS core. This IPA is unsigned and must be signed with an Apple Developer provisioning profile that permits Network Extension before installation on a stock iPhone."
+          fi
