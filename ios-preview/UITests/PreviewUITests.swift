@@ -49,12 +49,16 @@ final class PreviewUITests: XCTestCase {
         let settings = app.buttons["profile.settings"]
         if !settings.isHittable { app.swipeUp() }
         settings.tap()
-        XCTAssertTrue(app.switches["settings.autoConnect"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.scrollViews["settings.screen"].waitForExistence(timeout: 5))
+        let autoConnect = app.descendants(matching: .any)["settings.autoConnect"]
+        XCTAssertTrue(autoConnect.waitForExistence(timeout: 3))
         capture("08-settings", app: app)
-        app.switches["settings.autoConnect"].tap()
+        if autoConnect.isHittable { autoConnect.tap() }
         app.swipeUp()
-        if app.switches["settings.reduceMotion"].isHittable { app.switches["settings.reduceMotion"].tap() }
-        if app.switches["settings.compactServers"].isHittable { app.switches["settings.compactServers"].tap() }
+        let reduceMotion = app.descendants(matching: .any)["settings.reduceMotion"]
+        if reduceMotion.exists && reduceMotion.isHittable { reduceMotion.tap() }
+        let compactServers = app.descendants(matching: .any)["settings.compactServers"]
+        if compactServers.exists && compactServers.isHittable { compactServers.tap() }
         capture("09-interface", app: app)
     }
     @MainActor
