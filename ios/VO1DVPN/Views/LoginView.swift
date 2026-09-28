@@ -6,6 +6,7 @@ struct LoginView: View {
 
     @State private var key = ""
     @State private var breathe = false
+    @State private var appeared = false
 
     var body: some View {
         ScrollView {
@@ -23,6 +24,7 @@ struct LoginView: View {
                     )
                 }
                 .padding(.top, 36)
+                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.00)
 
                 Spacer(minLength: 48)
 
@@ -39,6 +41,7 @@ struct LoginView: View {
                         .vo1dSurface(highlighted: true, radius: 26)
                 }
                 .frame(width: 108, height: 108)
+                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.06)
 
                 VStack(alignment: .leading, spacing: 14) {
                     Eyebrow(text: model.isDemoMode ? "DEMO / SIMULATOR" : "YOUR PRIVATE CONNECTION")
@@ -69,6 +72,7 @@ struct LoginView: View {
                     }
                     .padding(18)
                     .vo1dSurface(radius: 16)
+                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.15)
                 }
 
                 PrimaryButton(
@@ -85,6 +89,7 @@ struct LoginView: View {
                     (!model.isDemoMode && key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 )
                 .accessibilityIdentifier("login.activate")
+                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.19)
 
                 if let error = model.errorMessage {
                     HStack(spacing: 10) {
@@ -121,8 +126,19 @@ struct LoginView: View {
         .background { DeepSpaceBackdrop().ignoresSafeArea() }
         .scrollDismissesKeyboard(.interactively)
         .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+            if reduceMotion {
+                appeared = true
+                return
+            }
+
+            withAnimation(.easeOut(duration: 0.46)) {
+                appeared = true
+            }
+
+            withAnimation(
+                .easeInOut(duration: 2.8)
+                .repeatForever(autoreverses: true)
+            ) {
                 breathe = true
             }
         }
