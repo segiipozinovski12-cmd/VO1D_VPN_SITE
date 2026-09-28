@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ReferenceBackdrop: View {
     var interactive = false
+    var impact = false
 
     var body: some View {
         ZStack {
@@ -21,8 +22,11 @@ struct ReferenceBackdrop: View {
 
             ReferenceAmbientBloom()
 
-            ReferenceLineField(interactive: interactive)
-                .opacity(0.84)
+            ReferenceLineField(
+                interactive: interactive,
+                impact: impact
+            )
+            .opacity(0.84)
                 .blendMode(.screen)
 
             ReferenceNoise()
@@ -98,6 +102,7 @@ private struct ReferenceLineField: View {
     @Environment(\.vo1dReduceMotion) private var reduceMotion
 
     let interactive: Bool
+    let impact: Bool
 
     @State private var dragPoint: CGPoint?
     @State private var impulse: CGFloat = 0
@@ -144,8 +149,14 @@ private struct ReferenceLineField: View {
                     context: &context,
                     size: size,
                     time: time,
-                    focus: dragPoint,
-                    impulse: impulse
+                    focus:
+                        impact
+                        ? CGPoint(
+                            x: size.width * 0.50,
+                            y: size.height * 0.42
+                        )
+                        : dragPoint,
+                    impulse: impact ? 1 : impulse
                 )
             }
         }
