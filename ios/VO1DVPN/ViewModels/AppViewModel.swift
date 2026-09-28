@@ -132,9 +132,17 @@ final class AppViewModel: ObservableObject {
     }
 
     func toggleConnection() {
-        if phase.isBusy || vpn.isConnected { disconnect(); return }
+        if phase.isBusy || vpn.isConnected {
+            Haptics.play(.selection, enabled: preferences.haptics)
+            disconnect()
+            return
+        }
         let route = preferences.autoFastest ? (fastestServer ?? selectedServer) : selectedServer
-        guard let route else { errorMessage = "No available route. Refresh locations and try again."; return }
+        guard let route else {
+            errorMessage = "No available route. Refresh locations and try again."
+            Haptics.play(.error, enabled: preferences.haptics)
+            return
+        }
         beginConnection(to: route)
     }
 
