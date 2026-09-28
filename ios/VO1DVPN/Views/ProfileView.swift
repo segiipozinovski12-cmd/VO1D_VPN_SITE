@@ -39,7 +39,6 @@ struct ProfileView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .background { ReferenceBackdrop() }
         .navigationDestination(isPresented: $showSettings) {
             SettingsView()
         }
