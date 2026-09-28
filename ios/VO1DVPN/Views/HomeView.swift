@@ -185,7 +185,10 @@ struct HomeView: View {
         return Button {
             openLocations()
         } label: {
-            ReferenceGlassCard(radius: 22) {
+            ReferenceGlassCard(
+                radius: 22,
+                highlighted: model.isConnected
+            ) {
                 HStack(spacing: 13) {
                     Text(server?.flag ?? "◉")
                         .font(.system(size: 27))
@@ -228,7 +231,7 @@ struct HomeView: View {
                 active: model.isConnected || flash,
                 busy: model.phase.isBusy || flash
             )
-            .frame(width: 338, height: 338)
+            .frame(width: 356, height: 356)
             .scaleEffect(
                 model.isConnected
                 ? (pulse ? 1.025 : 0.990)
@@ -278,7 +281,7 @@ struct HomeView: View {
             .frame(height: 286)
             .allowsHitTesting(false)
         }
-        .frame(height: 338)
+        .frame(height: 356)
     }
 
     private var connectionShockwaves: some View {
@@ -294,12 +297,30 @@ struct HomeView: View {
 
             Circle()
                 .stroke(
-                    VO1DStyle.frost.opacity(burstTwo ? 0 : 0.42),
-                    lineWidth: burstTwo ? 0.6 : 1.6
+                    VO1DStyle.frost.opacity(burstTwo ? 0 : 0.54),
+                    lineWidth: burstTwo ? 0.6 : 1.9
                 )
-                .frame(width: 118, height: 118)
-                .scaleEffect(burstTwo ? 2.20 : 0.82)
-                .blur(radius: burstTwo ? 3.8 : 0.8)
+                .frame(width: 122, height: 122)
+                .scaleEffect(burstTwo ? 2.34 : 0.80)
+                .blur(radius: burstTwo ? 4.4 : 0.9)
+
+            Circle()
+                .stroke(
+                    VO1DStyle.chrome.opacity(
+                        flash ? 0.34 : 0.08
+                    ),
+                    lineWidth: 1.0
+                )
+                .frame(width: 146, height: 146)
+                .scaleEffect(
+                    flash
+                    ? 1.42
+                    : model.isConnected
+                        ? (pulse ? 1.04 : 0.97)
+                        : 0.91
+                )
+                .blur(radius: flash ? 2.8 : 0.8)
+                .opacity(model.isConnected || flash ? 1 : 0.42)
 
             Circle()
                 .fill(
@@ -364,17 +385,20 @@ struct HomeView: View {
                         RadialGradient(
                             colors: [
                                 .white.opacity(
-                                    model.isConnected ? 0.10 : 0.055
+                                    model.isConnected ? 0.16 : 0.075
                                 ),
-                                VO1DStyle.graphite.opacity(0.88),
-                                .black.opacity(0.96)
+                                VO1DStyle.frost.opacity(
+                                    model.isConnected ? 0.055 : 0.018
+                                ),
+                                VO1DStyle.graphite.opacity(0.90),
+                                .black.opacity(0.97)
                             ],
                             center: UnitPoint(x: 0.40, y: 0.34),
                             startRadius: 0,
                             endRadius: 72
                         )
                     )
-                    .frame(width: 116, height: 116)
+                    .frame(width: 122, height: 122)
                     .background(
                         .ultraThinMaterial,
                         in: Circle()
@@ -385,11 +409,14 @@ struct HomeView: View {
                                 LinearGradient(
                                     colors: [
                                         .white.opacity(
-                                            model.isConnected ? 0.42 : 0.24
+                                            model.isConnected ? 0.62 : 0.30
                                         ),
-                                        .white.opacity(0.055),
+                                        VO1DStyle.chrome.opacity(
+                                            model.isConnected ? 0.18 : 0.06
+                                        ),
+                                        .white.opacity(0.045),
                                         VO1DStyle.frost.opacity(
-                                            model.isConnected ? 0.20 : 0.06
+                                            model.isConnected ? 0.28 : 0.09
                                         )
                                     ],
                                     startPoint: .topLeading,
@@ -433,7 +460,7 @@ struct HomeView: View {
                             lineCap: .round
                         )
                     )
-                    .frame(width: 102, height: 102)
+                    .frame(width: 108, height: 108)
                     .rotationEffect(.degrees(pressSpin))
 
                 Circle()
@@ -448,7 +475,7 @@ struct HomeView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 74, height: 74)
+                    .frame(width: 78, height: 78)
                     .overlay {
                         Circle()
                             .strokeBorder(
