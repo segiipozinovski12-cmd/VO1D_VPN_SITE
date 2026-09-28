@@ -279,6 +279,8 @@ def init_db():
         ensure_column(c,"users","app_key_created_at","INTEGER NOT NULL DEFAULT 0")
         ensure_column(c,"payments","reference","TEXT NOT NULL DEFAULT ''")
         ensure_column(c,"app_embedded_licenses","issued_at","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"app_embedded_licenses","bound_device_id","TEXT NOT NULL DEFAULT ''")
+        ensure_column(c,"app_embedded_licenses","bound_device_name","TEXT NOT NULL DEFAULT ''")
         rows=c.execute("SELECT id FROM users WHERE vpn_uuid='' OR vpn_uuid IS NULL").fetchall()
         for r in rows:
             c.execute("UPDATE users SET vpn_uuid=? WHERE id=?",(str(uuid.uuid4()),r["id"]))
@@ -926,14 +928,24 @@ def activate_app_key(raw_key,device_id="",device_name=""):
             if not key_row:return None,None,"invalid_key"
 
             bound_uid=int(key_row["redeemed_user_id"] or 0)
+            bound_device=str(key_row["bound_device_id"] or "")
             if bound_uid:
+                if bound_device and bound_device!=device_id:
+                    return None,None,"key_in_use"
                 row=c.execute("SELECT * FROM users WHERE id=?",(bound_uid,)).fetchone()
                 if not row:return None,None,"invalid_key"
+                if not bound_device:
+                    c.execute("""UPDATE app_embedded_licenses
+                      SET bound_device_id=?,bound_device_name=?
+                      WHERE id=?""",(device_id,device_name,int(key_row["id"])))
             else:
                 row=_create_app_only_user(c,key_row)
                 c.execute("""UPDATE app_embedded_licenses
-                  SET redeemed_user_id=?,redeemed_at=?
-                  WHERE id=?""",(int(row["id"]),now(),int(key_row["id"])))
+                  SET redeemed_user_id=?,redeemed_at=?,
+                      bound_device_id=?,bound_device_name=?
+                  WHERE id=?""",(
+                    int(row["id"]),now(),device_id,device_name,int(key_row["id"])
+                ))
 
             return _open_app_session(c,row,device_id,device_name)
 
@@ -2502,6 +2514,8 @@ class Web(BaseHTTPRequestHandler):
                 return self.reply_json(403,{"ok":False,"error":"blocked","message":"Доступ заблокирован."})
             if status=="expired_key":
                 return self.reply_json(403,{"ok":False,"error":"expired_key","message":"Срок этого ключа закончился. Выбери новый тариф."})
+            if status=="key_in_use":
+                return self.reply_json(409,{"ok":False,"error":"key_in_use","message":"Этот ключ уже активирован на другом iPhone."})
             return self.reply_json(200,{"ok":True,"token":token,**app_user_payload(row)})
 
         if path=="/api/app/logout":
