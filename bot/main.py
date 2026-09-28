@@ -278,6 +278,7 @@ def init_db():
         ensure_column(c,"users","app_key_hash","TEXT NOT NULL DEFAULT ''")
         ensure_column(c,"users","app_key_created_at","INTEGER NOT NULL DEFAULT 0")
         ensure_column(c,"payments","reference","TEXT NOT NULL DEFAULT ''")
+        ensure_column(c,"app_embedded_licenses","issued_at","INTEGER NOT NULL DEFAULT 0")
         rows=c.execute("SELECT id FROM users WHERE vpn_uuid='' OR vpn_uuid IS NULL").fetchall()
         for r in rows:
             c.execute("UPDATE users SET vpn_uuid=? WHERE id=?",(str(uuid.uuid4()),r["id"]))
@@ -1408,6 +1409,79 @@ def guide(uid):
       "Если ссылка не выдаётся — проверь срок подписки.",
       [[button("⚡ Получить ссылку","connect")],[button("◀️ Меню","menu")]])
 
+def app_embedded_inventory():
+    inventory={}
+    with db() as c:
+        for days in (30,90,180,365):
+            row=c.execute("""SELECT
+              COUNT(*) total,
+              SUM(CASE WHEN active=1 AND redeemed_user_id=0 AND issued_at=0 THEN 1 ELSE 0 END) free,
+              SUM(CASE WHEN active=1 AND redeemed_user_id=0 AND issued_at>0 THEN 1 ELSE 0 END) issued,
+              SUM(CASE WHEN redeemed_user_id!=0 THEN 1 ELSE 0 END) redeemed
+              FROM app_embedded_licenses WHERE plan_days=?""",(days,)).fetchone()
+            inventory[days]={
+              "total":int(row["total"] or 0),
+              "free":int(row["free"] or 0),
+              "issued":int(row["issued"] or 0),
+              "redeemed":int(row["redeemed"] or 0),
+            }
+    return inventory
+
+def issue_embedded_app_license(days):
+    days=int(days)
+    if days not in (30,90,180,365):return None
+    candidates=[
+      code for code,plan_days in APP_EMBEDDED_KEYS.items()
+      if int(plan_days)==days
+    ]
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        for code in candidates:
+            digest=_secret_hash(normalize_app_key(code))
+            row=c.execute("""SELECT id,active,redeemed_user_id,issued_at
+              FROM app_embedded_licenses WHERE code_hash=?""",(digest,)).fetchone()
+            if not row:continue
+            if not int(row["active"]):continue
+            if int(row["redeemed_user_id"] or 0)!=0:continue
+            if int(row["issued_at"] or 0)!=0:continue
+            c.execute("UPDATE app_embedded_licenses SET issued_at=? WHERE id=?",(now(),int(row["id"])))
+            return code
+    return None
+
+def admin_app_keys():
+    inv=app_embedded_inventory()
+    text="<b>🔑 VO1D iPhone · 400 ключей</b>\n\n"
+    for days in (30,90,180,365):
+        state=inv[days]
+        plan=PLANS[days]
+        text+=(
+          f"<b>{esc(plan['title'])}</b> · {money(plan['usd'])}\n"
+          f"Свободно: <b>{state['free']}</b> · выдано: {state['issued']} · "
+          f"активировано: {state['redeemed']} / {state['total']}\n\n"
+        )
+    text+=("После оплаты нажми нужный тариф. Бот резервирует следующий свободный "
+           "ключ, поэтому один и тот же код двум покупателям не выдаст.")
+    send(ADMIN_ID,text,[
+      [button("1 мес · $1.99","admin_appkey:30"),button("3 мес · $4.99","admin_appkey:90")],
+      [button("6 мес · $8.99","admin_appkey:180"),button("1 год · $14.99","admin_appkey:365")],
+      [button("↻ Обновить","admin_appkeys"),button("◀️ Админ","admin")]
+    ])
+
+def admin_issue_app_key(days):
+    code=issue_embedded_app_license(days)
+    if not code:
+        return send(ADMIN_ID,
+          "⚠️ Для этого тарифа не осталось свободных невыданных ключей.",
+          [[button("🔑 Склад ключей","admin_appkeys")],[button("◀️ Админ","admin")]])
+    plan=PLANS[int(days)]
+    return send(ADMIN_ID,
+      f"<b>✅ Ключ зарезервирован</b>\n\n"
+      f"Тариф: <b>{esc(plan['title'])}</b> · {money(plan['usd'])}\n"
+      f"<code>{esc(code)}</code>\n\n"
+      "Отправь этот код покупателю. Срок подписки начнётся только при первой "
+      "успешной активации в iPhone-приложении.",
+      [[button("🔑 Склад ключей","admin_appkeys")],[button("◀️ Админ","admin")]])
+
 def admin_panel():
     with db() as c:
         users=c.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
@@ -1422,8 +1496,8 @@ def admin_panel():
       f"Ожидают оплаты: <b>{pend}</b>\nДоход Stars: <b>{stars} ⭐</b>\n"
       f"Подтверждённый manual: <b>{money(usd)}</b>",
       [[button("👥 Последние пользователи","admin_users")],[button("💳 Заявки","admin_payments")],
-       [button("🎟 Промокоды","admin_promos")],[button("🇷🇺 RU pinned","admin_ru")],
-       [button("◀️ Меню","menu")]])
+       [button("🔑 iPhone ключи","admin_appkeys")],[button("🎟 Промокоды","admin_promos")],
+       [button("🇷🇺 RU pinned","admin_ru")],[button("◀️ Меню","menu")]])
 
 def admin_ru_panel():
     st=pinned_ru_health()
@@ -1498,6 +1572,7 @@ def handle_command(uid,text):
     if cmd=="/stats" and uid==ADMIN_ID:return admin_panel()
     if cmd=="/users" and uid==ADMIN_ID:return admin_users()
     if cmd=="/payments" and uid==ADMIN_ID:return admin_payments()
+    if cmd=="/appkeys" and uid==ADMIN_ID:return admin_app_keys()
     if cmd=="/promos" and uid==ADMIN_ID:return admin_promos()
     if cmd in ("/ru","/rustatus") and uid==ADMIN_ID:return admin_ru_panel()
     if uid!=ADMIN_ID:return
@@ -1650,6 +1725,12 @@ def handle_callback(q):
             if method=="stars":return giftcode_star_invoice(uid,days)
         except Exception as e:return send(uid,f"Ошибка подарочного кода: <code>{esc(e)}</code>")
     if data=="admin_promos" and uid==ADMIN_ID:return admin_promos()
+    if data=="admin_appkeys" and uid==ADMIN_ID:return admin_app_keys()
+    if data.startswith("admin_appkey:") and uid==ADMIN_ID:
+        try:
+            days=int(data.split(":",1)[1])
+            if days in (30,90,180,365):return admin_issue_app_key(days)
+        except Exception:return
     if data=="admin_ru" and uid==ADMIN_ID:return admin_ru_panel()
     if data=="admin_ru_set" and uid==ADMIN_ID:
         set_pending(uid,"set_ru_json")
