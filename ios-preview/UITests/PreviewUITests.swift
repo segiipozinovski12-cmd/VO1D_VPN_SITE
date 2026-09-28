@@ -7,6 +7,7 @@ final class PreviewUITests: XCTestCase {
 
         let app = XCUIApplication()
         app.launchArguments = [
+            "-vo1d.preview.autoLogin",
             "-vo1d.autoconnect", "NO",
             "-vo1d.autoFastest", "YES",
             "-vo1d.reduceAnimations", "NO"
@@ -42,7 +43,7 @@ final class PreviewUITests: XCTestCase {
 
         app.buttons["tab.stats"].tap()
         XCTAssertTrue(
-            app.otherElements["stats.screen"].waitForExistence(timeout: 4)
+            app.scrollViews["stats.screen"].waitForExistence(timeout: 4)
         )
         capture("06-stats", app: app)
 
@@ -59,7 +60,7 @@ final class PreviewUITests: XCTestCase {
         settings.tap()
 
         XCTAssertTrue(
-            app.otherElements["settings.screen"].waitForExistence(timeout: 5)
+            app.scrollViews["settings.screen"].waitForExistence(timeout: 5)
         )
         capture("08-settings", app: app)
 
@@ -80,7 +81,7 @@ final class PreviewUITests: XCTestCase {
         logoutButtons.element(boundBy: logoutButtons.count - 1).tap()
 
         XCTAssertTrue(
-            app.otherElements["login.screen"].waitForExistence(timeout: 5)
+            app.scrollViews["login.screen"].waitForExistence(timeout: 5)
         )
         capture("09-plans", app: app)
 
