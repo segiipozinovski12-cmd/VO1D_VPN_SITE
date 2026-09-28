@@ -7,6 +7,7 @@ struct LaunchScreenView: View {
     @State private var progress: CGFloat = 0.04
     @State private var statusIndex = 0
     @State private var sweep = false
+    @State private var corePulse = false
 
     let completion: () -> Void
 
@@ -20,37 +21,48 @@ struct LaunchScreenView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                ReferenceBackdrop()
+                ReferenceBackdrop(interactive: true)
 
                 VStack(spacing: 0) {
                     topPrivacy
-                        .padding(.horizontal, 28)
-                        .padding(.top, 30)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 22)
                         .opacity(appeared ? 1 : 0)
 
-                    Spacer(minLength: 0)
+                    Spacer(minLength: 18)
 
-                    planetStage(size: proxy.size)
-                        .frame(height: proxy.size.height * 0.66)
+                    brandBlock
+                        .padding(.horizontal, 24)
 
-                    Spacer(minLength: 0)
+                    Spacer(minLength: 20)
+
+                    coreGlass
+                        .padding(.horizontal, 26)
+
+                    Spacer(minLength: 22)
 
                     terminalFooter
-                        .padding(.horizontal, 28)
-                        .padding(.bottom, 26)
+                        .padding(.horizontal, 26)
+                        .padding(.bottom, 22)
                 }
 
                 LinearGradient(
                     colors: [
                         .clear,
-                        .white.opacity(0.055),
+                        .white.opacity(0.06),
+                        VO1DStyle.frost.opacity(0.035),
                         .clear
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 110)
-                .offset(y: sweep ? proxy.size.height * 0.65 : -proxy.size.height * 0.55)
+                .frame(height: 120)
+                .offset(
+                    y:
+                        sweep
+                        ? proxy.size.height * 0.72
+                        : -proxy.size.height * 0.56
+                )
                 .blur(radius: 24)
                 .opacity(reduceMotion ? 0 : 1)
                 .allowsHitTesting(false)
@@ -62,9 +74,20 @@ struct LaunchScreenView: View {
 
     private var topPrivacy: some View {
         HStack(alignment: .top) {
+            Text("VO1D / BOOT")
+                .font(
+                    .system(
+                        size: 8,
+                        weight: .medium,
+                        design: .monospaced
+                    )
+                )
+                .tracking(2.0)
+                .foregroundStyle(.white.opacity(0.34))
+
             Spacer()
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 privacyLine("PRIVACY")
                 privacyLine("SECURE")
                 privacyLine("ANONYMITY")
@@ -74,86 +97,198 @@ struct LaunchScreenView: View {
     }
 
     private func privacyLine(_ text: String) -> some View {
-        HStack(spacing: 11) {
+        HStack(spacing: 9) {
+            Circle()
+                .fill(.white.opacity(0.72))
+                .frame(width: 2.6, height: 2.6)
+
             Rectangle()
-                .fill(.white.opacity(0.55))
-                .frame(width: 7, height: 1)
+                .fill(.white.opacity(0.22))
+                .frame(width: 13, height: 0.7)
 
             Text(text)
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .tracking(2.4)
-                .foregroundStyle(.white.opacity(0.64))
+                .font(
+                    .system(
+                        size: 7,
+                        weight: .medium,
+                        design: .monospaced
+                    )
+                )
+                .tracking(2.2)
+                .foregroundStyle(.white.opacity(0.58))
         }
     }
 
-    private func planetStage(size: CGSize) -> some View {
-        ZStack {
-            ReferencePlanet(
-                diameter: min(size.width * 1.72, 690),
-                rotation: -17,
-                glow: appeared ? 0.30 : 0.07
-            )
-            .offset(
-                x: -size.width * 0.30,
-                y: size.height * 0.055
-            )
-            .scaleEffect(appeared || reduceMotion ? 1 : 0.90)
-            .opacity(appeared ? 1 : 0)
+    private var brandBlock: some View {
+        VStack(spacing: 14) {
+            VO1DBrandLockup()
+                .shadow(color: .black.opacity(0.98), radius: 18)
+                .shadow(color: .white.opacity(0.16), radius: 10)
 
-            VStack(spacing: 10) {
-                Spacer()
-
-                VO1DBrandLockup()
-                    .shadow(color: .black.opacity(0.98), radius: 18)
-                    .shadow(color: .white.opacity(0.22), radius: 12)
-                    .padding(.bottom, size.height * 0.020)
-            }
-            .padding(.bottom, 18)
-            .opacity(appeared ? 1 : 0)
+            Text("PRIVATE NETWORK")
+                .font(
+                    .system(
+                        size: 9,
+                        weight: .medium,
+                        design: .monospaced
+                    )
+                )
+                .tracking(3.2)
+                .foregroundStyle(.white.opacity(0.38))
         }
+        .opacity(appeared ? 1 : 0)
+        .scaleEffect(appeared || reduceMotion ? 1 : 0.97)
+    }
+
+    private var coreGlass: some View {
+        ReferenceGlassCard(
+            radius: 28,
+            highlighted: true
+        ) {
+            HStack(spacing: 18) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    .white.opacity(0.16),
+                                    VO1DStyle.frost.opacity(0.05),
+                                    .black.opacity(0.88)
+                                ],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 38
+                            )
+                        )
+                        .frame(width: 74, height: 74)
+
+                    Circle()
+                        .stroke(
+                            .white.opacity(corePulse ? 0.58 : 0.18),
+                            lineWidth: 1.0
+                        )
+                        .frame(width: corePulse ? 68 : 56, height: corePulse ? 68 : 56)
+                        .blur(radius: corePulse ? 1.8 : 0)
+
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 7, height: 7)
+                        .shadow(color: .white.opacity(0.85), radius: 8)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("VO1D CORE")
+                        .font(
+                            .system(
+                                size: 12,
+                                weight: .semibold,
+                                design: .monospaced
+                            )
+                        )
+                        .tracking(1.7)
+
+                    Text(
+                        statuses[
+                            min(
+                                statusIndex,
+                                statuses.count - 1
+                            )
+                        ]
+                    )
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.48))
+                    .contentTransition(.opacity)
+
+                    HStack(spacing: 8) {
+                        ForEach(0..<4, id: \.self) { index in
+                            Capsule()
+                                .fill(
+                                    index <= statusIndex
+                                    ? .white.opacity(0.80)
+                                    : .white.opacity(0.11)
+                                )
+                                .frame(width: 24, height: 2.5)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 20)
+        }
+        .frame(maxWidth: 430)
+        .opacity(appeared ? 1 : 0)
     }
 
     private var terminalFooter: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
-                ForEach(Array(statuses.enumerated()), id: \.offset) { index, status in
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(
+                    Array(statuses.enumerated()),
+                    id: \.offset
+                ) { index, status in
                     Text(status)
-                        .font(.system(size: 9, weight: .regular, design: .monospaced))
+                        .font(
+                            .system(
+                                size: 8.5,
+                                weight: .regular,
+                                design: .monospaced
+                            )
+                        )
                         .foregroundStyle(
                             index <= statusIndex
-                            ? .white.opacity(0.58)
-                            : .white.opacity(0.16)
+                            ? .white.opacity(0.54)
+                            : .white.opacity(0.14)
                         )
-                        .opacity(index <= statusIndex ? 1 : 0.36)
                 }
             }
 
             HStack(spacing: 12) {
-                GeometryReader { proxy in
+                GeometryReader { bar in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(.white.opacity(0.12))
-                            .frame(height: 4)
+                            .fill(.white.opacity(0.10))
+                            .frame(height: 3.5)
 
                         Capsule()
-                            .fill(.white)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        .white.opacity(0.84),
+                                        VO1DStyle.pearl,
+                                        VO1DStyle.frost.opacity(0.70)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
                             .frame(
                                 width: max(
                                     8,
-                                    proxy.size.width * min(1, progress)
+                                    bar.size.width * min(1, progress)
                                 ),
-                                height: 4
+                                height: 3.5
                             )
-                            .shadow(color: .white.opacity(0.55), radius: 6)
+                            .shadow(
+                                color: .white.opacity(0.48),
+                                radius: 7
+                            )
                     }
                 }
-                .frame(height: 4)
+                .frame(height: 3.5)
 
                 Text("\(Int(progress * 100))%")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(
+                        .system(
+                            size: 9,
+                            weight: .medium,
+                            design: .monospaced
+                        )
+                    )
                     .monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.82))
-                    .frame(width: 38, alignment: .trailing)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .frame(width: 34, alignment: .trailing)
             }
         }
         .opacity(appeared ? 1 : 0)
@@ -165,42 +300,51 @@ struct LaunchScreenView: View {
             appeared = true
             progress = 1
             statusIndex = 3
-            try? await Task.sleep(for: .milliseconds(350))
+            corePulse = true
+
+            try? await Task.sleep(for: .milliseconds(320))
             completion()
             return
         }
 
-        withAnimation(.easeOut(duration: 0.70)) {
+        withAnimation(.easeOut(duration: 0.52)) {
             appeared = true
         }
 
-        withAnimation(.linear(duration: 1.45)) {
+        withAnimation(
+            .easeInOut(duration: 1.0)
+            .repeatForever(autoreverses: true)
+        ) {
+            corePulse = true
+        }
+
+        withAnimation(.linear(duration: 1.55)) {
             sweep = true
         }
 
         let milestones: [(Int, CGFloat, Int)] = [
-            (230, 0.18, 0),
-            (250, 0.34, 1),
-            (280, 0.52, 2),
-            (310, 0.68, 3)
+            (240, 0.18, 0),
+            (260, 0.39, 1),
+            (280, 0.61, 2),
+            (320, 0.82, 3)
         ]
 
         for item in milestones {
             try? await Task.sleep(for: .milliseconds(item.0))
 
-            withAnimation(.easeInOut(duration: 0.34)) {
+            withAnimation(.easeInOut(duration: 0.30)) {
                 statusIndex = item.2
                 progress = item.1
             }
         }
 
-        try? await Task.sleep(for: .milliseconds(310))
+        try? await Task.sleep(for: .milliseconds(280))
 
-        withAnimation(.easeOut(duration: 0.38)) {
+        withAnimation(.easeOut(duration: 0.34)) {
             progress = 1
         }
 
-        try? await Task.sleep(for: .milliseconds(240))
+        try? await Task.sleep(for: .milliseconds(220))
         completion()
     }
 }
