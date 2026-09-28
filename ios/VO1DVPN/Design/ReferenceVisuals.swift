@@ -945,22 +945,22 @@ struct ReferenceVortex: View {
 
         let strength: Double =
             active
-            ? 1.0
+            ? 1.12
             : busy
-                ? 0.70
-                : 0.24
+                ? 0.78
+                : 0.28
 
         // deep halo
         context.drawLayer { halo in
             halo.addFilter(
                 .blur(
-                    radius: active ? 24 : 15
+                    radius: active ? 30 : 17
                 )
             )
 
-            for ring in 0..<5 {
+            for ring in 0..<7 {
                 let radius =
-                    side * (0.27 + CGFloat(ring) * 0.062)
+                    side * (0.235 + CGFloat(ring) * 0.048)
                 let rect = CGRect(
                     x: center.x - radius,
                     y: center.y - radius,
@@ -988,31 +988,31 @@ struct ReferenceVortex: View {
         context.drawLayer { glow in
             glow.addFilter(
                 .blur(
-                    radius: active ? 7.5 : 4.0
+                    radius: active ? 9.0 : 4.8
                 )
             )
 
-            for index in 0..<14 {
+            for index in 0..<20 {
                 let base =
                     Double(index) * 25.7 +
                     time * (active ? 23 : busy ? 34 : 8)
 
                 let radius =
                     side * (
-                        0.25 +
-                        CGFloat(index % 7) * 0.035
+                        0.225 +
+                        CGFloat(index % 9) * 0.031
                     )
 
                 let length =
-                    34.0 +
-                    Double(index % 5) * 13.0
+                    38.0 +
+                    Double(index % 6) * 12.0
 
                 let start = Angle(degrees: base)
                 let end = Angle(degrees: base + length)
                 let lineWidth =
                     active
-                    ? CGFloat(3.8 + Double(index % 3) * 1.7)
-                    : CGFloat(1.2 + Double(index % 2))
+                    ? CGFloat(4.4 + Double(index % 4) * 1.5)
+                    : CGFloat(1.4 + Double(index % 2))
 
                 var path = Path()
                 path.addArc(
@@ -1027,7 +1027,7 @@ struct ReferenceVortex: View {
                     path,
                     with: .color(
                         .white.opacity(
-                            (0.12 + Double(index % 4) * 0.045)
+                            (0.14 + Double(index % 5) * 0.040)
                             * strength
                         )
                     ),
@@ -1040,7 +1040,7 @@ struct ReferenceVortex: View {
         }
 
         // crisp energy arcs
-        for index in 0..<24 {
+        for index in 0..<32 {
             let direction = index.isMultiple(of: 2) ? 1.0 : -1.0
             let base =
                 Double(index) * 15.0 +
@@ -1050,18 +1050,18 @@ struct ReferenceVortex: View {
 
             let radius =
                 side * (
-                    0.235 +
-                    CGFloat(index % 9) * 0.024
+                    0.205 +
+                    CGFloat(index % 11) * 0.023
                 )
 
             let length =
-                18.0 +
-                Double((index * 11) % 31)
+                20.0 +
+                Double((index * 11) % 37)
 
             let alpha =
                 (
-                    0.12 +
-                    Double(index % 6) * 0.072
+                    0.13 +
+                    Double(index % 7) * 0.066
                 ) * strength
 
             var path = Path()
@@ -1079,15 +1079,57 @@ struct ReferenceVortex: View {
                 style: StrokeStyle(
                     lineWidth:
                         active && index % 5 == 0
-                        ? 2.6
-                        : 0.9 + CGFloat(index % 3) * 0.45,
+                        ? 3.0
+                        : 1.0 + CGFloat(index % 3) * 0.48,
                     lineCap: .round
                 )
             )
         }
 
+        // cold chrome counter-spiral for depth
+        context.drawLayer { chrome in
+            chrome.addFilter(
+                .blur(radius: active ? 2.8 : 1.4)
+            )
+
+            for index in 0..<12 {
+                let base =
+                    Double(index) * 31.0 -
+                    time * (active ? 13.0 : busy ? 19.0 : 4.0)
+
+                let radius =
+                    side * (
+                        0.245 +
+                        CGFloat(index % 6) * 0.042
+                    )
+
+                var path = Path()
+                path.addArc(
+                    center: center,
+                    radius: radius,
+                    startAngle: .degrees(base),
+                    endAngle: .degrees(base + 26 + Double(index % 4) * 9),
+                    clockwise: true
+                )
+
+                chrome.stroke(
+                    path,
+                    with: .color(
+                        VO1DStyle.frost.opacity(
+                            (0.08 + Double(index % 4) * 0.035)
+                            * strength
+                        )
+                    ),
+                    style: StrokeStyle(
+                        lineWidth: index.isMultiple(of: 3) ? 1.8 : 0.8,
+                        lineCap: .round
+                    )
+                )
+            }
+        }
+
         // inner orbit rings
-        for ring in 0..<3 {
+        for ring in 0..<4 {
             let radius =
                 side * (0.18 + CGFloat(ring) * 0.040)
 
@@ -1124,15 +1166,15 @@ struct ReferenceVortex: View {
             context.drawLayer { particles in
                 particles.addFilter(.blur(radius: 1.4))
 
-                for index in 0..<18 {
+                for index in 0..<26 {
                     let angle =
                         time * (0.62 + Double(index % 4) * 0.11)
                         + Double(index) * 0.57
 
                     let radius =
                         side * (
-                            0.25 +
-                            CGFloat(index % 7) * 0.024
+                            0.225 +
+                            CGFloat(index % 9) * 0.024
                         )
 
                     let px =
@@ -1144,8 +1186,8 @@ struct ReferenceVortex: View {
 
                     let r: CGFloat =
                         index.isMultiple(of: 4)
-                        ? 2.0
-                        : 1.1
+                        ? 2.2
+                        : 1.15
 
                     particles.fill(
                         Path(
