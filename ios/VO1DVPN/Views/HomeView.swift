@@ -202,19 +202,19 @@ struct HomeView: View {
         case .failed:
             return VO1DStyle.red
         case .disconnecting:
-            return VO1DStyle.violet
+            return .white
         case .ready:
-            return VO1DStyle.teal
+            return .white
         }
     }
 
     private var atmosphereOpacity: Double {
         switch model.phase {
-        case .connected: return 0.10
-        case .preparing, .routing, .securing, .switching: return 0.085
-        case .failed: return 0.075
-        case .disconnecting: return 0.07
-        case .ready: return 0.045
+        case .connected: return 0.070
+        case .preparing, .routing, .securing, .switching: return 0.045
+        case .failed: return 0.060
+        case .disconnecting: return 0.035
+        case .ready: return 0.022
         }
     }
 
@@ -242,6 +242,7 @@ struct HomeView: View {
 
 private struct ConnectionStageRail: View {
     let phase: ConnectionPhase
+    @Namespace private var activeStage
 
     private let stages = ["PREPARE", "ROUTE", "SECURE"]
 
@@ -274,7 +275,20 @@ private struct ConnectionStageRail: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
                 .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(index == activeIndex ? 0.14 : 0.06), lineWidth: 1))
+                .background {
+                    if index == activeIndex {
+                        Capsule()
+                            .fill(.white.opacity(0.055))
+                            .matchedGeometryEffect(id: "active-stage", in: activeStage)
+                    }
+                }
+                .overlay(
+                    Capsule()
+                        .strokeBorder(
+                            .white.opacity(index == activeIndex ? 0.16 : 0.055),
+                            lineWidth: 1
+                        )
+                )
             }
         }
         .accessibilityHidden(true)
@@ -337,7 +351,20 @@ private struct QuickActions: View {
                     Image(systemName: icon)
                         .font(.system(size: 17, weight: .light))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(active ? VO1DStyle.ice : .white)
+                        .foregroundStyle(.white)
+                        .rotationEffect(
+                            .degrees(
+                                title == "REFRESH PING" && pings.isRefreshing
+                                ? 360
+                                : 0
+                            )
+                        )
+                        .animation(
+                            title == "REFRESH PING" && pings.isRefreshing
+                            ? .linear(duration: 0.85).repeatForever(autoreverses: false)
+                            : .easeOut(duration: 0.16),
+                            value: pings.isRefreshing
+                        )
 
                     Spacer(minLength: 0)
 
