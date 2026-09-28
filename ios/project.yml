@@ -38,6 +38,9 @@ targets:
         VO1D_API_BASE_URL: "$(VO1D_API_BASE_URL)"
         UILaunchScreen: {}
         UIUserInterfaceStyle: Dark
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
         CFBundleURLTypes:
           - CFBundleURLName: com.vo1d.vpn
             CFBundleURLSchemes:
@@ -83,6 +86,9 @@ targets:
             CFBundleIconFiles:
               - AppIcon60x60
         VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview
