@@ -49,6 +49,26 @@ final class ConnectionTests: XCTestCase {
         let activated = await app.activate(key: "")
         XCTAssertTrue(activated)
     }
+    func testReconnectKeepsCurrentRoute() async throws {
+        let app = model()
+        await app.bootstrap()
+
+        app.toggleConnection()
+        try await wait()
+
+        XCTAssertEqual(app.phase, .connected)
+        let route = try XCTUnwrap(app.activeServer)
+
+        app.reconnect()
+        XCTAssertEqual(app.phase, .switching)
+
+        try await wait(1.8)
+        XCTAssertEqual(app.phase, .connected)
+        XCTAssertEqual(app.activeServer?.code, route.code)
+
+        app.disconnect()
+    }
+
     func testStatsDoNotPublishThroughAppModel() async throws {
         let app = model()
         await app.bootstrap()
