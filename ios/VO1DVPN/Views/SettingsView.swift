@@ -272,8 +272,7 @@ struct SettingsView: View {
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.white.opacity(0.90))
                     .frame(width: 30, height: 30)
-                    .background(
-                        .ultraThinMaterial,
+                    .vo1dSystemGlass(
                         in: RoundedRectangle(
                             cornerRadius: 9,
                             style: .continuous
