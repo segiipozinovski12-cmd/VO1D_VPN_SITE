@@ -8,7 +8,6 @@ DEST="$DEST_DIR/AppIcon-1024.png"
 mkdir -p "$DEST_DIR"
 
 cat "$SOURCE_DIR"/AppIcon.png.b64.part* \
-  | tr -d '\\r\\n' \
   | /usr/bin/base64 -D \
   > "$DEST"
 
