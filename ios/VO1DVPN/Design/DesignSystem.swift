@@ -43,7 +43,7 @@ extension EnvironmentValues {
     }
 }
 
-private extension View {
+extension View {
     @ViewBuilder
     func vo1dSystemGlass<S: Shape>(
         in shape: S,
@@ -306,7 +306,7 @@ struct StatusPill: View {
         .foregroundStyle(connected ? VO1DStyle.green : VO1DStyle.secondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(.ultraThinMaterial, in: Capsule())
+        .vo1dSystemGlass(in: Capsule())
         .overlay(Capsule().strokeBorder(.white.opacity(0.09), lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
