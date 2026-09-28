@@ -29,7 +29,7 @@ struct ServerCard: View {
                     Text(server.flag)
                         .font(.system(size: compact ? 24 : 29))
                         .frame(width: compact ? 38 : 46, height: compact ? 38 : 46)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .vo1dSystemGlass(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .strokeBorder(.white.opacity(selected ? 0.14 : 0.065), lineWidth: 1)
