@@ -9,8 +9,6 @@ enum VO1DStyle {
     static let secondary = Color(white: 0.64)
 
     static let ice = Color(white: 0.92)
-    static let teal = Color(white: 0.72)
-    static let violet = Color(white: 0.54)
 
     // Functional colors only.
     static let green = Color(red: 0.52, green: 0.82, blue: 0.62)
