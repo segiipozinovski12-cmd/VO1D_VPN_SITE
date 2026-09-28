@@ -562,10 +562,13 @@ struct ReferenceGlassCard<Content: View>: View {
                         LinearGradient(
                             colors: [
                                 Color.white.opacity(
-                                    highlighted ? 0.22 : 0.11
+                                    highlighted ? 0.20 : 0.095
                                 ),
-                                VO1DStyle.graphite.opacity(0.72),
-                                Color.black.opacity(0.90)
+                                VO1DStyle.midnight.opacity(
+                                    highlighted ? 0.72 : 0.58
+                                ),
+                                VO1DStyle.graphite.opacity(0.78),
+                                Color.black.opacity(0.94)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -582,19 +585,37 @@ struct ReferenceGlassCard<Content: View>: View {
                         LinearGradient(
                             colors: [
                                 .white.opacity(
-                                    highlighted ? 0.19 : 0.10
+                                    highlighted ? 0.20 : 0.095
                                 ),
                                 .clear,
                                 VO1DStyle.frost.opacity(
-                                    highlighted ? 0.08 : 0.03
+                                    highlighted ? 0.095 : 0.038
                                 )
                             ],
-                            startPoint: UnitPoint(x: 0.05, y: 0.02),
-                            endPoint: UnitPoint(x: 0.90, y: 0.95)
+                            startPoint: UnitPoint(x: 0.02, y: 0.00),
+                            endPoint: UnitPoint(x: 0.92, y: 0.98)
                         )
                     )
                     .blendMode(.screen)
                     .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(
+                    colors: [
+                        .clear,
+                        VO1DStyle.steel.opacity(
+                            highlighted ? 0.10 : 0.035
+                        ),
+                        .white.opacity(
+                            highlighted ? 0.07 : 0.025
+                        )
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: highlighted ? 52 : 38)
+                .mask(shape)
+                .allowsHitTesting(false)
             }
             .overlay {
                 shape
@@ -602,37 +623,71 @@ struct ReferenceGlassCard<Content: View>: View {
                         LinearGradient(
                             colors: [
                                 .white.opacity(
-                                    highlighted ? 0.94 : 0.36
+                                    highlighted ? 0.98 : 0.42
                                 ),
-                                .white.opacity(0.08),
+                                VO1DStyle.chrome.opacity(
+                                    highlighted ? 0.34 : 0.12
+                                ),
+                                .white.opacity(0.06),
                                 VO1DStyle.frost.opacity(
-                                    highlighted ? 0.44 : 0.16
+                                    highlighted ? 0.50 : 0.18
                                 )
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: highlighted ? 1.25 : 0.95
+                        lineWidth: highlighted ? 1.35 : 0.90
+                    )
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                shape
+                    .inset(by: 3)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(
+                                    highlighted ? 0.15 : 0.055
+                                ),
+                                .clear,
+                                .white.opacity(
+                                    highlighted ? 0.07 : 0.025
+                                )
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.7
                     )
                     .allowsHitTesting(false)
             }
             .overlay(alignment: .topLeading) {
                 GlassSheen(
                     radius: radius,
-                    strong: highlighted
+                    strong: highlighted,
+                    delay: 0
                 )
                 .allowsHitTesting(false)
             }
+            .overlay(alignment: .topLeading) {
+                GlassSheen(
+                    radius: radius,
+                    strong: highlighted,
+                    delay: highlighted ? 2.2 : 3.4
+                )
+                .opacity(highlighted ? 0.58 : 0.34)
+                .allowsHitTesting(false)
+            }
             .shadow(
-                color: .white.opacity(
-                    highlighted ? 0.22 : 0.055
+                color: VO1DStyle.frost.opacity(
+                    highlighted ? 0.18 : 0.028
                 ),
-                radius: highlighted ? 22 : 12
+                radius: highlighted ? 24 : 12
             )
             .shadow(
-                color: .black.opacity(0.72),
-                radius: 28,
-                y: 14
+                color: .black.opacity(0.78),
+                radius: 30,
+                y: 15
             )
     }
 }
@@ -642,8 +697,9 @@ private struct GlassSheen: View {
 
     let radius: CGFloat
     let strong: Bool
+    let delay: Double
 
-    @State private var shift: CGFloat = -0.65
+    @State private var shift: CGFloat = -0.80
 
     var body: some View {
         GeometryReader { proxy in
@@ -655,8 +711,15 @@ private struct GlassSheen: View {
                 LinearGradient(
                     colors: [
                         .clear,
-                        .white.opacity(strong ? 0.20 : 0.09),
-                        .white.opacity(strong ? 0.34 : 0.13),
+                        VO1DStyle.frost.opacity(
+                            strong ? 0.08 : 0.035
+                        ),
+                        .white.opacity(
+                            strong ? 0.28 : 0.12
+                        ),
+                        .white.opacity(
+                            strong ? 0.42 : 0.16
+                        ),
                         .clear
                     ],
                     startPoint: .leading,
@@ -664,15 +727,15 @@ private struct GlassSheen: View {
                 )
             )
             .frame(
-                width: proxy.size.width * 0.42,
-                height: proxy.size.height * 1.55
+                width: proxy.size.width * 0.34,
+                height: proxy.size.height * 1.72
             )
-            .rotationEffect(.degrees(-18))
+            .rotationEffect(.degrees(-17))
             .offset(
                 x: proxy.size.width * shift,
-                y: -proxy.size.height * 0.24
+                y: -proxy.size.height * 0.31
             )
-            .blur(radius: 8)
+            .blur(radius: strong ? 9 : 7)
             .mask {
                 RoundedRectangle(
                     cornerRadius: radius,
@@ -683,10 +746,11 @@ private struct GlassSheen: View {
                 guard !reduceMotion else { return }
 
                 withAnimation(
-                    .linear(duration: strong ? 4.8 : 7.2)
+                    .linear(duration: strong ? 4.6 : 7.6)
+                    .delay(delay)
                     .repeatForever(autoreverses: false)
                 ) {
-                    shift = 1.45
+                    shift = 1.70
                 }
             }
         }
