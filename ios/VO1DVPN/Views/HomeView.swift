@@ -102,8 +102,14 @@ struct HomeView: View {
                         .foregroundStyle(VO1DStyle.secondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+                        .vo1dSystemGlass(in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(
+                                    .white.opacity(0.08),
+                                    lineWidth: 1
+                                )
+                        )
                 }
             }
 
