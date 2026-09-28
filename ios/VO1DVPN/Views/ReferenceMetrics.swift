@@ -8,44 +8,106 @@ struct ReferenceMetricCard: View {
     var sparkline = false
 
     var body: some View {
-        ReferenceGlassCard(radius: 16) {
-            VStack(alignment: .leading, spacing: large ? 10 : 6) {
-                Text(title)
-                    .font(.system(size: 11, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.66))
-
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value)
+        ReferenceGlassCard(
+            radius: 16,
+            highlighted: large
+        ) {
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .leading, spacing: large ? 10 : 6) {
+                    Text(title.uppercased())
                         .font(
                             .system(
-                                size: large ? 22 : 17,
-                                weight: .semibold,
-                                design: .rounded
+                                size: 9,
+                                weight: .medium,
+                                design: .monospaced
                             )
                         )
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.68)
+                        .tracking(1.0)
+                        .foregroundStyle(.white.opacity(0.46))
 
-                    if !unit.isEmpty {
-                        Text(unit)
-                            .font(.system(size: large ? 12 : 10))
-                            .foregroundStyle(.white.opacity(0.46))
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(value)
+                            .font(
+                                .system(
+                                    size: large ? 22 : 17,
+                                    weight: .semibold,
+                                    design: .rounded
+                                )
+                            )
+                            .tracking(large ? -0.4 : -0.2)
+                            .monospacedDigit()
+                            .foregroundStyle(.white.opacity(0.96))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.68)
+
+                        if !unit.isEmpty {
+                            Text(unit)
+                                .font(
+                                    .system(
+                                        size: large ? 11 : 10,
+                                        weight: .medium
+                                    )
+                                )
+                                .foregroundStyle(.white.opacity(0.38))
+                        }
+                    }
+
+                    if sparkline {
+                        ZStack(alignment: .bottom) {
+                            LinearGradient(
+                                colors: [
+                                    .clear,
+                                    VO1DStyle.frost.opacity(0.055)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .clipShape(
+                                RoundedRectangle(
+                                    cornerRadius: 8,
+                                    style: .continuous
+                                )
+                            )
+
+                            MiniSparkline(intensity: 1.0)
+                                .padding(.vertical, 3)
+                        }
+                        .frame(height: 40)
+                        .padding(.top, 1)
                     }
                 }
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: large ? 116 : 78,
+                    alignment: .topLeading
+                )
+                .padding(14)
 
-                if sparkline {
-                    MiniSparkline()
-                        .frame(height: 36)
-                        .padding(.top, 3)
+                if large {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(VO1DStyle.pearl)
+                            .frame(width: 3.5, height: 3.5)
+                            .shadow(
+                                color: VO1DStyle.frost.opacity(0.72),
+                                radius: 5
+                            )
+
+                        Text("LIVE")
+                            .font(
+                                .system(
+                                    size: 7,
+                                    weight: .semibold,
+                                    design: .monospaced
+                                )
+                            )
+                            .tracking(0.9)
+                            .foregroundStyle(.white.opacity(0.34))
+                    }
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
                 }
             }
-            .frame(
-                maxWidth: .infinity,
-                minHeight: large ? 116 : 78,
-                alignment: .topLeading
-            )
-            .padding(14)
         }
     }
 }
@@ -58,7 +120,9 @@ struct ReferenceTrafficGrid: View {
     var body: some View {
         let data = session.stats
         let available = session.hasTrafficMeasurements
-        let code = model.activeServer?.code ?? model.selectedServer?.code
+        let code =
+            model.activeServer?.code ??
+            model.selectedServer?.code
         let ping = code.flatMap { pings.values[$0] }
 
         VStack(spacing: 10) {
@@ -67,7 +131,10 @@ struct ReferenceTrafficGrid: View {
                     title: "Download",
                     value:
                         available
-                        ? String(format: "%.1f", data.downloadMbps)
+                        ? String(
+                            format: "%.1f",
+                            data.downloadMbps
+                        )
                         : "—",
                     unit: "Mbps",
                     large: true,
@@ -78,7 +145,10 @@ struct ReferenceTrafficGrid: View {
                     title: "Upload",
                     value:
                         available
-                        ? String(format: "%.1f", data.uploadMbps)
+                        ? String(
+                            format: "%.1f",
+                            data.uploadMbps
+                        )
                         : "—",
                     unit: "Mbps",
                     large: true,
