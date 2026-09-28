@@ -37,9 +37,7 @@ final class APIClient {
     }
 
     func activate(key: String) async throws -> ActivateResponse {
-        let (deviceID, deviceName) = await MainActor.run {
-            (UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString, UIDevice.current.name)
-        }
+        let (deviceID, deviceName) = await deviceContext()
         let body: [String: String] = [
             "key": key,
             "device_id": deviceID,
@@ -52,6 +50,56 @@ final class APIClient {
             token: nil,
             as: ActivateResponse.self
         )
+    }
+
+    func createPayment(
+        planDays: Int,
+        paymentMethod: String
+    ) async throws -> PaymentCreateResponse {
+        let (deviceID, deviceName) = await deviceContext()
+
+        return try await request(
+            path: "/api/app/payments/create",
+            method: "POST",
+            body: [
+                "plan_days": String(planDays),
+                "method": paymentMethod,
+                "device_id": deviceID,
+                "device_name": deviceName
+            ],
+            token: nil,
+            as: PaymentCreateResponse.self
+        )
+    }
+
+    func paymentStatus(
+        orderID: String,
+        pollToken: String
+    ) async throws -> PaymentStatusResponse {
+        let (deviceID, deviceName) = await deviceContext()
+
+        return try await request(
+            path: "/api/app/payments/status",
+            method: "POST",
+            body: [
+                "order_id": orderID,
+                "poll_token": pollToken,
+                "device_id": deviceID,
+                "device_name": deviceName
+            ],
+            token: nil,
+            as: PaymentStatusResponse.self
+        )
+    }
+
+    private func deviceContext() async -> (String, String) {
+        await MainActor.run {
+            (
+                UIDevice.current.identifierForVendor?.uuidString
+                    ?? UUID().uuidString,
+                UIDevice.current.name
+            )
+        }
     }
 
     func me(token: String) async throws -> AppStateResponse {
