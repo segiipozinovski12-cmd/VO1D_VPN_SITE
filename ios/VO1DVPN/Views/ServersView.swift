@@ -122,7 +122,6 @@ struct ServersView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .background { ReferenceBackdrop() }
         .onAppear {
             guard !appeared else { return }
 
