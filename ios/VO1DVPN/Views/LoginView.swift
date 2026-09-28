@@ -192,8 +192,22 @@ struct LoginView: View {
                 }
             }
         }
-        .buttonStyle(ScaleButtonStyle(scale: 0.975))
+        .buttonStyle(ScaleButtonStyle(scale: 0.965))
         .frame(maxWidth: .infinity)
+        .scaleEffect(selected ? 1.025 : 0.992)
+        .shadow(
+            color:
+                selected
+                ? VO1DStyle.frost.opacity(0.18)
+                : .clear,
+            radius: selected ? 16 : 0
+        )
+        .animation(
+            reduceMotion
+            ? nil
+            : .spring(response: 0.34, dampingFraction: 0.78),
+            value: selected
+        )
         .accessibilityIdentifier("plan.\(plan.days)")
     }
 
@@ -300,7 +314,17 @@ struct LoginView: View {
             .frame(height: 58)
             .background {
                 Capsule()
-                    .fill(Color.white.opacity(0.028))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(keyFocused ? 0.11 : 0.055),
+                                VO1DStyle.midnight.opacity(0.68),
+                                .black.opacity(0.90)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .background(.ultraThinMaterial, in: Capsule())
             }
             .overlay {
@@ -308,15 +332,27 @@ struct LoginView: View {
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                .white.opacity(keyFocused ? 0.34 : 0.13),
-                                .white.opacity(0.045)
+                                .white.opacity(keyFocused ? 0.54 : 0.20),
+                                VO1DStyle.chrome.opacity(keyFocused ? 0.18 : 0.05),
+                                VO1DStyle.frost.opacity(keyFocused ? 0.22 : 0.07)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 0.9
+                        lineWidth: keyFocused ? 1.0 : 0.8
                     )
             }
+            .shadow(
+                color:
+                    keyFocused
+                    ? VO1DStyle.frost.opacity(0.10)
+                    : .clear,
+                radius: 12
+            )
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.22),
+                value: keyFocused
+            )
 
             if model.isDemoMode {
                 Button("Enter Simulator Demo") {
