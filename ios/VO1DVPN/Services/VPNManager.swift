@@ -118,7 +118,7 @@ final class VPNManager: ObservableObject {
         status = .connecting
         for phase in [ConnectionPhase.preparing, .routing, .securing] {
             stage(phase)
-            try await Task.sleep(for: .milliseconds(280))
+            try await Task.sleep(for: .milliseconds(380))
             try Task.checkCancellation()
             guard generation == demoGeneration else { throw CancellationError() }
         }
