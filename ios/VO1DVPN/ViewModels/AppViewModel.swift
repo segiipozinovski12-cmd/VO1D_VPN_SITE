@@ -63,9 +63,11 @@ final class AppViewModel: ObservableObject {
         didBootstrap = true
         defer { isBootstrapping = false }
         #if targetEnvironment(simulator)
-        let autoLoginPreview = ProcessInfo.processInfo.arguments.contains(
-            "-vo1d.preview.autoLogin"
-        )
+        let processInfo = ProcessInfo.processInfo
+        let autoLoginPreview =
+            processInfo.arguments.contains("-vo1d.preview.autoLogin") ||
+            processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+            processInfo.processName.contains("xctest")
 
         try? await vpn.prepare()
 
