@@ -153,10 +153,14 @@ private struct ActivationSuccessOverlay: View {
                 ReferenceBackdrop()
 
                 ReferenceVortex(active: true, busy: true)
-                    .frame(width: 360, height: 360)
+                    .frame(width: 390, height: 390)
                     .rotationEffect(.degrees(rotate ? 360 : 0))
                     .offset(y: proxy.size.height * 0.20)
-                    .opacity(0.74)
+                    .opacity(0.84)
+                    .shadow(
+                        color: VO1DStyle.frost.opacity(0.16),
+                        radius: 28
+                    )
 
                 LinearGradient(
                     colors: [
@@ -208,7 +212,18 @@ private struct ActivationSuccessOverlay: View {
                                             .frame(height: 4)
 
                                         Capsule()
-                                            .fill(.white)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [
+                                                        .white,
+                                                        VO1DStyle.pearl,
+                                                        VO1DStyle.chrome,
+                                                        VO1DStyle.frost.opacity(0.82)
+                                                    ],
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
                                             .frame(
                                                 width: max(
                                                     8,
@@ -216,7 +231,10 @@ private struct ActivationSuccessOverlay: View {
                                                 ),
                                                 height: 4
                                             )
-                                            .shadow(color: .white.opacity(0.52), radius: 6)
+                                            .shadow(
+                                                color: VO1DStyle.frost.opacity(0.48),
+                                                radius: 8
+                                            )
                                     }
                                 }
                                 .frame(height: 4)
@@ -247,8 +265,23 @@ private struct ActivationSuccessOverlay: View {
     private var acceptedIcon: some View {
         ZStack {
             Circle()
-                .stroke(.white.opacity(0.11), lineWidth: 1)
-                .frame(width: 88, height: 88)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.48),
+                            VO1DStyle.chrome.opacity(0.18),
+                            VO1DStyle.frost.opacity(0.14)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+                .frame(width: 92, height: 92)
+                .shadow(
+                    color: VO1DStyle.frost.opacity(0.18),
+                    radius: 14
+                )
 
             Circle()
                 .trim(from: 0.02, to: 0.33)
@@ -267,14 +300,35 @@ private struct ActivationSuccessOverlay: View {
                         lineCap: .round
                     )
                 )
-                .frame(width: 78, height: 78)
+                .frame(width: 82, height: 82)
                 .rotationEffect(.degrees(rotate ? 360 : 0))
-                .shadow(color: .white.opacity(0.42), radius: 6)
+                .shadow(
+                    color: VO1DStyle.frost.opacity(0.52),
+                    radius: 9
+                )
 
             Circle()
-                .fill(.white.opacity(0.07))
-                .frame(width: 62, height: 62)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white.opacity(0.16),
+                            VO1DStyle.midnight.opacity(0.70),
+                            .black.opacity(0.92)
+                        ],
+                        center: UnitPoint(x: 0.36, y: 0.30),
+                        startRadius: 0,
+                        endRadius: 44
+                    )
+                )
+                .frame(width: 64, height: 64)
                 .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(
+                            .white.opacity(0.16),
+                            lineWidth: 0.8
+                        )
+                }
 
             Image(systemName: "checkmark")
                 .font(.system(size: 27, weight: .medium))
@@ -291,8 +345,10 @@ private struct ActivationSuccessOverlay: View {
             ZStack {
                 Circle()
                     .stroke(
-                        .white.opacity(done || active ? 0.48 : 0.18),
-                        lineWidth: 1
+                        active
+                        ? VO1DStyle.chrome.opacity(0.72)
+                        : .white.opacity(done ? 0.48 : 0.18),
+                        lineWidth: active ? 1.4 : 1
                     )
                     .frame(width: 21, height: 21)
 
@@ -306,7 +362,10 @@ private struct ActivationSuccessOverlay: View {
                     Circle()
                         .fill(.white)
                         .frame(width: 5, height: 5)
-                        .shadow(color: .white.opacity(0.7), radius: 4)
+                        .shadow(
+                            color: VO1DStyle.frost.opacity(0.82),
+                            radius: 7
+                        )
                 }
             }
 
