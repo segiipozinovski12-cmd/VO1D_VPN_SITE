@@ -17,12 +17,21 @@ targets:
         excludes:
           - Resources/Info.plist
           - Resources/VO1D_VPN.entitlements
+          - Resources/IconSource
+    preBuildScripts:
+      - name: Generate VO1D App Icon
+        script: |
+          bash "$SRCROOT/../ios/Scripts/generate_app_icon.sh"
+        inputFiles:
+          - "$SRCROOT/../ios/VO1DVPN/Resources/IconSource/AppIcon.png.b64.part00"
+        outputFiles:
+          - "$SRCROOT/../ios/VO1DVPN/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
     info:
       path: PreviewInfo.plist
       properties:
         CFBundleDisplayName: VO1D_VPN
         CFBundleName: VO1D_VPN
-        CFBundleShortVersionString: "0.3.0"
+        CFBundleShortVersionString: "0.4.0"
         CFBundleVersion: "1"
         VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
         UILaunchScreen: {}
@@ -33,6 +42,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview
         PRODUCT_NAME: VO1D_VPN_PREVIEW
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
         TARGETED_DEVICE_FAMILY: "1"
