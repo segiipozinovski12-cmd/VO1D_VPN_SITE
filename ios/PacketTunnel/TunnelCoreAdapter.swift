@@ -2,9 +2,15 @@ import Foundation
 import NetworkExtension
 import SwiftyXrayKit
 
+struct TunnelTrafficSnapshot: Codable {
+    let received: Int64
+    let sent: Int64
+}
+
 protocol TunnelCoreAdapter: AnyObject {
     func start(uri: String, packetFlow: NEPacketTunnelFlow) async throws
     func stop() async
+    func getAndClearStats() -> TunnelTrafficSnapshot
 }
 
 enum TunnelCoreError: LocalizedError {
@@ -69,8 +75,6 @@ final class XrayTunnelCore: TunnelCoreAdapter {
             configTransform: { config in
                 var final = config
                 final["log"] = ["loglevel": "warning"]
-
-                // Use encrypted tunnel routing for DNS requests as well.
                 final["dns"] = [
                     "servers": [
                         "1.1.1.1",
@@ -88,5 +92,16 @@ final class XrayTunnelCore: TunnelCoreAdapter {
     func stop() async {
         bridge?.stop()
         bridge = nil
+    }
+
+    func getAndClearStats() -> TunnelTrafficSnapshot {
+        guard let bridge else {
+            return TunnelTrafficSnapshot(received: 0, sent: 0)
+        }
+        let bytes = bridge.getAndClearStats()
+        return TunnelTrafficSnapshot(
+            received: bytes.received,
+            sent: bytes.sent
+        )
     }
 }
