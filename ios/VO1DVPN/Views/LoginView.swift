@@ -393,11 +393,7 @@ struct LoginView: View {
     }
 
     private var keyReady: Bool {
-        let clean = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        if clean.uppercased().hasPrefix("VO1D1.") {
-            return clean.count > 16
-        }
-        return clean.filter { $0.isLetter || $0.isNumber }.count == 16
+        AccessKeyVault.license(for: key) != nil
     }
 
     private func activate() {
