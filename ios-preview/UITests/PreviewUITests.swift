@@ -41,10 +41,10 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(pingRefresh.isHittable)
         pingRefresh.tap()
 
-        // Demo ping measurement is intentionally short (240 ms), but the
-        // accessibility tree can take another frame to settle on CI.
-        Thread.sleep(forTimeInterval: 0.6)
-        XCTAssertEqual(pingRefresh.value as? String, "MEASURE")
+        // Accessibility updates can trail the 240 ms demo measurement on CI.
+        let pingFinished = NSPredicate(format: "value == %@", "MEASURE")
+        expectation(for: pingFinished, evaluatedWith: pingRefresh)
+        waitForExpectations(timeout: 3)
 
         let fastest = app.buttons["quick.fastest"]
         XCTAssertTrue(fastest.waitForExistence(timeout: 3))
