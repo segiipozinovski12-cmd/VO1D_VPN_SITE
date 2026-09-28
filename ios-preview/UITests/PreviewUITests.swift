@@ -49,6 +49,8 @@ final class PreviewUITests: XCTestCase {
         let settings = app.buttons["profile.settings"]
         if !settings.isHittable { app.swipeUp() }
         settings.tap()
+        capture("08-settings-after-tap", app: app)
+        print("SETTINGS ACCESSIBILITY SNAPSHOT\n" + app.debugDescription)
         let settingsTitle = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "Fine-tune")).firstMatch
         XCTAssertTrue(settingsTitle.waitForExistence(timeout: 5))
         let autoConnect = app.switches.matching(NSPredicate(format: "label CONTAINS[c] %@", "Auto Connect")).firstMatch
