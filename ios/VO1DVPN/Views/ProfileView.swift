@@ -8,6 +8,8 @@ struct ProfileView: View {
     @State private var showKey = false
     @State private var showLogout = false
     @State private var showSettings = false
+    @State private var showPrivacy = false
+    @State private var showTerms = false
     @State private var appeared = false
 
     @FocusState private var editingName: Bool
@@ -41,6 +43,12 @@ struct ProfileView: View {
         .scrollDismissesKeyboard(.interactively)
         .navigationDestination(isPresented: $showSettings) {
             SettingsView()
+        }
+        .navigationDestination(isPresented: $showPrivacy) {
+            LegalDocumentView(document: .privacy)
+        }
+        .navigationDestination(isPresented: $showTerms) {
+            LegalDocumentView(document: .terms)
         }
         .sheet(isPresented: $showKey) {
             ChangeKeyView()
@@ -316,6 +324,24 @@ struct ProfileView: View {
                 showKey = true
             }
             .accessibilityIdentifier("profile.changeKey")
+
+            profileAction(
+                title: "Privacy Policy",
+                detail: "RollyPay.io privacy and data processing",
+                icon: "hand.raised"
+            ) {
+                showPrivacy = true
+            }
+            .accessibilityIdentifier("profile.privacy")
+
+            profileAction(
+                title: "User Agreement",
+                detail: "Public offer and service terms",
+                icon: "doc.text"
+            ) {
+                showTerms = true
+            }
+            .accessibilityIdentifier("profile.terms")
 
             profileAction(
                 title: "Log Out",
