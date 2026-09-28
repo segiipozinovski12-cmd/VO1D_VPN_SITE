@@ -420,10 +420,6 @@ struct HomeView: View {
                         )
                     )
                     .frame(width: 122, height: 122)
-                    .background(
-                        .ultraThinMaterial,
-                        in: Circle()
-                    )
                     .overlay {
                         Circle()
                             .strokeBorder(
