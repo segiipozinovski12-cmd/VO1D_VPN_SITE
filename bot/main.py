@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from community_nodes import COMMUNITY_POOL, community_worker
 from pinned_ru import build_pinned_ru_uri
+from app_embedded_keys import APP_EMBEDDED_KEYS
 
 TOKEN=os.getenv("BOT_TOKEN","").strip()
 ADMIN_ID=int(os.getenv("ADMIN_ID","8632158680"))
@@ -51,6 +52,8 @@ PLANS={
   365:{"title":"12 месяцев","usd":1499,"stars":975},
 }
 
+# Native iPhone paid keys are a fixed code manifest shared with the app.
+# Telegram is not involved in key generation or validation.
 # Внутренний баланс VO1D. Эти суммы — только быстрые кнопки:
 # пользователь также может ввести произвольную сумму вручную.
 TOPUP_STARS_PER_USD=Decimal("65")
@@ -248,6 +251,17 @@ def init_db():
           last_seen INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_app_sessions_user ON app_sessions(user_id);
+        CREATE TABLE IF NOT EXISTS app_embedded_licenses(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code_hash TEXT NOT NULL UNIQUE,
+          plan_days INTEGER NOT NULL,
+          redeemed_user_id INTEGER NOT NULL DEFAULT 0,
+          redeemed_at INTEGER NOT NULL DEFAULT 0,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_app_embedded_licenses_plan
+          ON app_embedded_licenses(plan_days,active,redeemed_user_id);
         CREATE TABLE IF NOT EXISTS meta(
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -264,6 +278,9 @@ def init_db():
         ensure_column(c,"users","app_key_hash","TEXT NOT NULL DEFAULT ''")
         ensure_column(c,"users","app_key_created_at","INTEGER NOT NULL DEFAULT 0")
         ensure_column(c,"payments","reference","TEXT NOT NULL DEFAULT ''")
+        ensure_column(c,"app_embedded_licenses","issued_at","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"app_embedded_licenses","bound_device_id","TEXT NOT NULL DEFAULT ''")
+        ensure_column(c,"app_embedded_licenses","bound_device_name","TEXT NOT NULL DEFAULT ''")
         rows=c.execute("SELECT id FROM users WHERE vpn_uuid='' OR vpn_uuid IS NULL").fetchall()
         for r in rows:
             c.execute("UPDATE users SET vpn_uuid=? WHERE id=?",(str(uuid.uuid4()),r["id"]))
@@ -295,6 +312,16 @@ def init_db():
                         continue
             c.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('private_promos_v2',?)",
                       (json.dumps(generated),))
+
+        # Mirror the fixed 400-key app manifest into persistent state only
+        # to remember which license has already been activated.
+        for code,plan_days in APP_EMBEDDED_KEYS.items():
+            raw="".join(ch for ch in str(code).upper() if ch.isalnum())
+            if raw.startswith("VOID"):raw=raw[4:]
+            digest=hashlib.sha256(raw.encode()).hexdigest()
+            c.execute("""INSERT OR IGNORE INTO app_embedded_licenses
+              (code_hash,plan_days,redeemed_user_id,redeemed_at,active,created_at)
+              VALUES(?,?,0,0,1,?)""",(digest,int(plan_days),now()))
 init_db()
 
 PINNED_RU_URI=""
@@ -505,6 +532,7 @@ def send(chat_id,text,kb=None,disable_preview=True):
 
 
 def admin_alert(key,text,cooldown=None):
+    if not TOKEN:return False
     cooldown=max(0,int(ALERT_COOLDOWN_SECONDS if cooldown is None else cooldown))
     ts=now()
     with _ALERT_LOCK:
@@ -850,23 +878,81 @@ def app_key_screen(uid,rotate=False):
       "Если потеряешь — создай новый ключ в профиле.",
       [[button("🔄 Сбросить ключ","app_key_reset")],[button("◀️ Профиль","profile")]])
 
+def _create_app_only_user(c,key_row):
+    key_id=int(key_row["id"])
+    uid=-(1_000_000+key_id)
+    row=c.execute("SELECT * FROM users WHERE id=?",(uid,)).fetchone()
+    if row:return row
+
+    created=now()
+    end=created+int(key_row["plan_days"])*86400
+    sub_token=secrets.token_urlsafe(24)
+    c.execute("""INSERT INTO users(
+      id,username,first_name,joined_at,last_seen,trial_claimed,sub_until,banned,
+      balance_cents,sub_token
+    ) VALUES(?,?,?,?,?,1,?,0,0,?)""",
+      (uid,f"ios_license_{key_id}","VO1D iPhone",created,created,end,sub_token))
+    c.execute("""UPDATE users
+      SET vpn_uuid=?,notifications=0,welcome_done=1,app_key_created_at=?
+      WHERE id=?""",
+      (str(uuid.uuid4()),created,uid))
+    c.execute("""INSERT INTO subscription_events(user_id,days,source,created_at,sub_until)
+      VALUES(?,?,?,?,?)""",
+      (uid,int(key_row["plan_days"]),"ios_license",created,end))
+    return c.execute("SELECT * FROM users WHERE id=?",(uid,)).fetchone()
+
+def _open_app_session(c,row,device_id,device_name):
+    if row["banned"]:return None,None,"blocked"
+    if int(row["sub_until"])<=now():return None,None,"expired_key"
+    token=secrets.token_urlsafe(32)
+    token_hash=_secret_hash(token)
+    c.execute("DELETE FROM app_sessions WHERE user_id=? AND device_id=?",(int(row["id"]),device_id))
+    c.execute("""INSERT INTO app_sessions(token_hash,user_id,device_id,device_name,created_at,last_seen)
+      VALUES(?,?,?,?,?,?)""",(token_hash,int(row["id"]),device_id,device_name,now(),now()))
+    return token,row,"ok"
+
 def activate_app_key(raw_key,device_id="",device_name=""):
     normalized=normalize_app_key(raw_key)
-    if len(normalized)!=16:return None,None,"invalid_key"
+    if len(normalized) not in (12,16):return None,None,"invalid_key"
     key_hash=_secret_hash(normalized)
     device_id=str(device_id or "").strip()[:128] or secrets.token_hex(8)
     device_name=str(device_name or "").strip()[:80]
     with db() as c:
         c.execute("BEGIN IMMEDIATE")
+
+        # New paid iPhone license: VOID-XXXX-XXXX-XXXX.
+        if len(normalized)==12:
+            key_row=c.execute(
+              "SELECT * FROM app_embedded_licenses WHERE code_hash=? AND active=1",(key_hash,)
+            ).fetchone()
+            if not key_row:return None,None,"invalid_key"
+
+            bound_uid=int(key_row["redeemed_user_id"] or 0)
+            bound_device=str(key_row["bound_device_id"] or "")
+            if bound_uid:
+                if bound_device and bound_device!=device_id:
+                    return None,None,"key_in_use"
+                row=c.execute("SELECT * FROM users WHERE id=?",(bound_uid,)).fetchone()
+                if not row:return None,None,"invalid_key"
+                if not bound_device:
+                    c.execute("""UPDATE app_embedded_licenses
+                      SET bound_device_id=?,bound_device_name=?
+                      WHERE id=?""",(device_id,device_name,int(key_row["id"])))
+            else:
+                row=_create_app_only_user(c,key_row)
+                c.execute("""UPDATE app_embedded_licenses
+                  SET redeemed_user_id=?,redeemed_at=?,
+                      bound_device_id=?,bound_device_name=?
+                  WHERE id=?""",(
+                    int(row["id"]),now(),device_id,device_name,int(key_row["id"])
+                ))
+
+            return _open_app_session(c,row,device_id,device_name)
+
+        # Legacy per-user application key: VOID-XXXX-XXXX-XXXX-XXXX.
         row=c.execute("SELECT * FROM users WHERE app_key_hash=?",(key_hash,)).fetchone()
         if not row:return None,None,"invalid_key"
-        if row["banned"]:return None,None,"blocked"
-        token=secrets.token_urlsafe(32)
-        token_hash=_secret_hash(token)
-        c.execute("DELETE FROM app_sessions WHERE user_id=? AND device_id=?",(int(row["id"]),device_id))
-        c.execute("""INSERT INTO app_sessions(token_hash,user_id,device_id,device_name,created_at,last_seen)
-          VALUES(?,?,?,?,?,?)""",(token_hash,int(row["id"]),device_id,device_name,now(),now()))
-        return token,row,"ok"
+        return _open_app_session(c,row,device_id,device_name)
 
 def app_session_user(raw_token):
     token=str(raw_token or "").strip()
@@ -1336,6 +1422,79 @@ def guide(uid):
       "Если ссылка не выдаётся — проверь срок подписки.",
       [[button("⚡ Получить ссылку","connect")],[button("◀️ Меню","menu")]])
 
+def app_embedded_inventory():
+    inventory={}
+    with db() as c:
+        for days in (30,90,180,365):
+            row=c.execute("""SELECT
+              COUNT(*) total,
+              SUM(CASE WHEN active=1 AND redeemed_user_id=0 AND issued_at=0 THEN 1 ELSE 0 END) free,
+              SUM(CASE WHEN active=1 AND redeemed_user_id=0 AND issued_at>0 THEN 1 ELSE 0 END) issued,
+              SUM(CASE WHEN redeemed_user_id!=0 THEN 1 ELSE 0 END) redeemed
+              FROM app_embedded_licenses WHERE plan_days=?""",(days,)).fetchone()
+            inventory[days]={
+              "total":int(row["total"] or 0),
+              "free":int(row["free"] or 0),
+              "issued":int(row["issued"] or 0),
+              "redeemed":int(row["redeemed"] or 0),
+            }
+    return inventory
+
+def issue_embedded_app_license(days):
+    days=int(days)
+    if days not in (30,90,180,365):return None
+    candidates=[
+      code for code,plan_days in APP_EMBEDDED_KEYS.items()
+      if int(plan_days)==days
+    ]
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        for code in candidates:
+            digest=_secret_hash(normalize_app_key(code))
+            row=c.execute("""SELECT id,active,redeemed_user_id,issued_at
+              FROM app_embedded_licenses WHERE code_hash=?""",(digest,)).fetchone()
+            if not row:continue
+            if not int(row["active"]):continue
+            if int(row["redeemed_user_id"] or 0)!=0:continue
+            if int(row["issued_at"] or 0)!=0:continue
+            c.execute("UPDATE app_embedded_licenses SET issued_at=? WHERE id=?",(now(),int(row["id"])))
+            return code
+    return None
+
+def admin_app_keys():
+    inv=app_embedded_inventory()
+    text="<b>🔑 VO1D iPhone · 400 ключей</b>\n\n"
+    for days in (30,90,180,365):
+        state=inv[days]
+        plan=PLANS[days]
+        text+=(
+          f"<b>{esc(plan['title'])}</b> · {money(plan['usd'])}\n"
+          f"Свободно: <b>{state['free']}</b> · выдано: {state['issued']} · "
+          f"активировано: {state['redeemed']} / {state['total']}\n\n"
+        )
+    text+=("После оплаты нажми нужный тариф. Бот резервирует следующий свободный "
+           "ключ, поэтому один и тот же код двум покупателям не выдаст.")
+    send(ADMIN_ID,text,[
+      [button("1 мес · $1.99","admin_appkey:30"),button("3 мес · $4.99","admin_appkey:90")],
+      [button("6 мес · $8.99","admin_appkey:180"),button("1 год · $14.99","admin_appkey:365")],
+      [button("↻ Обновить","admin_appkeys"),button("◀️ Админ","admin")]
+    ])
+
+def admin_issue_app_key(days):
+    code=issue_embedded_app_license(days)
+    if not code:
+        return send(ADMIN_ID,
+          "⚠️ Для этого тарифа не осталось свободных невыданных ключей.",
+          [[button("🔑 Склад ключей","admin_appkeys")],[button("◀️ Админ","admin")]])
+    plan=PLANS[int(days)]
+    return send(ADMIN_ID,
+      f"<b>✅ Ключ зарезервирован</b>\n\n"
+      f"Тариф: <b>{esc(plan['title'])}</b> · {money(plan['usd'])}\n"
+      f"<code>{esc(code)}</code>\n\n"
+      "Отправь этот код покупателю. Срок подписки начнётся только при первой "
+      "успешной активации в iPhone-приложении.",
+      [[button("🔑 Склад ключей","admin_appkeys")],[button("◀️ Админ","admin")]])
+
 def admin_panel():
     with db() as c:
         users=c.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
@@ -1350,8 +1509,8 @@ def admin_panel():
       f"Ожидают оплаты: <b>{pend}</b>\nДоход Stars: <b>{stars} ⭐</b>\n"
       f"Подтверждённый manual: <b>{money(usd)}</b>",
       [[button("👥 Последние пользователи","admin_users")],[button("💳 Заявки","admin_payments")],
-       [button("🎟 Промокоды","admin_promos")],[button("🇷🇺 RU pinned","admin_ru")],
-       [button("◀️ Меню","menu")]])
+       [button("🔑 iPhone ключи","admin_appkeys")],[button("🎟 Промокоды","admin_promos")],
+       [button("🇷🇺 RU pinned","admin_ru")],[button("◀️ Меню","menu")]])
 
 def admin_ru_panel():
     st=pinned_ru_health()
@@ -1426,6 +1585,7 @@ def handle_command(uid,text):
     if cmd=="/stats" and uid==ADMIN_ID:return admin_panel()
     if cmd=="/users" and uid==ADMIN_ID:return admin_users()
     if cmd=="/payments" and uid==ADMIN_ID:return admin_payments()
+    if cmd=="/appkeys" and uid==ADMIN_ID:return admin_app_keys()
     if cmd=="/promos" and uid==ADMIN_ID:return admin_promos()
     if cmd in ("/ru","/rustatus") and uid==ADMIN_ID:return admin_ru_panel()
     if uid!=ADMIN_ID:return
@@ -1578,6 +1738,12 @@ def handle_callback(q):
             if method=="stars":return giftcode_star_invoice(uid,days)
         except Exception as e:return send(uid,f"Ошибка подарочного кода: <code>{esc(e)}</code>")
     if data=="admin_promos" and uid==ADMIN_ID:return admin_promos()
+    if data=="admin_appkeys" and uid==ADMIN_ID:return admin_app_keys()
+    if data.startswith("admin_appkey:") and uid==ADMIN_ID:
+        try:
+            days=int(data.split(":",1)[1])
+            if days in (30,90,180,365):return admin_issue_app_key(days)
+        except Exception:return
     if data=="admin_ru" and uid==ADMIN_ID:return admin_ru_panel()
     if data=="admin_ru_set" and uid==ADMIN_ID:
         set_pending(uid,"set_ru_json")
@@ -2045,16 +2211,19 @@ def service_health():
     startup_age=max(0,ts-PROCESS_STARTED_AT)
     poll_age=(ts-POLL_HEARTBEAT_AT) if POLL_HEARTBEAT_AT else None
     maintenance_age=(ts-MAINT_HEARTBEAT_AT) if MAINT_HEARTBEAT_AT else None
-    polling_ok=(poll_age is not None and poll_age<=150) or (poll_age is None and startup_age<=150)
+    telegram_enabled=bool(TOKEN)
+    polling_ok=(not telegram_enabled) or (poll_age is not None and poll_age<=150) or (poll_age is None and startup_age<=150)
     maintenance_ok=(maintenance_age is not None and maintenance_age<=720) or (maintenance_age is None and startup_age<=120)
     components={
       "database":"ok" if db_ok else "error",
-      "telegram_polling":"ok" if polling_ok else "stale",
+      "native_api":"ok" if db_ok else "error",
+      "telegram_polling":("disabled" if not telegram_enabled else ("ok" if polling_ok else "stale")),
       "maintenance":"ok" if maintenance_ok else "stale",
     }
     return {
       "ok":bool(db_ok and polling_ok and maintenance_ok),
-      "service":"VO1D_VPNbot",
+      "service":"VO1D_VPN",
+      "mode":"api+telegram" if telegram_enabled else "api-only",
       "uptime_seconds":startup_age,
       "components":components,
       "poll_age_seconds":poll_age,
@@ -2343,6 +2512,10 @@ class Web(BaseHTTPRequestHandler):
                 return self.reply_json(401,{"ok":False,"error":"invalid_key","message":"Неверный ключ VO1D."})
             if status=="blocked":
                 return self.reply_json(403,{"ok":False,"error":"blocked","message":"Доступ заблокирован."})
+            if status=="expired_key":
+                return self.reply_json(403,{"ok":False,"error":"expired_key","message":"Срок этого ключа закончился. Выбери новый тариф."})
+            if status=="key_in_use":
+                return self.reply_json(409,{"ok":False,"error":"key_in_use","message":"Этот ключ уже активирован на другом iPhone."})
             return self.reply_json(200,{"ok":True,"token":token,**app_user_payload(row)})
 
         if path=="/api/app/logout":
@@ -2465,6 +2638,7 @@ def mark_reminder(uid,key):
     with db() as c:c.execute("INSERT OR IGNORE INTO reminders(user_id,event_key,sent_at) VALUES(?,?,?)",(uid,key,now()))
 
 def send_once(uid,key,text,kb=None):
+    if not TOKEN:return False
     if reminder_sent(uid,key):return False
     try:
         send(uid,text,kb)
@@ -2473,6 +2647,7 @@ def send_once(uid,key,text,kb=None):
     except Exception:return False
 
 def refresh_node_statuses(notify_changes=True):
+    notify_changes=bool(notify_changes and TOKEN)
     transitions=[]
     for i,node in enumerate(VPN_NODES):
         online,lat=probe_node(i)
@@ -2562,11 +2737,18 @@ def web_thread():
 
 def run():
     global POLL_HEARTBEAT_AT
-    if not TOKEN: raise SystemExit("Set BOT_TOKEN in Railway Variables")
+
+    # Native iPhone API is the primary service and does not require Telegram.
     threading.Thread(target=web_thread,daemon=True).start()
     threading.Thread(target=maintenance_worker,daemon=True).start()
     if COMMUNITY_POOL.enabled:
         threading.Thread(target=community_worker,daemon=True).start()
+
+    if not TOKEN:
+        print("VO1D native API started in API-only mode; db:",DB_PATH,"web port:",PORT,flush=True)
+        while True:
+            time.sleep(3600)
+
     if MINI_APP_URL:
         try:
             api("setChatMenuButton",{
@@ -2579,11 +2761,13 @@ def run():
             print("VO1D Mini App menu:",MINI_APP_URL,flush=True)
         except Exception as e:
             print("mini app menu error",repr(e),flush=True)
-    print("VO1D_VPNbot started; db:",DB_PATH,"web port:",PORT,flush=True)
+
+    print("VO1D API + Telegram started; db:",DB_PATH,"web port:",PORT,flush=True)
     try:
-        send(ADMIN_ID,"🟢 <b>VO1D PROJECT ONLINE</b>\nБот запущен, web health endpoint поднят.")
+        send(ADMIN_ID,"🟢 <b>VO1D PROJECT ONLINE</b>\nNative API и Telegram подняты.")
     except Exception as e:
         print("startup alert error",repr(e),flush=True)
+
     offset=0
     while True:
         try:
