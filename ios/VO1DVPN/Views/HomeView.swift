@@ -140,10 +140,13 @@ struct HomeView: View {
     private var readinessCard: some View {
         HStack(alignment: .top, spacing: 13) {
             ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
+                Color.clear
                     .frame(width: 38, height: 38)
-                    .overlay(Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+                    .vo1dSystemGlass(in: Circle())
+                    .overlay(
+                        Circle()
+                            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                    )
 
                 Image(systemName: "point.3.connected.trianglepath.dotted")
                     .font(.system(size: 17, weight: .light))
