@@ -43,37 +43,60 @@ extension EnvironmentValues {
     }
 }
 
-extension View {
+private struct AdaptiveSystemGlass<S: Shape>: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    let shape: S
+    let interactive: Bool
+
     @ViewBuilder
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background(
+                VO1DStyle.panel.opacity(0.98),
+                in: shape
+            )
+        } else {
+            #if compiler(>=6.2)
+            if #available(iOS 26.0, *) {
+                if interactive {
+                    content.glassEffect(
+                        .regular.interactive(),
+                        in: shape
+                    )
+                } else {
+                    content.glassEffect(
+                        .regular,
+                        in: shape
+                    )
+                }
+            } else {
+                content.background(
+                    .ultraThinMaterial,
+                    in: shape
+                )
+            }
+            #else
+            content.background(
+                .ultraThinMaterial,
+                in: shape
+            )
+            #endif
+        }
+    }
+}
+
+extension View {
     func vo1dSystemGlass<S: Shape>(
         in shape: S,
         interactive: Bool = false
     ) -> some View {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            if interactive {
-                self.glassEffect(
-                    .regular.interactive(),
-                    in: shape
-                )
-            } else {
-                self.glassEffect(
-                    .regular,
-                    in: shape
-                )
-            }
-        } else {
-            self.background(
-                .ultraThinMaterial,
-                in: shape
+        modifier(
+            AdaptiveSystemGlass(
+                shape: shape,
+                interactive: interactive
             )
-        }
-        #else
-        self.background(
-            .ultraThinMaterial,
-            in: shape
         )
-        #endif
     }
 }
 
