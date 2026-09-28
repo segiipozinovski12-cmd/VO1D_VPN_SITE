@@ -583,27 +583,20 @@ struct ReferenceGlassCard<Content: View>: View {
 
         content
             .background {
-                shape
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(
-                                    highlighted ? 0.20 : 0.095
-                                ),
-                                VO1DStyle.midnight.opacity(
-                                    highlighted ? 0.72 : 0.58
-                                ),
-                                VO1DStyle.graphite.opacity(0.78),
-                                Color.black.opacity(0.94)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                if highlighted {
+                    shape
+                        .fill(glassFill)
+                        .background(
+                            .ultraThinMaterial,
+                            in: shape
                         )
-                    )
-                    .background(
-                        .ultraThinMaterial,
-                        in: shape
-                    )
+                } else {
+                    // Most cards use a visually glassy gradient instead of a
+                    // live backdrop blur. This is dramatically cheaper while
+                    // scrolling and still keeps the same VO1D glass language.
+                    shape
+                        .fill(glassFill)
+                }
             }
             .overlay {
                 shape
@@ -611,11 +604,11 @@ struct ReferenceGlassCard<Content: View>: View {
                         LinearGradient(
                             colors: [
                                 .white.opacity(
-                                    highlighted ? 0.20 : 0.095
+                                    highlighted ? 0.18 : 0.085
                                 ),
                                 .clear,
                                 VO1DStyle.frost.opacity(
-                                    highlighted ? 0.095 : 0.038
+                                    highlighted ? 0.085 : 0.030
                                 )
                             ],
                             startPoint: UnitPoint(x: 0.02, y: 0.00),
@@ -630,16 +623,16 @@ struct ReferenceGlassCard<Content: View>: View {
                     colors: [
                         .clear,
                         VO1DStyle.steel.opacity(
-                            highlighted ? 0.10 : 0.035
+                            highlighted ? 0.085 : 0.025
                         ),
                         .white.opacity(
-                            highlighted ? 0.07 : 0.025
+                            highlighted ? 0.055 : 0.018
                         )
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: highlighted ? 52 : 38)
+                .frame(height: highlighted ? 46 : 32)
                 .mask(shape)
                 .allowsHitTesting(false)
             }
@@ -649,20 +642,20 @@ struct ReferenceGlassCard<Content: View>: View {
                         LinearGradient(
                             colors: [
                                 .white.opacity(
-                                    highlighted ? 0.98 : 0.42
+                                    highlighted ? 0.92 : 0.34
                                 ),
                                 VO1DStyle.chrome.opacity(
-                                    highlighted ? 0.34 : 0.12
+                                    highlighted ? 0.28 : 0.09
                                 ),
-                                .white.opacity(0.06),
+                                .white.opacity(0.045),
                                 VO1DStyle.frost.opacity(
-                                    highlighted ? 0.50 : 0.18
+                                    highlighted ? 0.40 : 0.13
                                 )
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: highlighted ? 1.35 : 0.90
+                        lineWidth: highlighted ? 1.2 : 0.8
                     )
                     .allowsHitTesting(false)
             }
@@ -670,51 +663,48 @@ struct ReferenceGlassCard<Content: View>: View {
                 shape
                     .inset(by: 3)
                     .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(
-                                    highlighted ? 0.15 : 0.055
-                                ),
-                                .clear,
-                                .white.opacity(
-                                    highlighted ? 0.07 : 0.025
-                                )
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                        .white.opacity(
+                            highlighted ? 0.10 : 0.035
                         ),
-                        lineWidth: 0.7
+                        lineWidth: 0.6
                     )
                     .allowsHitTesting(false)
             }
             .overlay(alignment: .topLeading) {
                 GlassSheen(
                     radius: radius,
-                    strong: highlighted,
-                    delay: 0
+                    animated: highlighted
                 )
-                .allowsHitTesting(false)
-            }
-            .overlay(alignment: .topLeading) {
-                GlassSheen(
-                    radius: radius,
-                    strong: highlighted,
-                    delay: highlighted ? 2.2 : 3.4
-                )
-                .opacity(highlighted ? 0.58 : 0.34)
                 .allowsHitTesting(false)
             }
             .shadow(
                 color: VO1DStyle.frost.opacity(
-                    highlighted ? 0.18 : 0.028
+                    highlighted ? 0.14 : 0.018
                 ),
-                radius: highlighted ? 24 : 12
+                radius: highlighted ? 18 : 8
             )
             .shadow(
-                color: .black.opacity(0.78),
-                radius: 30,
-                y: 15
+                color: .black.opacity(0.70),
+                radius: highlighted ? 22 : 14,
+                y: highlighted ? 11 : 7
             )
+    }
+
+    private var glassFill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(
+                    highlighted ? 0.18 : 0.075
+                ),
+                VO1DStyle.midnight.opacity(
+                    highlighted ? 0.70 : 0.62
+                ),
+                VO1DStyle.graphite.opacity(0.82),
+                Color.black.opacity(0.95)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -722,41 +712,33 @@ private struct GlassSheen: View {
     @Environment(\.vo1dReduceMotion) private var reduceMotion
 
     let radius: CGFloat
-    let strong: Bool
-    let delay: Double
+    let animated: Bool
 
-    @State private var shift: CGFloat = -0.80
+    @State private var shift: CGFloat = -0.58
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                LinearGradient(
-                    colors: [
-                        .clear,
-                        VO1DStyle.frost.opacity(
-                            strong ? 0.08 : 0.035
-                        ),
-                        .white.opacity(
-                            strong ? 0.28 : 0.12
-                        ),
-                        .white.opacity(
-                            strong ? 0.42 : 0.16
-                        ),
-                        .clear
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(
-                    width: proxy.size.width * 0.34,
-                    height: proxy.size.height * 1.72
-                )
-                .rotationEffect(.degrees(-17))
-                .offset(
-                    x: proxy.size.width * shift,
-                    y: -proxy.size.height * 0.31
-                )
-                .blur(radius: strong ? 9 : 7)
+                if animated && !reduceMotion {
+                    sheen(proxy: proxy)
+                        .offset(
+                            x: proxy.size.width * shift
+                        )
+                        .onAppear {
+                            withAnimation(
+                                .linear(duration: 5.2)
+                                .repeatForever(autoreverses: false)
+                            ) {
+                                shift = 1.50
+                            }
+                        }
+                } else {
+                    sheen(proxy: proxy)
+                        .offset(
+                            x: -proxy.size.width * 0.18
+                        )
+                        .opacity(0.55)
+                }
             }
             .frame(
                 width: proxy.size.width,
@@ -768,19 +750,39 @@ private struct GlassSheen: View {
                     style: .continuous
                 )
             )
-            .onAppear {
-                guard !reduceMotion else { return }
-
-                withAnimation(
-                    .linear(duration: strong ? 4.6 : 7.6)
-                    .delay(delay)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    shift = 1.70
-                }
-            }
         }
         .clipped()
+    }
+
+    private func sheen(
+        proxy: GeometryProxy
+    ) -> some View {
+        LinearGradient(
+            colors: [
+                .clear,
+                VO1DStyle.frost.opacity(
+                    animated ? 0.065 : 0.025
+                ),
+                .white.opacity(
+                    animated ? 0.23 : 0.085
+                ),
+                .white.opacity(
+                    animated ? 0.34 : 0.11
+                ),
+                .clear
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(
+            width: proxy.size.width * 0.30,
+            height: proxy.size.height * 1.45
+        )
+        .rotationEffect(.degrees(-16))
+        .offset(
+            y: -proxy.size.height * 0.22
+        )
+        .blur(radius: animated ? 5.0 : 2.5)
     }
 }
 
