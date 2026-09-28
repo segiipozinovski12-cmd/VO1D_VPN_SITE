@@ -75,7 +75,7 @@ struct ConnectionDashboard: View {
             sessionControls
 
             if !model.isDemoMode {
-                Text("Speed and traffic counters are not available from this tunnel core.")
+                Text("Traffic is measured directly by the running Packet Tunnel.")
                     .font(.caption)
                     .foregroundStyle(VO1DStyle.secondary)
             }
