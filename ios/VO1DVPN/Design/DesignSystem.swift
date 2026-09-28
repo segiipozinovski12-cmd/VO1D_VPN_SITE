@@ -9,8 +9,12 @@ enum VO1DStyle {
     static let secondary = Color(white: 0.64)
 
     static let ice = Color(white: 0.92)
+    static let pearl = Color(red: 0.965, green: 0.972, blue: 0.985)
+    static let frost = Color(red: 0.69, green: 0.76, blue: 0.86)
+    static let steel = Color(red: 0.28, green: 0.32, blue: 0.40)
+    static let graphite = Color(red: 0.085, green: 0.092, blue: 0.110)
 
-    // Functional colors only.
+    // Functional colors only. Main connection states stay monochrome.
     static let green = Color(red: 0.52, green: 0.82, blue: 0.62)
     static let amber = Color(red: 0.87, green: 0.70, blue: 0.42)
     static let red = Color(red: 0.88, green: 0.44, blue: 0.46)
@@ -161,17 +165,25 @@ struct DeepSpaceBackdrop: View {
             )
 
             RadialGradient(
-                colors: [.white.opacity(0.024), .clear],
+                colors: [
+                    VO1DStyle.frost.opacity(0.026),
+                    .white.opacity(0.012),
+                    .clear
+                ],
                 center: UnitPoint(x: 0.88, y: 0.32),
                 startRadius: 0,
-                endRadius: 350
+                endRadius: 360
             )
 
             RadialGradient(
-                colors: [VO1DStyle.raised.opacity(0.10), .clear],
+                colors: [
+                    VO1DStyle.steel.opacity(0.12),
+                    VO1DStyle.raised.opacity(0.06),
+                    .clear
+                ],
                 center: UnitPoint(x: 0.50, y: 0.72),
                 startRadius: 20,
-                endRadius: 420
+                endRadius: 440
             )
 
             LinearGradient(
@@ -373,15 +385,25 @@ struct StatusPill: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(connected ? VO1DStyle.green : VO1DStyle.secondary)
+                .fill(connected ? VO1DStyle.pearl : VO1DStyle.secondary)
                 .frame(width: 5, height: 5)
-                .shadow(color: connected ? VO1DStyle.green.opacity(0.42) : .clear, radius: 4)
+                .shadow(
+                    color:
+                        connected
+                        ? VO1DStyle.pearl.opacity(0.38)
+                        : .clear,
+                    radius: 5
+                )
 
             Text(text)
                 .font(VO1DStyle.mono(9))
                 .tracking(0.6)
         }
-        .foregroundStyle(connected ? VO1DStyle.green : VO1DStyle.secondary)
+        .foregroundStyle(
+            connected
+            ? VO1DStyle.pearl
+            : VO1DStyle.secondary
+        )
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .vo1dSystemGlass(in: Capsule())
