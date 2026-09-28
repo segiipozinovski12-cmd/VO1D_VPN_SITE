@@ -59,12 +59,18 @@ final class PreviewUITests: XCTestCase {
         if !settings.isHittable { app.swipeUp() }
         XCTAssertTrue(settings.isHittable)
         settings.tap()
-        let settingsTitle = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "Fine-tune")).firstMatch
-        XCTAssertTrue(settingsTitle.waitForExistence(timeout: 5))
-        let autoConnect = app.switches.matching(NSPredicate(format: "label CONTAINS[c] %@", "Auto Connect")).firstMatch
+
+        let settingsBack = app.buttons["Back"]
+        XCTAssertTrue(settingsBack.waitForExistence(timeout: 5))
+
+        let autoConnect = app.descendants(matching: .any)["settings.autoConnect"]
         XCTAssertTrue(autoConnect.waitForExistence(timeout: 3))
+
         capture("09-settings", app: app)
-        if autoConnect.isHittable { autoConnect.tap() }
+
+        if autoConnect.isHittable {
+            autoConnect.tap()
+        }
         app.swipeUp()
         let switches = app.switches
         if switches.count > 0 {
