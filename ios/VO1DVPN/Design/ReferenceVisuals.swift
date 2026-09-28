@@ -714,11 +714,7 @@ private struct GlassSheen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            RoundedRectangle(
-                cornerRadius: radius,
-                style: .continuous
-            )
-            .fill(
+            ZStack {
                 LinearGradient(
                     colors: [
                         .clear,
@@ -736,23 +732,27 @@ private struct GlassSheen: View {
                     startPoint: .leading,
                     endPoint: .trailing
                 )
-            )
+                .frame(
+                    width: proxy.size.width * 0.34,
+                    height: proxy.size.height * 1.72
+                )
+                .rotationEffect(.degrees(-17))
+                .offset(
+                    x: proxy.size.width * shift,
+                    y: -proxy.size.height * 0.31
+                )
+                .blur(radius: strong ? 9 : 7)
+            }
             .frame(
-                width: proxy.size.width * 0.34,
-                height: proxy.size.height * 1.72
+                width: proxy.size.width,
+                height: proxy.size.height
             )
-            .rotationEffect(.degrees(-17))
-            .offset(
-                x: proxy.size.width * shift,
-                y: -proxy.size.height * 0.31
-            )
-            .blur(radius: strong ? 9 : 7)
-            .mask {
+            .clipShape(
                 RoundedRectangle(
                     cornerRadius: radius,
                     style: .continuous
                 )
-            }
+            )
             .onAppear {
                 guard !reduceMotion else { return }
 
@@ -765,6 +765,7 @@ private struct GlassSheen: View {
                 }
             }
         }
+        .clipped()
     }
 }
 
