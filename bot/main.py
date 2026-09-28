@@ -2198,16 +2198,19 @@ def service_health():
     startup_age=max(0,ts-PROCESS_STARTED_AT)
     poll_age=(ts-POLL_HEARTBEAT_AT) if POLL_HEARTBEAT_AT else None
     maintenance_age=(ts-MAINT_HEARTBEAT_AT) if MAINT_HEARTBEAT_AT else None
-    polling_ok=(poll_age is not None and poll_age<=150) or (poll_age is None and startup_age<=150)
+    telegram_enabled=bool(TOKEN)
+    polling_ok=(not telegram_enabled) or (poll_age is not None and poll_age<=150) or (poll_age is None and startup_age<=150)
     maintenance_ok=(maintenance_age is not None and maintenance_age<=720) or (maintenance_age is None and startup_age<=120)
     components={
       "database":"ok" if db_ok else "error",
-      "telegram_polling":"ok" if polling_ok else "stale",
+      "native_api":"ok" if db_ok else "error",
+      "telegram_polling":("disabled" if not telegram_enabled else ("ok" if polling_ok else "stale")),
       "maintenance":"ok" if maintenance_ok else "stale",
     }
     return {
       "ok":bool(db_ok and polling_ok and maintenance_ok),
-      "service":"VO1D_VPNbot",
+      "service":"VO1D_VPN",
+      "mode":"api+telegram" if telegram_enabled else "api-only",
       "uptime_seconds":startup_age,
       "components":components,
       "poll_age_seconds":poll_age,
@@ -2717,11 +2720,18 @@ def web_thread():
 
 def run():
     global POLL_HEARTBEAT_AT
-    if not TOKEN: raise SystemExit("Set BOT_TOKEN in Railway Variables")
+
+    # Native iPhone API is the primary service and does not require Telegram.
     threading.Thread(target=web_thread,daemon=True).start()
     threading.Thread(target=maintenance_worker,daemon=True).start()
     if COMMUNITY_POOL.enabled:
         threading.Thread(target=community_worker,daemon=True).start()
+
+    if not TOKEN:
+        print("VO1D native API started in API-only mode; db:",DB_PATH,"web port:",PORT,flush=True)
+        while True:
+            time.sleep(3600)
+
     if MINI_APP_URL:
         try:
             api("setChatMenuButton",{
@@ -2734,11 +2744,13 @@ def run():
             print("VO1D Mini App menu:",MINI_APP_URL,flush=True)
         except Exception as e:
             print("mini app menu error",repr(e),flush=True)
-    print("VO1D_VPNbot started; db:",DB_PATH,"web port:",PORT,flush=True)
+
+    print("VO1D API + Telegram started; db:",DB_PATH,"web port:",PORT,flush=True)
     try:
-        send(ADMIN_ID,"🟢 <b>VO1D PROJECT ONLINE</b>\nБот запущен, web health endpoint поднят.")
+        send(ADMIN_ID,"🟢 <b>VO1D PROJECT ONLINE</b>\nNative API и Telegram подняты.")
     except Exception as e:
         print("startup alert error",repr(e),flush=True)
+
     offset=0
     while True:
         try:
