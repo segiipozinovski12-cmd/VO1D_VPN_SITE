@@ -76,7 +76,7 @@ struct ServerCard: View {
             Button(action: toggleFavorite) {
                 Image(systemName: favorite ? "star.fill" : "star")
                     .font(.system(size: 15))
-                    .foregroundStyle(favorite ? VO1DStyle.amber.opacity(0.95) : .white.opacity(0.32))
+                    .foregroundStyle(favorite ? .white.opacity(0.92) : .white.opacity(0.30))
                     .symbolEffect(.bounce, value: favorite)
                     .frame(width: 44, height: 52)
             }
