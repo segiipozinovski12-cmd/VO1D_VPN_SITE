@@ -86,8 +86,8 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(settings.isHittable)
         settings.tap()
 
-        let settingsBack = app.buttons["Back"]
-        XCTAssertTrue(settingsBack.waitForExistence(timeout: 5))
+        let autoConnect = app.descendants(matching: .any)["settings.autoConnect"]
+        XCTAssertTrue(autoConnect.waitForExistence(timeout: 5))
 
         capture("09-reference-settings", app: app)
     }
