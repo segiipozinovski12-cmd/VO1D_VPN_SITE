@@ -22,6 +22,12 @@ targets:
     platform: iOS
     sources:
       - path: VO1DVPN
+        excludes:
+          - Resources/IconSource
+    preBuildScripts:
+      - name: Generate VO1D App Icon
+        script: |
+          bash "$SRCROOT/Scripts/generate_app_icon.sh"
     info:
       path: VO1DVPN/Resources/Info.plist
       properties:
@@ -61,6 +67,11 @@ targets:
         excludes:
           - Resources/Info.plist
           - Resources/VO1D_VPN.entitlements
+          - Resources/IconSource
+    preBuildScripts:
+      - name: Generate VO1D App Icon
+        script: |
+          bash "$SRCROOT/Scripts/generate_app_icon.sh"
     info:
       path: ../ios-preview/PreviewInfo.plist
       properties:
