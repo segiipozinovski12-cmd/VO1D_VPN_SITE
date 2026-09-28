@@ -33,7 +33,7 @@ struct ProfileView: View {
                 if model.isDemoMode { Eyebrow(text: "DEMO / IPHONE SIMULATOR") }
             }.padding(.horizontal, 22).padding(.bottom, 28)
         }
-        .background(VO1DStyle.background).scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
+        .background { DeepSpaceBackdrop().ignoresSafeArea() }.scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
         .navigationDestination(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showAvatars) { avatarPicker }
         .sheet(isPresented: $showKey) { ChangeKeyView() }
