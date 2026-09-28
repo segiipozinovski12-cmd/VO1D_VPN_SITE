@@ -16,6 +16,7 @@ enum AppTab: String, CaseIterable {
 
 struct AppShell: View {
     @Environment(\.vo1dReduceMotion) private var reduceMotion
+    @EnvironmentObject private var preferences: Preferences
 
     @State private var tab: AppTab = .home
     @Namespace private var tabSelection
@@ -63,6 +64,7 @@ struct AppShell: View {
                         Image(systemName: item.icon)
                             .font(.system(size: 15, weight: tab == item ? .semibold : .regular))
                             .symbolRenderingMode(.hierarchical)
+                            .symbolEffect(.bounce, value: tab == item)
 
                         Text(item.rawValue)
                             .font(.system(size: 12, weight: .medium))
@@ -114,6 +116,7 @@ struct AppShell: View {
 
     private func select(_ next: AppTab) {
         guard next != tab else { return }
+        Haptics.play(.selection, enabled: preferences.haptics)
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.30)) {
             tab = next
         }
