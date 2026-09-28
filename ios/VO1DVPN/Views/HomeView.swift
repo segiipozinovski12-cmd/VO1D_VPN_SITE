@@ -246,9 +246,11 @@ struct HomeView: View {
                 }
                 .buttonStyle(ScaleButtonStyle(scale: 0.93))
                 .disabled(model.phase.isBusy)
-                .accessibilityIdentifier("connection.toggle")
+                .accessibilityIdentifier("connection.control")
+                .accessibilityValue(connectionTitle)
 
                 Text(connectionTitle)
+                    .accessibilityIdentifier("connection.status")
                     .font(
                         .system(
                             size: 14,
