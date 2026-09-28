@@ -51,7 +51,7 @@ struct PrimaryButton: View {
             .foregroundStyle(.black)
             .background(
                 LinearGradient(
-                    colors: [.white, Color(red: 0.87, green: 0.94, blue: 0.96)],
+                    colors: [.white, Color(white: 0.90)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),
