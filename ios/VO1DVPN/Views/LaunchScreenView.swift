@@ -54,10 +54,13 @@ struct LaunchScreenView: View {
                         .stroke(VO1DStyle.ice.opacity(pulse ? 0.03 : 0.23), lineWidth: 1)
                         .frame(width: pulse ? 106 : 76, height: pulse ? 106 : 76)
 
-                    Circle()
-                        .fill(.ultraThinMaterial)
+                    Color.clear
                         .frame(width: 72, height: 72)
-                        .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1))
+                        .vo1dSystemGlass(in: Circle())
+                        .overlay(
+                            Circle()
+                                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                        )
 
                     Image(systemName: "point.3.connected.trianglepath.dotted")
                         .font(.system(size: 30, weight: .ultraLight))
