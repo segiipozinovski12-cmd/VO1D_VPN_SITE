@@ -136,10 +136,17 @@ struct GlitchText: View {
 }
 
 struct ReferencePlanet: View {
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
+
     var diameter: CGFloat
     var rotation: Double = -16
     var glow: Double = 0.13
     var showRoutes = true
+
+    @State private var routeDraw: CGFloat = 0.06
+    @State private var orbitTurn = false
+    @State private var breathe = false
+    @State private var highlightTurn = false
 
     var body: some View {
         ZStack {
@@ -188,12 +195,13 @@ struct ReferencePlanet: View {
 
             if showRoutes {
                 PlanetRoutes()
+                    .trim(from: 0, to: routeDraw)
                     .stroke(
                         LinearGradient(
                             colors: [
                                 .white.opacity(0.06),
-                                .white.opacity(0.38),
-                                .white.opacity(0.04)
+                                .white.opacity(0.48),
+                                .white.opacity(0.05)
                             ],
                             startPoint: .leading,
                             endPoint: .trailing
@@ -205,7 +213,7 @@ struct ReferencePlanet: View {
                     )
                     .padding(diameter * 0.06)
 
-                PlanetRouteDots()
+                PlanetRouteDots(active: breathe)
                     .padding(diameter * 0.06)
             }
 
@@ -225,19 +233,93 @@ struct ReferencePlanet: View {
 
             Circle()
                 .trim(from: 0.05, to: 0.33)
-                .stroke(.white.opacity(0.75), lineWidth: 1.8)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.22),
+                            .white.opacity(0.90),
+                            .white.opacity(0.12)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1.8
+                )
                 .blur(radius: 1.2)
-                .rotationEffect(.degrees(-24))
+                .rotationEffect(
+                    .degrees(
+                        -24 + (highlightTurn ? 360 : 0)
+                    )
+                )
         }
         .frame(width: diameter, height: diameter)
         .rotationEffect(.degrees(rotation))
-        .shadow(color: .white.opacity(glow), radius: diameter * 0.075)
+        .shadow(
+            color: .white.opacity(
+                glow * (breathe ? 1.28 : 0.82)
+            ),
+            radius: diameter * (breathe ? 0.092 : 0.070)
+        )
         .overlay {
             Ellipse()
-                .stroke(.white.opacity(0.08), lineWidth: 0.7)
-                .frame(width: diameter * 1.20, height: diameter * 0.33)
-                .rotationEffect(.degrees(-12))
+                .trim(from: 0.03, to: 0.82)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            .white.opacity(0.20),
+                            .white.opacity(0.06),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    style: StrokeStyle(
+                        lineWidth: 0.75,
+                        lineCap: .round
+                    )
+                )
+                .frame(
+                    width: diameter * 1.20,
+                    height: diameter * 0.33
+                )
+                .rotationEffect(
+                    .degrees(
+                        -12 + (orbitTurn ? 360 : 0)
+                    )
+                )
                 .offset(y: diameter * 0.08)
+        }
+        .onAppear {
+            guard !reduceMotion else {
+                routeDraw = 1
+                return
+            }
+
+            withAnimation(.easeOut(duration: 1.20)) {
+                routeDraw = 1
+            }
+
+            withAnimation(
+                .linear(duration: 14)
+                .repeatForever(autoreverses: false)
+            ) {
+                orbitTurn = true
+            }
+
+            withAnimation(
+                .linear(duration: 9.5)
+                .repeatForever(autoreverses: false)
+            ) {
+                highlightTurn = true
+            }
+
+            withAnimation(
+                .easeInOut(duration: 3.0)
+                .repeatForever(autoreverses: true)
+            ) {
+                breathe = true
+            }
         }
         .accessibilityHidden(true)
     }
@@ -362,6 +444,8 @@ private struct PlanetRoutes: Shape {
 }
 
 private struct PlanetRouteDots: View {
+    let active: Bool
+
     var body: some View {
         GeometryReader { proxy in
             let points: [(CGFloat, CGFloat)] = [
@@ -377,7 +461,11 @@ private struct PlanetRouteDots: View {
                 Circle()
                     .fill(.white)
                     .frame(width: index.isMultiple(of: 2) ? 4.5 : 3.2, height: index.isMultiple(of: 2) ? 4.5 : 3.2)
-                    .shadow(color: .white.opacity(0.8), radius: 5)
+                    .shadow(
+                        color: .white.opacity(active ? 0.88 : 0.42),
+                        radius: active ? 6 : 3
+                    )
+                    .scaleEffect(active ? 1.18 : 0.82)
                     .position(
                         x: proxy.size.width * point.0,
                         y: proxy.size.height * point.1
