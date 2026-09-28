@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from community_nodes import COMMUNITY_POOL, community_worker
 from pinned_ru import build_pinned_ru_uri
+from app_embedded_keys import APP_EMBEDDED_KEYS
 
 TOKEN=os.getenv("BOT_TOKEN","").strip()
 ADMIN_ID=int(os.getenv("ADMIN_ID","8632158680"))
@@ -51,13 +52,8 @@ PLANS={
   365:{"title":"12 месяцев","usd":1499,"stars":975},
 }
 
-# Native iPhone license inventory.
-# Keys are generated and stored ONLY on the backend database, never shipped
-# inside the IPA. There are exactly 100 licenses for each paid plan.
-APP_LICENSE_PLANS=(30,90,180,365)
-APP_LICENSES_PER_PLAN=100
-APP_LICENSE_ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-
+# Native iPhone paid keys are a fixed code manifest shared with the app.
+# Telegram is not involved in key generation or validation.
 # Внутренний баланс VO1D. Эти суммы — только быстрые кнопки:
 # пользователь также может ввести произвольную сумму вручную.
 TOPUP_STARS_PER_USD=Decimal("65")
@@ -255,21 +251,17 @@ def init_db():
           last_seen INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_app_sessions_user ON app_sessions(user_id);
-        CREATE TABLE IF NOT EXISTS app_plan_keys(
+        CREATE TABLE IF NOT EXISTS app_embedded_licenses(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          code TEXT NOT NULL UNIQUE,
           code_hash TEXT NOT NULL UNIQUE,
           plan_days INTEGER NOT NULL,
-          slot INTEGER NOT NULL,
-          issued_at INTEGER NOT NULL DEFAULT 0,
           redeemed_user_id INTEGER NOT NULL DEFAULT 0,
           redeemed_at INTEGER NOT NULL DEFAULT 0,
           active INTEGER NOT NULL DEFAULT 1,
-          created_at INTEGER NOT NULL,
-          UNIQUE(plan_days,slot)
+          created_at INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_app_plan_keys_plan
-          ON app_plan_keys(plan_days,active,redeemed_user_id,issued_at);
+        CREATE INDEX IF NOT EXISTS idx_app_embedded_licenses_plan
+          ON app_embedded_licenses(plan_days,active,redeemed_user_id);
         CREATE TABLE IF NOT EXISTS meta(
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -318,26 +310,15 @@ def init_db():
             c.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('private_promos_v2',?)",
                       (json.dumps(generated),))
 
-        # Seed exactly 100 app licenses for each paid plan. Existing slots are
-        # preserved across redeploys when the persistent SQLite volume is kept.
-        for plan_days in APP_LICENSE_PLANS:
-            existing={int(r["slot"]) for r in c.execute(
-              "SELECT slot FROM app_plan_keys WHERE plan_days=?",(int(plan_days),)
-            ).fetchall()}
-            for slot in range(1,APP_LICENSES_PER_PLAN+1):
-                if slot in existing:continue
-                while True:
-                    raw="".join(secrets.choice(APP_LICENSE_ALPHABET) for _ in range(12))
-                    code="VOID-"+raw[0:4]+"-"+raw[4:8]+"-"+raw[8:12]
-                    digest=hashlib.sha256(raw.encode()).hexdigest()
-                    try:
-                        c.execute("""INSERT INTO app_plan_keys
-                          (code,code_hash,plan_days,slot,issued_at,redeemed_user_id,redeemed_at,active,created_at)
-                          VALUES(?,?,?,?,0,0,0,1,?)""",
-                          (code,digest,int(plan_days),slot,now()))
-                        break
-                    except sqlite3.IntegrityError:
-                        continue
+        # Mirror the fixed 400-key app manifest into persistent state only
+        # to remember which license has already been activated.
+        for code,plan_days in APP_EMBEDDED_KEYS.items():
+            raw="".join(ch for ch in str(code).upper() if ch.isalnum())
+            if raw.startswith("VOID"):raw=raw[4:]
+            digest=hashlib.sha256(raw.encode()).hexdigest()
+            c.execute("""INSERT OR IGNORE INTO app_embedded_licenses
+              (code_hash,plan_days,redeemed_user_id,redeemed_at,active,created_at)
+              VALUES(?,?,0,0,1,?)""",(digest,int(plan_days),now()))
 init_db()
 
 PINNED_RU_URI=""
@@ -835,7 +816,7 @@ def reset_access(uid):
         return "✅ Ссылка и персональный VPN-ключ заменены. После синхронизации Xray старый ключ перестанет работать."
     return "✅ Персональная subscription-ссылка заменена. Старый импортированный VPN-конфиг пока не отключается сервером — для этого нужен режим персональных Xray-ключей."
 
-APP_KEY_ALPHABET=APP_LICENSE_ALPHABET
+APP_KEY_ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 def _secret_hash(value):
     return hashlib.sha256(str(value or "").encode()).hexdigest()
@@ -938,7 +919,7 @@ def activate_app_key(raw_key,device_id="",device_name=""):
         # New paid iPhone license: VOID-XXXX-XXXX-XXXX.
         if len(normalized)==12:
             key_row=c.execute(
-              "SELECT * FROM app_plan_keys WHERE code_hash=? AND active=1",(key_hash,)
+              "SELECT * FROM app_embedded_licenses WHERE code_hash=? AND active=1",(key_hash,)
             ).fetchone()
             if not key_row:return None,None,"invalid_key"
 
@@ -948,7 +929,7 @@ def activate_app_key(raw_key,device_id="",device_name=""):
                 if not row:return None,None,"invalid_key"
             else:
                 row=_create_app_only_user(c,key_row)
-                c.execute("""UPDATE app_plan_keys
+                c.execute("""UPDATE app_embedded_licenses
                   SET redeemed_user_id=?,redeemed_at=?
                   WHERE id=?""",(int(row["id"]),now(),int(key_row["id"])))
 
@@ -958,34 +939,6 @@ def activate_app_key(raw_key,device_id="",device_name=""):
         row=c.execute("SELECT * FROM users WHERE app_key_hash=?",(key_hash,)).fetchone()
         if not row:return None,None,"invalid_key"
         return _open_app_session(c,row,device_id,device_name)
-
-def app_license_inventory():
-    out={}
-    with db() as c:
-        for days in APP_LICENSE_PLANS:
-            row=c.execute("""SELECT
-              SUM(CASE WHEN active=1 AND redeemed_user_id=0 AND issued_at=0 THEN 1 ELSE 0 END) available,
-              SUM(CASE WHEN active=1 AND redeemed_user_id=0 AND issued_at>0 THEN 1 ELSE 0 END) issued,
-              SUM(CASE WHEN redeemed_user_id!=0 THEN 1 ELSE 0 END) redeemed
-              FROM app_plan_keys WHERE plan_days=?""",(int(days),)).fetchone()
-            out[int(days)]={
-              "available":int(row["available"] or 0),
-              "issued":int(row["issued"] or 0),
-              "redeemed":int(row["redeemed"] or 0),
-            }
-    return out
-
-def issue_app_plan_license(days):
-    days=int(days)
-    if days not in APP_LICENSE_PLANS:return None
-    with db() as c:
-        c.execute("BEGIN IMMEDIATE")
-        row=c.execute("""SELECT * FROM app_plan_keys
-          WHERE plan_days=? AND active=1 AND redeemed_user_id=0 AND issued_at=0
-          ORDER BY slot LIMIT 1""",(days,)).fetchone()
-        if not row:return None
-        c.execute("UPDATE app_plan_keys SET issued_at=? WHERE id=?",(now(),int(row["id"])))
-        return dict(row)
 
 def app_session_user(raw_token):
     token=str(raw_token or "").strip()
@@ -1469,39 +1422,8 @@ def admin_panel():
       f"Ожидают оплаты: <b>{pend}</b>\nДоход Stars: <b>{stars} ⭐</b>\n"
       f"Подтверждённый manual: <b>{money(usd)}</b>",
       [[button("👥 Последние пользователи","admin_users")],[button("💳 Заявки","admin_payments")],
-       [button("🔑 iPhone ключи","admin_appkeys")],[button("🎟 Промокоды","admin_promos")],
-       [button("🇷🇺 RU pinned","admin_ru")],[button("◀️ Меню","menu")]])
-
-def admin_app_keys():
-    inv=app_license_inventory()
-    text="<b>🔑 VO1D iPhone · лицензии</b>\n\n"
-    for days in APP_LICENSE_PLANS:
-        p=PLANS[days]
-        s=inv[days]
-        text+=(
-          f"<b>{esc(p['title'])}</b> · {money(p['usd'])}\n"
-          f"Свободно: <b>{s['available']}</b> · выдано: {s['issued']} · активировано: {s['redeemed']}\n\n"
-        )
-    text+="Нажми тариф — бот выдаст следующий свободный ключ покупателю."
-    send(ADMIN_ID,text,[
-      [button("1 месяц · $1.99","admin_appkey:30"),button("3 месяца · $4.99","admin_appkey:90")],
-      [button("6 месяцев · $8.99","admin_appkey:180"),button("1 год · $14.99","admin_appkey:365")],
-      [button("↻ Обновить","admin_appkeys"),button("◀️ Админ","admin")]
-    ])
-
-def admin_issue_app_key(days):
-    row=issue_app_plan_license(days)
-    if not row:
-        return send(ADMIN_ID,"Свободных ключей для этого тарифа больше нет.",[
-          [button("↻ Ключи","admin_appkeys")],[button("◀️ Админ","admin")]
-        ])
-    p=PLANS[int(days)]
-    return send(ADMIN_ID,
-      f"<b>✅ Ключ для покупателя</b>\n\n"
-      f"Тариф: <b>{esc(p['title'])}</b> · {money(p['usd'])}\n"
-      f"<code>{esc(row['code'])}</code>\n\n"
-      "Срок начнётся при первой успешной активации ключа в iPhone-приложении.",
-      [[button("🔑 Ещё ключи","admin_appkeys")],[button("◀️ Админ","admin")]])
+       [button("🎟 Промокоды","admin_promos")],[button("🇷🇺 RU pinned","admin_ru")],
+       [button("◀️ Меню","menu")]])
 
 def admin_ru_panel():
     st=pinned_ru_health()
@@ -1663,12 +1585,6 @@ def handle_callback(q):
         clear_pending(uid)
     if data=="menu":return send(uid,"<b>VO1D_VPN</b>\nВыбери действие:",main_kb(uid))
     if data=="more":return more_menu(uid)
-    if data=="admin_appkeys" and uid==ADMIN_ID:return admin_app_keys()
-    if data.startswith("admin_appkey:") and uid==ADMIN_ID:
-        try:
-            days=int(data.split(":",1)[1])
-            if days in APP_LICENSE_PLANS:return admin_issue_app_key(days)
-        except Exception:return
     if data=="balance_history":return balance_history(uid)
     if data=="sub_history":return subscription_history(uid)
     if data=="promo":return promo_prompt(uid)
