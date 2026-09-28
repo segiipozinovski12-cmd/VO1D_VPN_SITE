@@ -3,7 +3,7 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject private var model: AppViewModel
     @EnvironmentObject private var preferences: Preferences
-    @Environment(.vo1dReduceMotion) private var reduceMotion
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
 
     @State private var showAvatars = false
     @State private var showKey = false
