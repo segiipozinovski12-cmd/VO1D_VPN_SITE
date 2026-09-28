@@ -10,7 +10,7 @@ open VO1D_VPN_PREVIEW.xcodeproj
 
 Select **VO1D_VPN_PREVIEW**, choose an **iPhone Simulator**, and press **Run**. Requires Xcode with iOS 17 or newer and XcodeGen (`brew install xcodegen`).
 
-The first launch opens Home automatically. Connect takes about 840 ms. Demo ping and traffic are local simulations; no tunnel is installed. Log Out returns to an **Enter demo** button without requiring a key. Nickname, avatar, favorites, last manually selected location and preferences persist locally.
+The first launch opens Home automatically. Connect takes about 1.1–1.3 seconds so PREPARE, ROUTE and SECURE remain visible. Demo ping and traffic are local simulations; no tunnel is installed. Log Out returns to an **Enter demo** button without requiring a key. Nickname, avatar, favorites, last manually selected location and preferences persist locally.
 
 ## Validation
 
@@ -28,7 +28,7 @@ xcodebuild -project VO1D_VPN_PREVIEW.xcodeproj -scheme VO1D_VPN_PREVIEW \
 
 GitHub Actions selects an available iPhone automatically, runs unit and UI tests, and uploads screenshots and the `.xcresult` report as `VO1D-preview-validation`.
 
-The unit suite exercises cancellation, route switching, country-neutral Fastest selection, persistence and separation of session ticks from the app publisher. The UI journey covers launch, connect, disconnect, search, favorites, ping refresh, route switching, profile and settings.
+The unit suite exercises cancellation, reconnect, route switching, country-neutral Fastest selection, persistence and separation of session ticks from the app publisher. The UI journey covers launch, the connecting animation, connect, disconnect, search, favorites, ping refresh, route switching, profile and settings.
 
 Production builds remain in `../ios`. A physical iPhone uses API key activation, `NETunnelProviderManager`, Packet Tunnel and the existing pinned Xray package. Unsigned compile:
 
