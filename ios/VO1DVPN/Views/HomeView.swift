@@ -255,7 +255,8 @@ struct HomeView: View {
                     }
                 }
                 .buttonStyle(ScaleButtonStyle(scale: 0.92))
-                .accessibilityIdentifier("connection.toggle")
+                .accessibilityIdentifier("connection.control")
+                .accessibilityValue(statusTitle)
 
                 VStack(spacing: 4) {
                     Spacer()
@@ -271,6 +272,7 @@ struct HomeView: View {
                         .tracking(3.0)
                         .foregroundStyle(.white.opacity(0.92))
                         .contentTransition(.opacity)
+                    .accessibilityIdentifier("connection.status")
 
                     Text(
                         model.isConnected
