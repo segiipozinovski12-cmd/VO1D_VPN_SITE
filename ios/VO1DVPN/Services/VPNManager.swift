@@ -105,8 +105,45 @@ final class VPNManager: ObservableObject {
         let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while status != .disconnected && status != .invalid {
             try Task.checkCancellation()
-            guard ContinuousClock.now < deadline else { throw APIClientError.server("The previous route is still closing. Please try again.") }
+            guard ContinuousClock.now < deadline else {
+                throw APIClientError.server("The previous route is still closing. Please try again.")
+            }
             try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    /// A tunnel that enters connecting/reasserting and then falls back to
+    /// disconnected has already failed. Surface that immediately instead of
+    /// leaving the UI in SECURING until the full timeout expires.
+    func waitUntilConnected() async throws {
+        let clock = ContinuousClock()
+        let started = clock.now
+        let deadline = started.advanced(by: .seconds(25))
+        let launchGrace = started.advanced(by: .seconds(1))
+        var sawProgress = status == .connecting || status == .reasserting
+
+        while status != .connected {
+            try Task.checkCancellation()
+
+            if status == .connecting || status == .reasserting {
+                sawProgress = true
+            }
+
+            if status == .disconnected || status == .invalid {
+                if sawProgress {
+                    throw APIClientError.server("The VPN tunnel stopped before the connection was established.")
+                }
+
+                if clock.now >= launchGrace {
+                    throw APIClientError.server("The VPN tunnel did not start. Please try again.")
+                }
+            }
+
+            guard clock.now < deadline else {
+                throw APIClientError.server("Connection timed out. Please try another location.")
+            }
+
+            try await Task.sleep(for: .milliseconds(100))
         }
     }
 
