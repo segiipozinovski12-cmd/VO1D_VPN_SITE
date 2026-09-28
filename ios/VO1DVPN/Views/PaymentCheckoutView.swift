@@ -16,6 +16,7 @@ struct PaymentCheckoutView: View {
     @State private var showBrowser = false
     @State private var pollTask: Task<Void, Never>?
     @State private var glow = false
+    @State private var legalDocument: LegalDocument?
 
     var body: some View {
         ZStack {
@@ -42,6 +43,15 @@ struct PaymentCheckoutView: View {
                 CheckoutSafariView(url: browserURL)
                     .ignoresSafeArea()
             }
+        }
+        .sheet(item: $legalDocument) { document in
+            NavigationStack {
+                LegalDocumentView(document: document)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(30)
+            .presentationBackground(.black)
         }
         .accessibilityIdentifier("payment.checkout")
     }
@@ -229,6 +239,60 @@ struct PaymentCheckoutView: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 12)
             .padding(.top, 2)
+
+            HStack(spacing: 10) {
+                Button {
+                    legalDocument = .privacy
+                } label: {
+                    Label(
+                        "Конфиденциальность",
+                        systemImage: "hand.raised"
+                    )
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(
+                        Color.white.opacity(0.035),
+                        in: Capsule()
+                    )
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(
+                                .white.opacity(0.08),
+                                lineWidth: 0.7
+                            )
+                    }
+                }
+                .buttonStyle(ScaleButtonStyle(scale: 0.97))
+                .accessibilityIdentifier("payment.privacy")
+
+                Button {
+                    legalDocument = .terms
+                } label: {
+                    Label(
+                        "Соглашение",
+                        systemImage: "doc.text"
+                    )
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(
+                        Color.white.opacity(0.035),
+                        in: Capsule()
+                    )
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(
+                                .white.opacity(0.08),
+                                lineWidth: 0.7
+                            )
+                    }
+                }
+                .buttonStyle(ScaleButtonStyle(scale: 0.97))
+                .accessibilityIdentifier("payment.terms")
+            }
         }
     }
 
