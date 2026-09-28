@@ -2,17 +2,19 @@ import SwiftUI
 
 enum VO1DStyle {
     // VO1D stays intentionally near-monochrome. Color is reserved for state and errors.
-    static let background = Color(red: 0.010, green: 0.011, blue: 0.014)
-    static let backgroundRaised = Color(red: 0.022, green: 0.024, blue: 0.029)
-    static let panel = Color(red: 0.050, green: 0.053, blue: 0.061)
-    static let raised = Color(red: 0.088, green: 0.091, blue: 0.102)
-    static let secondary = Color(white: 0.64)
+    static let background = Color(red: 0.003, green: 0.004, blue: 0.007)
+    static let backgroundRaised = Color(red: 0.010, green: 0.013, blue: 0.021)
+    static let panel = Color(red: 0.026, green: 0.033, blue: 0.046)
+    static let raised = Color(red: 0.060, green: 0.074, blue: 0.098)
+    static let secondary = Color(red: 0.61, green: 0.65, blue: 0.72)
 
-    static let ice = Color(white: 0.92)
-    static let pearl = Color(red: 0.965, green: 0.972, blue: 0.985)
-    static let frost = Color(red: 0.69, green: 0.76, blue: 0.86)
-    static let steel = Color(red: 0.28, green: 0.32, blue: 0.40)
-    static let graphite = Color(red: 0.085, green: 0.092, blue: 0.110)
+    static let ice = Color(red: 0.91, green: 0.94, blue: 0.99)
+    static let pearl = Color(red: 0.982, green: 0.988, blue: 1.000)
+    static let frost = Color(red: 0.60, green: 0.70, blue: 0.86)
+    static let steel = Color(red: 0.22, green: 0.29, blue: 0.42)
+    static let graphite = Color(red: 0.040, green: 0.052, blue: 0.078)
+    static let midnight = Color(red: 0.015, green: 0.025, blue: 0.050)
+    static let chrome = Color(red: 0.76, green: 0.82, blue: 0.94)
 
     // Functional colors only. Main connection states stay monochrome.
     static let green = Color(red: 0.52, green: 0.82, blue: 0.62)
