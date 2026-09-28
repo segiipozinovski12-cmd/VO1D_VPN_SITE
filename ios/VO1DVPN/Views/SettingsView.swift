@@ -147,7 +147,6 @@ struct SettingsView: View {
         }
         .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
-        .background { ReferenceBackdrop() }
         .animation(
             reduceMotion
             ? nil
