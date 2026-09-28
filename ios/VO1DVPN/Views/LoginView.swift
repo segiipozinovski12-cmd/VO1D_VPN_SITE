@@ -199,7 +199,7 @@ struct LoginView: View {
                             .font(VO1DStyle.mono(10))
                             .tracking(0.7)
 
-                        Text("@vo1d_root · \\(selectedPlanTitle)")
+                        Text("@vo1d_root · \(selectedPlanTitle)")
                             .font(.caption)
                             .foregroundStyle(.black.opacity(0.62))
                     }
@@ -276,7 +276,7 @@ struct LoginView: View {
             }
         }
         .buttonStyle(ScaleButtonStyle())
-        .accessibilityIdentifier("plan.\\(plan.days)")
+        .accessibilityIdentifier("plan.\(plan.days)")
     }
 
     private var keySection: some View {
@@ -413,7 +413,7 @@ struct LoginView: View {
         components?.queryItems = [
             URLQueryItem(
                 name: "text",
-                value: "Хочу купить VO1D_VPN: \\(plan.title), \\(plan.price). Нужен ключ для iPhone."
+                value: "Хочу купить VO1D_VPN: \(plan.title), \(plan.price). Нужен ключ для iPhone."
             )
         ]
 
