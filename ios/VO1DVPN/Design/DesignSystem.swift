@@ -1,19 +1,21 @@
 import SwiftUI
 
 enum VO1DStyle {
-    static let background = Color(red: 0.014, green: 0.017, blue: 0.024)
-    static let backgroundRaised = Color(red: 0.025, green: 0.031, blue: 0.043)
-    static let panel = Color(red: 0.055, green: 0.064, blue: 0.079)
-    static let raised = Color(red: 0.092, green: 0.105, blue: 0.127)
-    static let secondary = Color(red: 0.62, green: 0.65, blue: 0.70)
+    // VO1D stays intentionally near-monochrome. Color is reserved for state and errors.
+    static let background = Color(red: 0.010, green: 0.011, blue: 0.014)
+    static let backgroundRaised = Color(red: 0.022, green: 0.024, blue: 0.029)
+    static let panel = Color(red: 0.050, green: 0.053, blue: 0.061)
+    static let raised = Color(red: 0.088, green: 0.091, blue: 0.102)
+    static let secondary = Color(white: 0.64)
 
-    // Muted, deep accents. They are intentionally not neon.
-    static let ice = Color(red: 0.58, green: 0.76, blue: 0.82)
-    static let teal = Color(red: 0.34, green: 0.66, blue: 0.61)
-    static let violet = Color(red: 0.36, green: 0.34, blue: 0.55)
-    static let green = Color(red: 0.49, green: 0.84, blue: 0.63)
-    static let amber = Color(red: 0.88, green: 0.71, blue: 0.40)
-    static let red = Color(red: 0.88, green: 0.42, blue: 0.45)
+    static let ice = Color(white: 0.92)
+    static let teal = Color(white: 0.72)
+    static let violet = Color(white: 0.54)
+
+    // Functional colors only.
+    static let green = Color(red: 0.52, green: 0.82, blue: 0.62)
+    static let amber = Color(red: 0.87, green: 0.70, blue: 0.42)
+    static let red = Color(red: 0.88, green: 0.44, blue: 0.46)
 
     static func latencyColor(_ ping: Int?) -> Color {
         guard let ping else { return secondary }
@@ -30,7 +32,9 @@ enum VO1DStyle {
     }
 }
 
-private struct MotionKey: EnvironmentKey { static let defaultValue = false }
+private struct MotionKey: EnvironmentKey {
+    static let defaultValue = false
+}
 
 extension EnvironmentValues {
     var vo1dReduceMotion: Bool {
@@ -45,24 +49,24 @@ struct DeepSpaceBackdrop: View {
             VO1DStyle.background
 
             RadialGradient(
-                colors: [VO1DStyle.violet.opacity(0.16), .clear],
-                center: UnitPoint(x: 0.12, y: 0.08),
+                colors: [.white.opacity(0.035), .clear],
+                center: UnitPoint(x: 0.16, y: 0.05),
                 startRadius: 0,
-                endRadius: 420
+                endRadius: 410
             )
 
             RadialGradient(
-                colors: [VO1DStyle.teal.opacity(0.10), .clear],
-                center: UnitPoint(x: 0.88, y: 0.30),
+                colors: [.white.opacity(0.020), .clear],
+                center: UnitPoint(x: 0.88, y: 0.32),
                 startRadius: 0,
-                endRadius: 360
+                endRadius: 350
             )
 
             LinearGradient(
                 colors: [
-                    .white.opacity(0.018),
+                    .white.opacity(0.010),
                     .clear,
-                    Color.black.opacity(0.20)
+                    Color.black.opacity(0.30)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -92,8 +96,9 @@ struct Surface: ViewModifier {
                 shape.fill(
                     LinearGradient(
                         colors: [
-                            highlighted ? VO1DStyle.raised.opacity(0.78) : VO1DStyle.panel.opacity(0.68),
-                            VO1DStyle.backgroundRaised.opacity(0.54)
+                            .white.opacity(highlighted ? 0.070 : 0.038),
+                            VO1DStyle.panel.opacity(highlighted ? 0.78 : 0.64),
+                            VO1DStyle.backgroundRaised.opacity(0.72)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -105,9 +110,9 @@ struct Surface: ViewModifier {
                     .fill(
                         LinearGradient(
                             colors: [
-                                .white.opacity(highlighted ? 0.075 : 0.048),
+                                .white.opacity(highlighted ? 0.080 : 0.046),
                                 .clear,
-                                VO1DStyle.ice.opacity(highlighted ? 0.045 : 0.018)
+                                .black.opacity(0.050)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -120,9 +125,9 @@ struct Surface: ViewModifier {
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                .white.opacity(highlighted ? 0.28 : 0.14),
-                                .white.opacity(0.055),
-                                VO1DStyle.ice.opacity(highlighted ? 0.12 : 0.035)
+                                .white.opacity(highlighted ? 0.30 : 0.15),
+                                .white.opacity(0.060),
+                                .white.opacity(highlighted ? 0.12 : 0.030)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -132,8 +137,8 @@ struct Surface: ViewModifier {
                     .allowsHitTesting(false)
             }
             .shadow(
-                color: .black.opacity(highlighted ? 0.24 : 0.15),
-                radius: highlighted ? 15 : 8,
+                color: .black.opacity(highlighted ? 0.28 : 0.17),
+                radius: highlighted ? 16 : 9,
                 y: highlighted ? 8 : 4
             )
     }
@@ -156,8 +161,9 @@ struct GlassCircle: ViewModifier {
                 Circle().fill(
                     LinearGradient(
                         colors: [
-                            .white.opacity(highlighted ? 0.12 : 0.075),
-                            VO1DStyle.backgroundRaised.opacity(0.72)
+                            .white.opacity(highlighted ? 0.14 : 0.075),
+                            VO1DStyle.backgroundRaised.opacity(0.82),
+                            .black.opacity(0.18)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -168,7 +174,7 @@ struct GlassCircle: ViewModifier {
                 Circle()
                     .strokeBorder(
                         LinearGradient(
-                            colors: [.white.opacity(0.22), .white.opacity(0.045)],
+                            colors: [.white.opacity(0.24), .white.opacity(0.045)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -176,7 +182,7 @@ struct GlassCircle: ViewModifier {
                     )
                     .allowsHitTesting(false)
             }
-            .shadow(color: .black.opacity(0.26), radius: 12, y: 7)
+            .shadow(color: .black.opacity(0.28), radius: 12, y: 7)
     }
 }
 
@@ -210,7 +216,7 @@ struct StatusPill: View {
             Circle()
                 .fill(connected ? VO1DStyle.green : VO1DStyle.secondary)
                 .frame(width: 5, height: 5)
-                .shadow(color: connected ? VO1DStyle.green.opacity(0.55) : .clear, radius: 5)
+                .shadow(color: connected ? VO1DStyle.green.opacity(0.42) : .clear, radius: 4)
 
             Text(text)
                 .font(VO1DStyle.mono(9))
@@ -233,9 +239,11 @@ struct PageHeading: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Eyebrow(text: "VO1D / \(number)")
+
             Text(title)
                 .font(.system(size: 34, weight: .semibold))
                 .tracking(-1.2)
+
             Text(subtitle)
                 .font(.subheadline)
                 .foregroundStyle(VO1DStyle.secondary)
@@ -251,9 +259,13 @@ struct DetailRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 20) {
-            Text(title).foregroundStyle(VO1DStyle.secondary)
+            Text(title)
+                .foregroundStyle(VO1DStyle.secondary)
+
             Spacer(minLength: 4)
-            Text(value).multilineTextAlignment(.trailing)
+
+            Text(value)
+                .multilineTextAlignment(.trailing)
         }
         .font(.subheadline)
         .padding(.vertical, 12)
@@ -265,7 +277,11 @@ struct DividerLine: View {
         Rectangle()
             .fill(
                 LinearGradient(
-                    colors: [.white.opacity(0.03), .white.opacity(0.10), .white.opacity(0.03)],
+                    colors: [
+                        .white.opacity(0.025),
+                        .white.opacity(0.095),
+                        .white.opacity(0.025)
+                    ],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
