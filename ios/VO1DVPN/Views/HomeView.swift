@@ -274,7 +274,7 @@ private struct ConnectionStageRail: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
-                .background(.ultraThinMaterial, in: Capsule())
+                .vo1dSystemGlass(in: Capsule())
                 .background {
                     if index == activeIndex {
                         Capsule()
@@ -426,7 +426,7 @@ private struct SelectedRouteCard: View {
                     Text(route?.flag ?? "◎")
                         .font(.system(size: 30))
                         .frame(width: 48, height: 48)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .vo1dSystemGlass(in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 15, style: .continuous)
                                 .strokeBorder(.white.opacity(0.09), lineWidth: 1)
