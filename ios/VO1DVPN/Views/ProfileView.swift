@@ -14,8 +14,16 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 22) {
-                PageHeading(number: "03", title: "Your space", subtitle: "A connection that feels like yours.")
-                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.00)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PROFILE")
+                        .font(.system(size: 28, weight: .semibold))
+                    Text("Your VO1D identity and access")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.44))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 16)
+                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.00)
                 identity
                     .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.05)
                 subscription
@@ -46,7 +54,7 @@ struct ProfileView: View {
                 }
             }.padding(.horizontal, 22).padding(.bottom, 28)
         }
-        .background { DeepSpaceBackdrop().ignoresSafeArea() }.scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
+        .background { ReferenceBackdrop() }.scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
         .navigationDestination(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showAvatars) { avatarPicker }
         .sheet(isPresented: $showKey) { ChangeKeyView() }
