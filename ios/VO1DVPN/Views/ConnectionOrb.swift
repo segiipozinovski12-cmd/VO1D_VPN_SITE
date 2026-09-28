@@ -121,11 +121,19 @@ struct ConnectionOrb: View {
                     .padding(24)
                     .id("ignition-\(phase.rawValue)")
             } else if connected {
-                ConnectedSweep(
-                    animated: motion,
-                    color: accent
-                )
-                .id("connected-sweep-\(motion)")
+                ZStack {
+                    ConnectedArrivalBurst(
+                        animated: motion,
+                        color: accent
+                    )
+                    .id("connected-arrival")
+
+                    ConnectedSweep(
+                        animated: motion,
+                        color: accent
+                    )
+                    .id("connected-sweep-\(motion)")
+                }
                 .padding(26)
             }
 
@@ -307,6 +315,43 @@ private struct BreathingHalo: View {
                 }
             }
             .allowsHitTesting(false)
+    }
+}
+
+
+private struct ConnectedArrivalBurst: View {
+    let animated: Bool
+    let color: Color
+
+    @State private var outerScale: CGFloat = 0.82
+    @State private var innerScale: CGFloat = 0.90
+    @State private var alpha = 0.0
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.white.opacity(alpha * 0.28), lineWidth: 1)
+                .scaleEffect(outerScale)
+
+            Circle()
+                .stroke(color.opacity(alpha * 0.22), lineWidth: 1.2)
+                .scaleEffect(innerScale)
+                .padding(18)
+        }
+        .onAppear {
+            guard animated else { return }
+
+            outerScale = 0.82
+            innerScale = 0.90
+            alpha = 0.9
+
+            withAnimation(.easeOut(duration: 0.72)) {
+                outerScale = 1.11
+                innerScale = 1.04
+                alpha = 0
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
