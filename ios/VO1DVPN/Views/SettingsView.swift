@@ -52,7 +52,7 @@ struct SettingsView: View {
                 }
             }.padding(22)
         }
-        .background(VO1DStyle.background).scrollIndicators(.hidden)
+        .background { DeepSpaceBackdrop().ignoresSafeArea() }.scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar).accessibilityIdentifier("settings.screen")
     }
     private func section<Content: View>(_ title: String, detail: String, @ViewBuilder content: () -> Content) -> some View {
