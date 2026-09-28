@@ -1,4 +1,4 @@
-import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, hashlib, hmac, mimetypes, ipaddress, uuid, socket, shutil, glob, base64
+import os, json, time, html, sqlite3, secrets, threading, urllib.request, urllib.parse, urllib.error, hashlib, hmac, mimetypes, ipaddress, uuid, socket, shutil, glob, base64
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -28,6 +28,19 @@ BOT_USERNAME=os.getenv("BOT_USERNAME","VO1D_VPNbot").lstrip("@")
 REFERRAL_REWARD_CENTS=max(0,int(os.getenv("REFERRAL_REWARD_CENTS","100")))
 PER_USER_KEYS=os.getenv("PER_USER_KEYS","0").strip().lower() in ("1","true","yes","on")
 XRAY_SYNC_SECRET=os.getenv("XRAY_SYNC_SECRET","").strip()
+
+ROLLYPAY_API_KEY=os.getenv("ROLLYPAY_API_KEY","").strip()
+ROLLYPAY_SIGNING_SECRET=os.getenv("ROLLYPAY_SIGNING_SECRET","").strip()
+ROLLYPAY_TERMINAL_ID=os.getenv(
+    "ROLLYPAY_TERMINAL_ID",
+    "f9099f0e-5245-477c-ad13-4934c5f2055e"
+).strip()
+ROLLYPAY_BASE_URL=os.getenv("ROLLYPAY_BASE_URL","https://rollypay.io").rstrip("/")
+ROLLYPAY_TEST=os.getenv("ROLLYPAY_TEST","0").strip().lower() in ("1","true","yes","on")
+ROLLYPAY_CALLBACK_URL=os.getenv(
+    "ROLLYPAY_CALLBACK_URL",
+    (PUBLIC_URL+"/api/rollypay/webhook") if PUBLIC_URL else ""
+).strip()
 
 ALERT_COOLDOWN_SECONDS=max(60,int(os.getenv("ALERT_COOLDOWN_SECONDS","1800")))
 PROCESS_STARTED_AT=int(time.time())
@@ -260,6 +273,32 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_app_embedded_licenses_plan
           ON app_embedded_licenses(plan_days,active,redeemed_user_id);
+        CREATE TABLE IF NOT EXISTS app_device_users(
+          device_hash TEXT PRIMARY KEY,
+          user_id INTEGER NOT NULL UNIQUE,
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS app_payment_orders(
+          order_id TEXT PRIMARY KEY,
+          poll_hash TEXT NOT NULL,
+          user_id INTEGER NOT NULL,
+          device_hash TEXT NOT NULL,
+          device_name TEXT NOT NULL DEFAULT '',
+          plan_days INTEGER NOT NULL,
+          amount_rub TEXT NOT NULL,
+          method TEXT NOT NULL,
+          rollypay_payment_id TEXT NOT NULL DEFAULT '',
+          pay_url TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'creating',
+          paid_at INTEGER NOT NULL DEFAULT 0,
+          granted_at INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_app_payment_orders_payment
+          ON app_payment_orders(rollypay_payment_id)
+          WHERE rollypay_payment_id<>'';
+        CREATE INDEX IF NOT EXISTS idx_app_payment_orders_user
+          ON app_payment_orders(user_id,created_at);
         CREATE TABLE IF NOT EXISTS meta(
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -873,6 +912,287 @@ def app_key_screen(uid,rotate=False):
       "Приложение само найдёт VO1D API. Не отправляй код другим людям. "
       "Если потеряешь — создай новый ключ в профиле.",
       [[button("🔄 Сбросить ключ","app_key_reset")],[button("◀️ Профиль","profile")]])
+
+
+def _rollypay_request(path,method="GET",payload=None):
+    if not ROLLYPAY_API_KEY:
+        raise RuntimeError("RollyPay API key is not configured")
+    url=ROLLYPAY_BASE_URL+path
+    body=None
+    headers={
+      "Accept":"application/json",
+      "X-API-Key":ROLLYPAY_API_KEY,
+      "X-Nonce":str(uuid.uuid4()),
+    }
+    if payload is not None:
+        body=json.dumps(payload,separators=(",",":")).encode()
+        headers["Content-Type"]="application/json"
+    req=urllib.request.Request(url,data=body,headers=headers,method=method)
+    try:
+        with urllib.request.urlopen(req,timeout=20) as response:
+            raw=response.read()
+            return json.loads(raw.decode() or "{}")
+    except urllib.error.HTTPError as e:
+        raw=e.read().decode(errors="replace")
+        try:
+            data=json.loads(raw or "{}")
+            message=data.get("message") or data.get("error") or raw
+        except Exception:
+            message=raw
+        raise RuntimeError("RollyPay: "+str(message or e.reason))
+    except Exception as e:
+        raise RuntimeError("RollyPay unavailable: "+str(e))
+
+def _rollypay_rate():
+    suffix=("?terminal_id="+urllib.parse.quote(ROLLYPAY_TERMINAL_ID)) if ROLLYPAY_TERMINAL_ID else ""
+    data=_rollypay_request("/api/v1/rate"+suffix)
+    rate=Decimal(str(data.get("rate","0")))
+    if rate<=0:
+        raise RuntimeError("RollyPay returned an invalid RUB rate")
+    return rate
+
+def _rollypay_plan_amount(days):
+    days=int(days)
+    plan=PLANS.get(days)
+    if not plan:
+        raise ValueError("bad_plan")
+    override=os.getenv(f"ROLLYPAY_PRICE_{days}_RUB","").strip().replace(",",".")
+    if override:
+        value=Decimal(override)
+    else:
+        value=(Decimal(int(plan["usd"]))/Decimal(100))*_rollypay_rate()
+    value=value.quantize(Decimal("0.01"),rounding=ROUND_HALF_UP)
+    if value<=0:
+        raise RuntimeError("RollyPay plan amount is invalid")
+    return value
+
+def _ensure_app_device_user(c,device_id,device_name=""):
+    device_id=str(device_id or "").strip()
+    if not device_id:
+        raise ValueError("device_required")
+    device_hash=_secret_hash("device:"+device_id)
+    mapped=c.execute(
+      "SELECT user_id FROM app_device_users WHERE device_hash=?",(device_hash,)
+    ).fetchone()
+    if mapped:
+        row=c.execute("SELECT * FROM users WHERE id=?",(int(mapped["user_id"]),)).fetchone()
+        if row:return row,device_hash
+
+    minimum=c.execute("SELECT COALESCE(MIN(id),0) AS min_id FROM users").fetchone()
+    uid=min(-2_000_001,int(minimum["min_id"] or 0)-1)
+    created=now()
+    c.execute("""INSERT INTO users(
+      id,username,first_name,joined_at,last_seen,trial_claimed,sub_until,banned,
+      balance_cents,sub_token
+    ) VALUES(?,?,?,?,?,1,0,0,0,?)""",
+      (uid,f"ios_device_{abs(uid)}","VO1D iPhone",created,created,secrets.token_urlsafe(24)))
+    c.execute("""UPDATE users
+      SET vpn_uuid=?,notifications=0,welcome_done=1,app_key_created_at=?
+      WHERE id=?""",(str(uuid.uuid4()),created,uid))
+    c.execute("""INSERT INTO app_device_users(device_hash,user_id,created_at)
+      VALUES(?,?,?)""",(device_hash,uid,created))
+    return c.execute("SELECT * FROM users WHERE id=?",(uid,)).fetchone(),device_hash
+
+def _grant_app_payment(c,order,payment_id=""):
+    if int(order["granted_at"] or 0)>0:
+        return c.execute("SELECT * FROM users WHERE id=?",(int(order["user_id"]),)).fetchone()
+
+    row=c.execute("SELECT * FROM users WHERE id=?",(int(order["user_id"]),)).fetchone()
+    if not row:
+        raise RuntimeError("payment user missing")
+    base=max(now(),int(row["sub_until"] or 0))
+    end=base+int(order["plan_days"])*86400
+    c.execute("UPDATE users SET sub_until=?,last_seen=? WHERE id=?",(end,now(),int(row["id"])))
+    c.execute("""INSERT INTO subscription_events(user_id,days,source,created_at,sub_until)
+      VALUES(?,?,?,?,?)""",(
+        int(row["id"]),int(order["plan_days"]),
+        "rollypay:"+str(payment_id or order["rollypay_payment_id"] or order["order_id"]),
+        now(),end
+    ))
+    c.execute("""UPDATE app_payment_orders
+      SET status='paid',paid_at=?,granted_at=?
+      WHERE order_id=?""",(now(),now(),str(order["order_id"])))
+    return c.execute("SELECT * FROM users WHERE id=?",(int(row["id"]),)).fetchone()
+
+def create_app_payment(plan_days,method,device_id,device_name=""):
+    days=int(plan_days or 0)
+    if days not in PLANS:
+        return None,"bad_plan"
+    method=str(method or "").strip().lower()
+    if method not in ("sbp","crypto","xrocket"):
+        return None,"bad_method"
+    if not ROLLYPAY_API_KEY:
+        return None,"not_configured"
+
+    amount=_rollypay_plan_amount(days)
+    order_id="vo1d_"+uuid.uuid4().hex
+    poll_token=secrets.token_urlsafe(32)
+    poll_hash=_secret_hash(poll_token)
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        row,device_hash=_ensure_app_device_user(c,device_id,device_name)
+        c.execute("""INSERT INTO app_payment_orders(
+          order_id,poll_hash,user_id,device_hash,device_name,plan_days,amount_rub,
+          method,status,created_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?)""",(
+          order_id,poll_hash,int(row["id"]),device_hash,str(device_name or "")[:80],
+          days,f"{amount:.2f}",method,"creating",now()
+        ))
+
+    payload={
+      "amount":f"{amount:.2f}",
+      "payment_currency":"RUB",
+      "order_id":order_id,
+      "description":f"VO1D_VPN · {PLANS[days]['title']}",
+      "customer_id":f"ios_{abs(int(row['id']))}",
+      "metadata":{
+        "vo1d_order_id":order_id,
+        "plan_days":days,
+        "requested_method":method,
+      },
+      "test":bool(ROLLYPAY_TEST),
+    }
+    if ROLLYPAY_TERMINAL_ID:
+        payload["terminal_id"]=ROLLYPAY_TERMINAL_ID
+    if method in ("sbp","crypto"):
+        payload["payment_method"]=method
+
+    try:
+        remote=_rollypay_request("/api/v1/payments","POST",payload)
+        payment_id=str(remote.get("payment_id") or "").strip()
+        pay_url=str(remote.get("pay_url") or "").strip()
+        status=str(remote.get("status") or "created").strip().lower()
+        if not payment_id or not pay_url:
+            raise RuntimeError("RollyPay did not return payment_id/pay_url")
+        with db() as c:
+            c.execute("""UPDATE app_payment_orders
+              SET rollypay_payment_id=?,pay_url=?,status=?
+              WHERE order_id=?""",(payment_id,pay_url,status,order_id))
+        return {
+          "order_id":order_id,
+          "poll_token":poll_token,
+          "payment_id":payment_id,
+          "pay_url":pay_url,
+          "status":status,
+          "amount_rub":f"{amount:.2f}",
+          "plan_days":days,
+          "method":method,
+          "test":bool(ROLLYPAY_TEST),
+        },"ok"
+    except Exception as e:
+        with db() as c:
+            c.execute("UPDATE app_payment_orders SET status='error' WHERE order_id=?",(order_id,))
+        return {"message":str(e)},"provider_error"
+
+def _sync_app_payment(order_id):
+    with db() as c:
+        order=c.execute("SELECT * FROM app_payment_orders WHERE order_id=?",(str(order_id),)).fetchone()
+    if not order:return None
+    if order["status"] in ("paid","expired","canceled","refunded","chargeback"):
+        return order
+    payment_id=str(order["rollypay_payment_id"] or "")
+    if not payment_id or not ROLLYPAY_API_KEY:
+        return order
+    try:
+        remote=_rollypay_request("/api/v1/payments/"+urllib.parse.quote(payment_id))
+        status=str(remote.get("status") or order["status"]).lower()
+        with db() as c:
+            c.execute("BEGIN IMMEDIATE")
+            current=c.execute("SELECT * FROM app_payment_orders WHERE order_id=?",(str(order_id),)).fetchone()
+            if not current:return None
+            if status=="paid":
+                _grant_app_payment(c,current,payment_id)
+            else:
+                c.execute("UPDATE app_payment_orders SET status=? WHERE order_id=?",(status,str(order_id)))
+            return c.execute("SELECT * FROM app_payment_orders WHERE order_id=?",(str(order_id),)).fetchone()
+    except Exception:
+        return order
+
+def app_payment_status(order_id,poll_token,device_id="",device_name=""):
+    order_id=str(order_id or "").strip()
+    poll_token=str(poll_token or "").strip()
+    if not order_id or not poll_token:return None,"invalid"
+    with db() as c:
+        order=c.execute("SELECT * FROM app_payment_orders WHERE order_id=?",(order_id,)).fetchone()
+    if not order or not hmac.compare_digest(str(order["poll_hash"]),_secret_hash(poll_token)):
+        return None,"invalid"
+    if str(order["device_hash"])!=_secret_hash("device:"+str(device_id or "").strip()):
+        return None,"invalid"
+
+    order=_sync_app_payment(order_id) or order
+    payload={
+      "ok":True,
+      "order_id":order_id,
+      "status":str(order["status"]),
+      "amount_rub":str(order["amount_rub"]),
+      "plan_days":int(order["plan_days"]),
+      "method":str(order["method"]),
+    }
+    if order["status"]=="paid":
+        with db() as c:
+            row=c.execute("SELECT * FROM users WHERE id=?",(int(order["user_id"]),)).fetchone()
+            token,row,status=_open_app_session(c,row,str(device_id or ""),str(device_name or ""))
+        if status=="ok":
+            payload.update({"token":token,**app_user_payload(row)})
+    return payload,"ok"
+
+def handle_rollypay_webhook(raw_body,timestamp,signature):
+    if not ROLLYPAY_SIGNING_SECRET:
+        return 503,{"ok":False,"error":"rollypay_signing_secret_missing"}
+    timestamp=str(timestamp or "").strip()
+    signature=str(signature or "").strip()
+    if not timestamp or not signature:
+        return 403,{"ok":False,"error":"signature_missing"}
+    try:
+        if abs(now()-int(timestamp))>600:
+            return 403,{"ok":False,"error":"stale_webhook"}
+    except Exception:
+        return 403,{"ok":False,"error":"bad_timestamp"}
+
+    expected=hmac.new(
+      ROLLYPAY_SIGNING_SECRET.encode(),
+      timestamp.encode()+b"."+raw_body,
+      hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected,signature):
+        return 403,{"ok":False,"error":"bad_signature"}
+
+    try:event=json.loads(raw_body.decode() or "{}")
+    except Exception:return 400,{"ok":False,"error":"bad_json"}
+
+    order_id=str(event.get("order_id") or "").strip()
+    payment_id=str(event.get("payment_id") or "").strip()
+    status=str(event.get("status") or "").strip().lower()
+    currency=str(event.get("currency") or event.get("payment_currency") or "").strip().upper()
+    amount=str(event.get("amount") or "").strip()
+    if not order_id or not payment_id or not status:
+        return 400,{"ok":False,"error":"missing_fields"}
+
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        order=c.execute("SELECT * FROM app_payment_orders WHERE order_id=?",(order_id,)).fetchone()
+        if not order:
+            return 200,{"ok":True,"ignored":True}
+        known=str(order["rollypay_payment_id"] or "")
+        if known and known!=payment_id:
+            return 409,{"ok":False,"error":"payment_mismatch"}
+        if currency and currency!="RUB":
+            return 409,{"ok":False,"error":"currency_mismatch"}
+        if amount:
+            try:
+                if Decimal(amount).quantize(Decimal("0.01"))!=Decimal(str(order["amount_rub"])).quantize(Decimal("0.01")):
+                    return 409,{"ok":False,"error":"amount_mismatch"}
+            except Exception:
+                return 400,{"ok":False,"error":"bad_amount"}
+
+        if status=="paid":
+            _grant_app_payment(c,order,payment_id)
+        else:
+            c.execute("""UPDATE app_payment_orders
+              SET rollypay_payment_id=CASE WHEN rollypay_payment_id='' THEN ? ELSE rollypay_payment_id END,
+                  status=?
+              WHERE order_id=?""",(payment_id,status,order_id))
+    return 200,{"ok":True}
 
 def _create_app_only_user(c,key_row):
     key_id=int(key_row["id"])
@@ -2209,10 +2529,16 @@ class Web(BaseHTTPRequestHandler):
     def reply_json(self,code,obj):
         self.reply(code,json.dumps(obj,ensure_ascii=False,separators=(",",":")),"application/json; charset=utf-8")
 
+    def read_body_bytes(self,max_size=262144):
+        try:
+            size=min(int(self.headers.get("Content-Length","0") or 0),int(max_size))
+            return self.rfile.read(size) if size else b""
+        except Exception:
+            return b""
+
     def read_json(self):
         try:
-            size=min(int(self.headers.get("Content-Length","0") or 0),65536)
-            raw=self.rfile.read(size) if size else b"{}"
+            raw=self.read_body_bytes(65536) or b"{}"
             return json.loads(raw.decode() or "{}")
         except Exception:
             return {}
@@ -2415,8 +2741,52 @@ class Web(BaseHTTPRequestHandler):
         parsed=urllib.parse.urlparse(self.path)
         path=parsed.path
 
-        if path not in ("/api/trial","/api/invoice","/api/admin/promo","/api/admin/grant","/api/app/activate","/api/app/logout"):
+        if path not in (
+          "/api/trial","/api/invoice","/api/admin/promo","/api/admin/grant",
+          "/api/app/activate","/api/app/logout",
+          "/api/app/payments/create","/api/app/payments/status",
+          "/api/rollypay/webhook"
+        ):
             return self.reply_json(404,{"ok":False,"error":"not_found"})
+
+        if path=="/api/rollypay/webhook":
+            raw=self.read_body_bytes(262144)
+            code,payload=handle_rollypay_webhook(
+              raw,
+              self.headers.get("X-Timestamp",""),
+              self.headers.get("X-Signature","")
+            )
+            return self.reply_json(code,payload)
+
+        if path=="/api/app/payments/create":
+            body=self.read_json()
+            result,status=create_app_payment(
+              body.get("plan_days",0),
+              body.get("method",""),
+              body.get("device_id",""),
+              body.get("device_name","")
+            )
+            if status=="bad_plan":
+                return self.reply_json(400,{"ok":False,"error":"bad_plan","message":"Тариф не найден."})
+            if status=="bad_method":
+                return self.reply_json(400,{"ok":False,"error":"bad_method","message":"Способ оплаты недоступен."})
+            if status=="not_configured":
+                return self.reply_json(503,{"ok":False,"error":"payments_not_configured","message":"Оплата RollyPay ещё не активирована."})
+            if status=="provider_error":
+                return self.reply_json(502,{"ok":False,"error":"payment_provider_error","message":result.get("message","RollyPay unavailable.")})
+            return self.reply_json(200,{"ok":True,**result})
+
+        if path=="/api/app/payments/status":
+            body=self.read_json()
+            result,status=app_payment_status(
+              body.get("order_id",""),
+              body.get("poll_token",""),
+              body.get("device_id",""),
+              body.get("device_name","")
+            )
+            if status!="ok":
+                return self.reply_json(404,{"ok":False,"error":"payment_not_found"})
+            return self.reply_json(200,result)
 
         if path=="/api/app/activate":
             body=self.read_json()
