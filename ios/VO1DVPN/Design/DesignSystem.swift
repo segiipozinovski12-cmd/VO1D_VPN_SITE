@@ -117,7 +117,7 @@ private struct AdaptiveSystemGlass<S: Shape>: ViewModifier {
         }
         .overlay {
             shape
-                .strokeBorder(
+                .stroke(
                     LinearGradient(
                         colors: [
                             .white.opacity(reduceTransparency ? 0.10 : 0.22),
