@@ -10,7 +10,7 @@ final class PreviewUITests: XCTestCase {
             "-vo1d.preview.autoLogin",
             "-vo1d.autoconnect", "NO",
             "-vo1d.autoFastest", "YES",
-            "-vo1d.reduceAnimations", "NO"
+            "-vo1d.reduceAnimations", "YES"
         ]
         app.launch()
 
