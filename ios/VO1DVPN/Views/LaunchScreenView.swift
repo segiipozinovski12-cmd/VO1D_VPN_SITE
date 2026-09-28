@@ -102,7 +102,7 @@ struct LaunchScreenView: View {
                     .tracking(1.4)
                     .foregroundStyle(
                         step >= 4
-                        ? VO1DStyle.green
+                        ? VO1DStyle.pearl
                         : VO1DStyle.secondary
                     )
                     .contentTransition(.opacity)
@@ -115,14 +115,14 @@ struct LaunchScreenView: View {
                     Circle()
                         .fill(
                             step >= 4
-                            ? VO1DStyle.green
+                            ? VO1DStyle.pearl
                             : .white.opacity(0.28)
                         )
                         .frame(width: 5, height: 5)
                         .shadow(
                             color:
                                 step >= 4
-                                ? VO1DStyle.green.opacity(0.45)
+                                ? VO1DStyle.pearl.opacity(0.32)
                                 : .clear,
                             radius: 5
                         )
@@ -137,7 +137,7 @@ struct LaunchScreenView: View {
                 }
                 .foregroundStyle(
                     step >= 4
-                    ? VO1DStyle.green
+                    ? VO1DStyle.pearl
                     : .white.opacity(0.38)
                 )
                 .padding(.bottom, 34)
@@ -347,7 +347,7 @@ struct LaunchScreenView: View {
                         .fill(
                             active
                             ? (index == 3
-                               ? VO1DStyle.green
+                               ? VO1DStyle.pearl
                                : .white.opacity(0.82))
                             : .white.opacity(0.12)
                         )
