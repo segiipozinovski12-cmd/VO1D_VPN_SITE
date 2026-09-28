@@ -33,7 +33,7 @@ private struct RootView: View {
 
     var body: some View {
         ZStack {
-            DeepSpaceBackdrop().ignoresSafeArea()
+            ReferenceBackdrop()
 
             if splashFinished {
                 Group {
