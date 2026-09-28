@@ -192,13 +192,6 @@ struct AppShell: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .background(
-                .ultraThinMaterial,
-                in: RoundedRectangle(
-                    cornerRadius: 24,
-                    style: .continuous
-                )
-            )
         }
         .overlay {
             RoundedRectangle(
