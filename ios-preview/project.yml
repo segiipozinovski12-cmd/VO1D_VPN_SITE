@@ -17,15 +17,6 @@ targets:
         excludes:
           - Resources/Info.plist
           - Resources/VO1D_VPN.entitlements
-          - Resources/IconSource
-    preBuildScripts:
-      - name: Generate VO1D App Icon
-        script: |
-          bash "$SRCROOT/../ios/Scripts/generate_app_icon.sh"
-        inputFiles:
-          - "$SRCROOT/../ios/VO1DVPN/Resources/IconSource/AppIcon.png.b64.part00"
-        outputFiles:
-          - "$SRCROOT/../ios/VO1DVPN/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
     info:
       path: PreviewInfo.plist
       properties:
