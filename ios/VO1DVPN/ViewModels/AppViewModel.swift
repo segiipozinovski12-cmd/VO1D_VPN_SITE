@@ -63,16 +63,35 @@ final class AppViewModel: ObservableObject {
         didBootstrap = true
         defer { isBootstrapping = false }
         #if targetEnvironment(simulator)
-        setupSimulatorDemo()
+        let autoLoginPreview = ProcessInfo.processInfo.arguments.contains(
+            "-vo1d.preview.autoLogin"
+        )
+
         try? await vpn.prepare()
-        await pings.refresh()
-        chooseInitialServer()
+
+        if autoLoginPreview {
+            setupSimulatorDemo()
+            await pings.refresh()
+            chooseInitialServer()
+        } else {
+            // Match a real fresh install: first launch opens the plan/key screen.
+            sessionToken = nil
+            account = nil
+            servers = []
+            selectedServer = nil
+            activeServer = nil
+        }
         #else
         sessionToken = KeychainStore.loadToken()
         do { try await vpn.prepare() } catch { report(error) }
         if sessionToken != nil { await refresh() }
         #endif
-        pings.start(live: preferences.livePing && foreground)
+        pings.start(
+            live:
+                preferences.livePing &&
+                foreground &&
+                sessionToken != nil
+        )
         if preferences.autoConnect, account?.active == true, !vpn.isConnected, !vpn.isBusy {
             toggleConnection()
         }
