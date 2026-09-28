@@ -3,13 +3,15 @@ import SwiftUI
 enum AppTab: String, CaseIterable {
     case home = "Home"
     case locations = "Locations"
+    case stats = "Stats"
     case profile = "Profile"
 
     var icon: String {
         switch self {
-        case .home: return "circle.hexagongrid"
-        case .locations: return "globe.europe.africa"
-        case .profile: return "person.crop.circle"
+        case .home: return "house.fill"
+        case .locations: return "location.circle"
+        case .stats: return "chart.bar.xaxis"
+        case .profile: return "person"
         }
     }
 }
@@ -20,12 +22,11 @@ struct AppShell: View {
 
     @State private var tab: AppTab = .home
     @State private var direction: CGFloat = 1
-    @Namespace private var tabSelection
 
     var body: some View {
         NavigationStack {
             ZStack {
-                DeepSpaceBackdrop().ignoresSafeArea()
+                ReferenceBackdrop()
 
                 Group {
                     switch tab {
@@ -34,8 +35,13 @@ struct AppShell: View {
                             openLocations: { select(.locations) },
                             openProfile: { select(.profile) }
                         )
+
                     case .locations:
                         ServersView()
+
+                    case .stats:
+                        StatsView()
+
                     case .profile:
                         ProfileView()
                     }
@@ -44,97 +50,120 @@ struct AppShell: View {
                 .transition(tabTransition)
                 .toolbar(.hidden, for: .navigationBar)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    tabBar
+                    referenceTabBar
                 }
             }
         }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.30), value: tab)
+        .animation(
+            reduceMotion
+            ? nil
+            : .snappy(duration: 0.30),
+            value: tab
+        )
     }
 
-    private var tabBar: some View {
-        HStack(spacing: 4) {
+    private var referenceTabBar: some View {
+        HStack(spacing: 0) {
             ForEach(AppTab.allCases, id: \.self) { item in
                 Button {
                     select(item)
                 } label: {
-                    HStack(spacing: 7) {
+                    VStack(spacing: 6) {
                         Image(systemName: item.icon)
-                            .font(.system(size: 15, weight: tab == item ? .semibold : .regular))
+                            .font(
+                                .system(
+                                    size: 18,
+                                    weight:
+                                        tab == item
+                                        ? .semibold
+                                        : .regular
+                                )
+                            )
                             .symbolRenderingMode(.hierarchical)
-                            .symbolEffect(.bounce, value: tab == item)
 
                         Text(item.rawValue)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                     }
-                    .foregroundStyle(tab == item ? .white : VO1DStyle.secondary)
+                    .foregroundStyle(
+                        tab == item
+                        ? .white
+                        : .white.opacity(0.34)
+                    )
                     .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .background {
-                        if tab == item {
-                            Color.clear
-                                .vo1dSystemGlass(
-                                    in: Capsule(),
-                                    interactive: true
-                                )
-                                .background {
-                                    Capsule()
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [
-                                                    .white.opacity(0.105),
-                                                    .white.opacity(0.050),
-                                                    .white.opacity(0.025)
-                                                ],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            )
-                                        )
-                                }
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(
-                                            .white.opacity(0.12),
-                                            lineWidth: 1
-                                        )
-                                )
-                                .matchedGeometryEffect(
-                                    id: "tab",
-                                    in: tabSelection
-                                )
-                        }
-                    }
+                    .frame(height: 60)
+                    .contentShape(Rectangle())
                 }
-                .buttonStyle(ScaleButtonStyle(scale: 0.95))
-                .accessibilityIdentifier("tab.\(item.rawValue.lowercased())")
-                .accessibilityAddTraits(tab == item ? .isSelected : [])
+                .buttonStyle(ScaleButtonStyle(scale: 0.94))
+                .accessibilityIdentifier(
+                    "tab.\(item.rawValue.lowercased())"
+                )
+                .accessibilityAddTraits(
+                    tab == item
+                    ? .isSelected
+                    : []
+                )
             }
         }
-        .padding(6)
-        .vo1dSurface(radius: 32)
-        .padding(.horizontal, 20)
-        .padding(.top, 9)
-        .padding(.bottom, 5)
-        .background(
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background {
+            RoundedRectangle(
+                cornerRadius: 24,
+                style: .continuous
+            )
+            .fill(Color(white: 0.035).opacity(0.96))
+            .background(
+                .ultraThinMaterial,
+                in: RoundedRectangle(
+                    cornerRadius: 24,
+                    style: .continuous
+                )
+            )
+        }
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: 24,
+                style: .continuous
+            )
+            .strokeBorder(
+                LinearGradient(
+                    colors: [
+                        .white.opacity(0.12),
+                        .white.opacity(0.035)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.8
+            )
+        }
+        .shadow(color: .black.opacity(0.55), radius: 20, y: 10)
+        .padding(.horizontal, 18)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .background {
             LinearGradient(
-                colors: [.clear, VO1DStyle.background.opacity(0.78), VO1DStyle.background],
+                colors: [
+                    .clear,
+                    .black.opacity(0.58),
+                    .black
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-        )
+            .ignoresSafeArea(edges: .bottom)
+        }
     }
 
     private var tabTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
 
-        let insertionX: CGFloat = direction > 0 ? 24 : -24
-        let removalX: CGFloat = direction > 0 ? -16 : 16
-
         return .asymmetric(
             insertion:
-                .offset(x: insertionX, y: 0)
+                .offset(x: direction > 0 ? 22 : -22)
                 .combined(with: .opacity),
             removal:
-                .offset(x: removalX, y: 0)
+                .offset(x: direction > 0 ? -16 : 16)
                 .combined(with: .opacity)
         )
     }
@@ -147,7 +176,10 @@ struct AppShell: View {
         let nextIndex = tabs.firstIndex(of: next) ?? currentIndex
         direction = nextIndex >= currentIndex ? 1 : -1
 
-        Haptics.play(.selection, enabled: preferences.haptics)
+        Haptics.play(
+            .selection,
+            enabled: preferences.haptics
+        )
 
         withAnimation(
             reduceMotion
