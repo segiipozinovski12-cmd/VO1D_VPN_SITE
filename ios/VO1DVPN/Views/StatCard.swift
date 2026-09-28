@@ -81,17 +81,34 @@ private struct RouteQualityGrid: View {
 struct PingBadge: View {
     @Environment(\.vo1dReduceMotion) private var reduceMotion
     let ping: Int?
+
     var body: some View {
         HStack(spacing: 5) {
             HStack(alignment: .bottom, spacing: 2) {
                 ForEach(0..<3) { bar in
-                    Capsule().fill(VO1DStyle.latencyColor(ping).opacity(ping == nil ? 0.25 : 1))
-                        .frame(width: 2, height: CGFloat(4 + bar * 3))
+                    Capsule()
+                        .fill(
+                            VO1DStyle.latencyColor(ping)
+                                .opacity(ping == nil ? 0.18 : 0.72)
+                        )
+                        .frame(
+                            width: 2,
+                            height: CGFloat(4 + bar * 3)
+                        )
                 }
-            }.accessibilityHidden(true)
+            }
+            .accessibilityHidden(true)
+
             Text(ping.map { "\($0) ms" } ?? "— ms")
-                .font(VO1DStyle.mono(11)).monospacedDigit()
-                .contentTransition(.numericText()).animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: ping)
-        }.foregroundStyle(VO1DStyle.latencyColor(ping)).fixedSize()
+                .font(VO1DStyle.mono(11))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(ping == nil ? 0.42 : 0.76))
+                .contentTransition(.numericText())
+                .animation(
+                    reduceMotion ? nil : .easeOut(duration: 0.25),
+                    value: ping
+                )
+        }
+        .fixedSize()
     }
 }
