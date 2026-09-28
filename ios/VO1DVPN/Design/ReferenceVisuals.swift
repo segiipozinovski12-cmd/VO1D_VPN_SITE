@@ -64,6 +64,8 @@ struct ReferenceBackdrop: View {
 }
 
 struct ReferencePlanetView: View {
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
+
     var compact = false
     var glow = true
 
@@ -80,6 +82,8 @@ struct ReferencePlanetView: View {
             )
         }
         .onAppear {
+            guard !reduceMotion else { return }
+
             withAnimation(
                 .linear(duration: 34)
                 .repeatForever(autoreverses: false)
@@ -551,6 +555,8 @@ struct ReferenceGlassPanel<Content: View>: View {
 }
 
 struct ReferencePrimaryButton: View {
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
+
     let title: String
     var icon = "chevron.right"
     var action: () -> Void
@@ -620,6 +626,8 @@ struct ReferencePrimaryButton: View {
         }
         .buttonStyle(ScaleButtonStyle(scale: 0.98))
         .onAppear {
+            guard !reduceMotion else { return }
+
             withAnimation(
                 .linear(duration: 2.8)
                 .repeatForever(autoreverses: false)
@@ -631,6 +639,8 @@ struct ReferencePrimaryButton: View {
 }
 
 struct ReferenceVortexView: View {
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
+
     let connected: Bool
     let busy: Bool
 
@@ -779,6 +789,8 @@ struct ReferenceVortexView: View {
         }
         .scaleEffect(breathe && connected ? 1.015 : 0.995)
         .onAppear {
+            guard !reduceMotion else { return }
+
             withAnimation(
                 .linear(duration: connected ? 4.6 : 8.0)
                 .repeatForever(autoreverses: false)
