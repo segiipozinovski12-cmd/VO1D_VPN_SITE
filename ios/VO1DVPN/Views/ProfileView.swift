@@ -5,7 +5,6 @@ struct ProfileView: View {
     @EnvironmentObject private var preferences: Preferences
     @Environment(\.vo1dReduceMotion) private var reduceMotion
 
-    @State private var showAvatars = false
     @State private var showKey = false
     @State private var showLogout = false
     @State private var showSettings = false
@@ -43,9 +42,6 @@ struct ProfileView: View {
         .background { ReferenceBackdrop() }
         .navigationDestination(isPresented: $showSettings) {
             SettingsView()
-        }
-        .sheet(isPresented: $showAvatars) {
-            avatarPicker
         }
         .sheet(isPresented: $showKey) {
             ChangeKeyView()
@@ -108,48 +104,54 @@ struct ProfileView: View {
     private var identityCard: some View {
         ReferenceGlassCard(radius: 24) {
             HStack(spacing: 16) {
-                Button {
-                    showAvatars = true
-                } label: {
-                    ZStack(alignment: .bottomTrailing) {
+                ZStack {
+                    RoundedRectangle(
+                        cornerRadius: 20,
+                        style: .continuous
+                    )
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.14),
+                                VO1DStyle.graphite.opacity(0.72),
+                                .black.opacity(0.92)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(
+                            cornerRadius: 20,
+                            style: .continuous
+                        )
+                    )
+                    .frame(width: 68, height: 68)
+                    .overlay {
                         RoundedRectangle(
                             cornerRadius: 20,
                             style: .continuous
                         )
-                        .fill(Color.white.opacity(0.045))
-                        .background(
-                            .ultraThinMaterial,
-                            in: RoundedRectangle(
-                                cornerRadius: 20,
-                                style: .continuous
-                            )
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.42),
+                                    .white.opacity(0.08),
+                                    VO1DStyle.frost.opacity(0.20)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.9
                         )
-                        .frame(width: 68, height: 68)
-                        .overlay {
-                            RoundedRectangle(
-                                cornerRadius: 20,
-                                style: .continuous
-                            )
-                            .strokeBorder(
-                                .white.opacity(0.12),
-                                lineWidth: 0.8
-                            )
-                        }
-
-                        Image(systemName: preferences.avatar)
-                            .font(.system(size: 27, weight: .light))
-                            .foregroundStyle(.white.opacity(0.92))
-                            .frame(width: 68, height: 68)
-
-                        Image(systemName: "pencil")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.black)
-                            .frame(width: 21, height: 21)
-                            .background(.white, in: Circle())
-                            .offset(x: 3, y: 3)
                     }
+
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .shadow(color: .white.opacity(0.18), radius: 7)
                 }
-                .buttonStyle(ScaleButtonStyle(scale: 0.95))
                 .accessibilityIdentifier("profile.avatar")
 
                 VStack(alignment: .leading, spacing: 7) {
@@ -375,54 +377,6 @@ struct ProfileView: View {
         Rectangle()
             .fill(.white.opacity(0.07))
             .frame(height: 1)
-    }
-
-    private var avatarPicker: some View {
-        ZStack {
-            ReferenceBackdrop()
-
-            VStack(spacing: 22) {
-                Text("Choose Avatar")
-                    .font(.system(size: 22, weight: .semibold))
-
-                LazyVGrid(
-                    columns: Array(
-                        repeating: GridItem(.flexible()),
-                        count: 3
-                    ),
-                    spacing: 12
-                ) {
-                    ForEach(Preferences.avatars, id: \.self) { symbol in
-                        Button {
-                            preferences.avatar = symbol
-                            Haptics.play(
-                                .selection,
-                                enabled: preferences.haptics
-                            )
-                            showAvatars = false
-                        } label: {
-                            ReferenceGlassCard(
-                                radius: 18,
-                                highlighted:
-                                    preferences.avatar == symbol
-                            ) {
-                                Image(systemName: symbol)
-                                    .font(.system(size: 26, weight: .light))
-                                    .foregroundStyle(.white.opacity(0.88))
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 68)
-                            }
-                        }
-                        .buttonStyle(ScaleButtonStyle(scale: 0.96))
-                        .accessibilityIdentifier("avatar.\(symbol)")
-                    }
-                }
-            }
-            .padding(22)
-        }
-        .presentationDetents([.height(330)])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(.black)
     }
 
     private var remainingDays: Int {
