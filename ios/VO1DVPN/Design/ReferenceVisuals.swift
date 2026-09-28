@@ -150,6 +150,37 @@ struct ReferencePlanetView: View {
                             .shadow(color: .white.opacity(0.55), radius: 4)
                             .padding(side * 0.09)
                     }
+                    .overlay {
+                        PlanetCityLights()
+                            .fill(.white.opacity(0.72))
+                            .shadow(
+                                color: .white.opacity(0.42),
+                                radius: 2.6
+                            )
+                            .padding(side * 0.10)
+                    }
+                    .overlay {
+                        Ellipse()
+                            .trim(from: 0.56, to: 0.94)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        .clear,
+                                        .white.opacity(0.18),
+                                        .white.opacity(0.76),
+                                        .white.opacity(0.12),
+                                        .clear
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ),
+                                style: StrokeStyle(
+                                    lineWidth: compact ? 1.4 : 2.1,
+                                    lineCap: .round
+                                )
+                            )
+                            .blur(radius: compact ? 0.3 : 0.7)
+                    }
                     .shadow(
                         color: glow ? .white.opacity(breathe ? 0.12 : 0.045) : .clear,
                         radius: glow ? 30 : 0
@@ -286,6 +317,34 @@ private struct PlanetLandHints: Shape {
             CGPoint(x: rect.minX + rect.width * 0.46, y: rect.minY + rect.height * 0.64)
         ])
 
+        return path
+    }
+}
+
+private struct PlanetCityLights: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let points: [(CGFloat, CGFloat, CGFloat)] = [
+            (0.18,0.35,1.2),(0.22,0.31,0.9),(0.25,0.38,1.4),(0.29,0.28,0.8),
+            (0.33,0.33,1.1),(0.36,0.27,0.8),(0.39,0.36,1.0),(0.43,0.31,1.3),
+            (0.47,0.40,1.0),(0.51,0.34,0.8),(0.55,0.30,1.1),(0.59,0.38,1.4),
+            (0.63,0.33,0.9),(0.67,0.41,1.0),(0.71,0.36,1.2),(0.75,0.44,0.8),
+            (0.32,0.48,0.9),(0.38,0.51,1.3),(0.44,0.47,0.7),(0.50,0.54,1.1),
+            (0.56,0.49,0.8),(0.61,0.56,1.2),(0.66,0.51,0.8),(0.42,0.62,0.9),
+            (0.48,0.68,1.2),(0.55,0.63,0.7),(0.60,0.70,1.0),(0.25,0.45,0.7),
+            (0.72,0.52,0.9),(0.76,0.57,0.7),(0.30,0.58,0.8),(0.35,0.66,0.7)
+        ]
+
+        for (x,y,r) in points {
+            path.addEllipse(
+                in: CGRect(
+                    x: rect.minX + rect.width * x - r,
+                    y: rect.minY + rect.height * y - r,
+                    width: r * 2,
+                    height: r * 2
+                )
+            )
+        }
         return path
     }
 }
@@ -493,110 +552,177 @@ struct ReferenceVortexView: View {
     let connected: Bool
     let busy: Bool
 
-    @State private var outer = false
-    @State private var middle = false
-    @State private var inner = false
-    @State private var pulse = false
+    @State private var spinFast = false
+    @State private var spinSlow = false
+    @State private var counterSpin = false
+    @State private var breathe = false
 
     var body: some View {
         ZStack {
-            ForEach(0..<6, id: \.self) { index in
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white.opacity(connected ? 0.16 : 0.055),
+                            .white.opacity(connected ? 0.045 : 0.012),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 16,
+                        endRadius: 155
+                    )
+                )
+                .blur(radius: connected ? 8 : 4)
+
+            ForEach(0..<10, id: \.self) { index in
                 Circle()
                     .trim(
-                        from: Double(index) * 0.12,
-                        to: min(1, Double(index) * 0.12 + 0.20)
+                        from:
+                            Double(index) * 0.083,
+                        to:
+                            min(
+                                1,
+                                Double(index) * 0.083
+                                + (connected ? 0.26 : 0.18)
+                            )
+                    )
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                .clear,
+                                .white.opacity(0.10),
+                                .white.opacity(
+                                    connected
+                                    ? 0.92
+                                    : busy
+                                        ? 0.56
+                                        : 0.25
+                                ),
+                                .white,
+                                .white.opacity(0.20),
+                                .clear
+                            ],
+                            center: .center
+                        ),
+                        style: StrokeStyle(
+                            lineWidth:
+                                connected
+                                ? CGFloat(2.0 + Double(index % 4) * 0.62)
+                                : CGFloat(0.9 + Double(index % 3) * 0.35),
+                            lineCap: .round
+                        )
+                    )
+                    .padding(CGFloat(index) * 5.2)
+                    .rotationEffect(
+                        .degrees(
+                            (index.isMultiple(of: 2) ? 1 : -1)
+                            * (spinFast ? 360 : 0)
+                            + Double(index * 23)
+                        )
+                    )
+                    .blur(
+                        radius:
+                            connected && index % 3 == 0
+                            ? 1.8
+                            : 0.25
+                    )
+                    .shadow(
+                        color:
+                            connected
+                            ? .white.opacity(0.20)
+                            : .clear,
+                        radius: connected ? 8 : 0
+                    )
+            }
+
+            ForEach(0..<5, id: \.self) { index in
+                Circle()
+                    .trim(
+                        from: Double(index) * 0.17,
+                        to: min(1, Double(index) * 0.17 + 0.11)
                     )
                     .stroke(
                         LinearGradient(
                             colors: [
                                 .clear,
-                                .white.opacity(0.18 + Double(index) * 0.07),
-                                .white.opacity(0.95),
-                                .white.opacity(0.12),
+                                .white.opacity(connected ? 0.72 : 0.20),
+                                .white.opacity(0.08),
                                 .clear
                             ],
                             startPoint: .leading,
                             endPoint: .trailing
                         ),
                         style: StrokeStyle(
-                            lineWidth: CGFloat(1.0 + Double(index) * 0.28),
+                            lineWidth: connected ? 1.7 : 0.8,
                             lineCap: .round
                         )
                     )
-                    .padding(CGFloat(index) * 7)
+                    .padding(26 + CGFloat(index) * 12)
                     .rotationEffect(
                         .degrees(
-                            (index.isMultiple(of: 2) ? 1 : -1)
-                            * (outer ? 360 : 0)
-                            + Double(index * 17)
+                            counterSpin
+                            ? -360
+                            : Double(index * 31)
                         )
                     )
-                    .blur(radius: index < 2 ? 0 : 0.35)
             }
 
             Circle()
                 .stroke(
-                    RadialGradient(
-                        colors: [
-                            .white.opacity(0.60),
-                            .white.opacity(0.09),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 20,
-                        endRadius: 120
+                    .white.opacity(
+                        connected
+                        ? (breathe ? 0.22 : 0.44)
+                        : 0.12
                     ),
-                    lineWidth: 1.2
+                    lineWidth: connected ? 1.3 : 0.8
                 )
-                .padding(pulse ? 4 : 13)
-                .opacity(connected ? 0.80 : busy ? 0.60 : 0.28)
+                .padding(breathe ? 44 : 34)
+                .blur(radius: connected ? 0.5 : 0)
 
             Circle()
-                .trim(from: 0.07, to: 0.32)
+                .trim(from: 0.06, to: 0.30)
                 .stroke(
-                    .white.opacity(0.34),
-                    style: StrokeStyle(lineWidth: 0.8, lineCap: .round)
+                    .white.opacity(connected ? 0.70 : 0.24),
+                    style: StrokeStyle(
+                        lineWidth: connected ? 2.2 : 1.0,
+                        lineCap: .round
+                    )
                 )
-                .padding(30)
-                .rotationEffect(.degrees(middle ? -360 : 0))
-
-            Circle()
-                .trim(from: 0.54, to: 0.74)
-                .stroke(
-                    .white.opacity(0.25),
-                    style: StrokeStyle(lineWidth: 0.7, lineCap: .round)
+                .padding(18)
+                .rotationEffect(.degrees(spinSlow ? 360 : 0))
+                .shadow(
+                    color: .white.opacity(connected ? 0.22 : 0),
+                    radius: 7
                 )
-                .padding(48)
-                .rotationEffect(.degrees(inner ? 360 : 0))
         }
-        .shadow(color: .white.opacity(connected ? 0.28 : 0.08), radius: 18)
+        .scaleEffect(breathe && connected ? 1.015 : 0.995)
         .onAppear {
             withAnimation(
-                .linear(duration: connected ? 5.4 : 8.4)
+                .linear(duration: connected ? 4.6 : 8.0)
                 .repeatForever(autoreverses: false)
             ) {
-                outer = true
+                spinFast = true
             }
 
             withAnimation(
-                .linear(duration: 9.5)
+                .linear(duration: 11.0)
                 .repeatForever(autoreverses: false)
             ) {
-                middle = true
+                spinSlow = true
             }
 
             withAnimation(
-                .linear(duration: 13.0)
+                .linear(duration: 8.5)
                 .repeatForever(autoreverses: false)
             ) {
-                inner = true
+                counterSpin = true
             }
 
             withAnimation(
-                .easeInOut(duration: 2.4)
+                .easeInOut(duration: 2.0)
                 .repeatForever(autoreverses: true)
             ) {
-                pulse = true
+                breathe = true
             }
         }
         .accessibilityHidden(true)
