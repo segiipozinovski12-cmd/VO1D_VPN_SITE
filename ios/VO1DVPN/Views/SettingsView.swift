@@ -79,7 +79,7 @@ struct SettingsView: View {
 
                     toggle(
                         "Secure DNS",
-                        detail: "DNS over HTTPS in the tunnel",
+                        detail: "Use the secure DNS route inside the tunnel",
                         icon: "lock",
                         value: $preferences.secureDNS,
                         id: "secureDNS"
