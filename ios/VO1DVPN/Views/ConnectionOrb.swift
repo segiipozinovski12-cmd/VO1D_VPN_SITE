@@ -134,6 +134,7 @@ struct ConnectionOrb: View {
                         .font(.system(size: 42, weight: .ultraLight))
                         .symbolRenderingMode(.hierarchical)
                         .contentTransition(.symbolEffect(.replace))
+                        .symbolEffect(.bounce, value: connected)
 
                     Text(connected ? "DISCONNECT" : phase.isBusy ? "CANCEL" : "CONNECT")
                         .font(VO1DStyle.mono(9))
