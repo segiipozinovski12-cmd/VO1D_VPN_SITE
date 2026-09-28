@@ -16,6 +16,10 @@ on:
       - ".github/workflows/ios-build.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   native-ios:
     runs-on: macos-15
@@ -105,11 +109,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="ios-v0.2.0"
+          TAG="ios-v0.3.0"
           IPA="ios/build/VO1D_VPN-unsigned.ipa"
           HASH="ios/build/VO1D_VPN-unsigned.ipa.sha256"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$IPA" "$HASH" --clobber
           else
-            gh release create "$TAG" "$IPA" "$HASH"               --title "VO1D_VPN iOS 0.2.0"               --notes "Native VO1D_VPN iPhone build with Packet Tunnel + Xray/VLESS core. This IPA is unsigned and must be signed with an Apple Developer provisioning profile that permits Network Extension before installation on a stock iPhone."
+            gh release create "$TAG" "$IPA" "$HASH"               --title "VO1D_VPN iOS 0.3.0"               --notes "Native VO1D_VPN iPhone build with Packet Tunnel + Xray/VLESS core. This IPA is unsigned and must be signed with an Apple Developer provisioning profile that permits Network Extension before installation on a stock iPhone."
           fi

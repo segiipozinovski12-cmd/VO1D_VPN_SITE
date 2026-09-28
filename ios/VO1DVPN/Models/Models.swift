@@ -67,3 +67,14 @@ struct LiveStats: Equatable {
     var uploadedMB: Double = 0
     var sessionSeconds: Int = 0
 }
+
+extension LiveStats {
+    var durationText: String {
+        String(format: "%02d:%02d:%02d", sessionSeconds / 3600, (sessionSeconds % 3600) / 60, sessionSeconds % 60)
+    }
+    var trafficValue: String {
+        let total = downloadedMB + uploadedMB
+        return String(format: total < 1024 ? "%.0f" : "%.1f", total < 1024 ? total : total / 1024)
+    }
+    var trafficUnit: String { downloadedMB + uploadedMB < 1024 ? "MB" : "GB" }
+}

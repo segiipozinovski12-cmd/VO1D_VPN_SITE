@@ -13,6 +13,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.10"
+    TARGETED_DEVICE_FAMILY: "1"
     DEVELOPMENT_TEAM: ""
 
 targets:
@@ -29,6 +30,8 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         VO1D_API_BASE_URL: "$(VO1D_API_BASE_URL)"
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
         CFBundleURLTypes:
           - CFBundleURLName: com.vo1d.vpn
             CFBundleURLSchemes:
@@ -40,13 +43,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn
         PRODUCT_NAME: VO1D_VPN
         INFOPLIST_KEY_CFBundleDisplayName: VO1D_VPN
-        MARKETING_VERSION: 0.2.0
-        CURRENT_PROJECT_VERSION: 2
-        VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
+        MARKETING_VERSION: 0.4.0
+        CURRENT_PROJECT_VERSION: 4
+        VO1D_API_BASE_URL: "https://sincere-commitment-production-8e4e.up.railway.app"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DEVELOPMENT_TEAM: "$(VO1D_TEAM_ID)"
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "$(VO1D_CODE_SIGN_IDENTITY)"
-        PROVISIONING_PROFILE_SPECIFIER: "$(VO1D_APP_PROFILE)"
+        CODE_SIGN_STYLE: Automatic
+        SUPPORTS_MACCATALYST: NO
     dependencies:
       - target: VO1D_PacketTunnel
 
@@ -55,12 +58,15 @@ targets:
     platform: iOS
     sources:
       - path: VO1DVPN
+        excludes:
+          - Resources/Info.plist
+          - Resources/VO1D_VPN.entitlements
     info:
-      path: VO1DVPN/Resources/Info.plist
+      path: ../ios-preview/PreviewInfo.plist
       properties:
         CFBundleDisplayName: VO1D_VPN
         CFBundleName: VO1D_VPN
-        CFBundleShortVersionString: "0.2.0-preview"
+        CFBundleShortVersionString: "0.4.0"
         CFBundleVersion: "1"
         VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
     settings:
@@ -68,9 +74,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview
         PRODUCT_NAME: VO1D_VPN
         INFOPLIST_KEY_CFBundleDisplayName: VO1D_VPN
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
         DEVELOPMENT_TEAM: ""
+        TARGETED_DEVICE_FAMILY: "1"
 
   VO1D_PacketTunnel:
     type: app-extension
@@ -93,13 +101,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.PacketTunnel
         PRODUCT_NAME: VO1D_PacketTunnel
-        MARKETING_VERSION: 0.2.0
-        CURRENT_PROJECT_VERSION: 2
+        MARKETING_VERSION: 0.4.0
+        CURRENT_PROJECT_VERSION: 4
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
         DEVELOPMENT_TEAM: "$(VO1D_TEAM_ID)"
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "$(VO1D_CODE_SIGN_IDENTITY)"
-        PROVISIONING_PROFILE_SPECIFIER: "$(VO1D_TUNNEL_PROFILE)"
+        CODE_SIGN_STYLE: Automatic
+        SUPPORTS_MACCATALYST: NO
     dependencies:
       - package: SwiftyXrayKit

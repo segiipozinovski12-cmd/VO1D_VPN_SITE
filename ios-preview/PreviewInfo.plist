@@ -7,11 +7,13 @@
     <key>CFBundleName</key>
     <string>VO1D_VPN</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.2.0-preview</string>
+    <string>0.3.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>VO1D_API_BASE_URL</key>
     <string>https://REPLACE_ME.invalid</string>
+    <key>UIUserInterfaceStyle</key>
+    <string>Dark</string>
     <key>UILaunchScreen</key>
     <dict/>
 </dict>
