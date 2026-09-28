@@ -150,7 +150,9 @@ private struct ActivationSuccessOverlay: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                ReferenceBackdrop()
+                ReferenceBackdrop(
+                    impact: step == 0 || step == 4
+                )
 
                 ReferenceVortex(active: true, busy: true)
                     .frame(width: 390, height: 390)
