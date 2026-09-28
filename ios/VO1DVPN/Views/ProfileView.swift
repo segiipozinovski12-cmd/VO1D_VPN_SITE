@@ -286,6 +286,21 @@ struct ProfileView: View {
     private var actionStack: some View {
         VStack(spacing: 10) {
             profileAction(
+                title:
+                    model.hasActiveSubscription
+                    ? "Subscription"
+                    : "Get Subscription",
+                detail:
+                    model.hasActiveSubscription
+                    ? "View plans or activate another key"
+                    : "Choose a plan or activate your VOID key",
+                icon: "creditcard"
+            ) {
+                model.presentPaywall()
+            }
+            .accessibilityIdentifier("profile.subscription")
+
+            profileAction(
                 title: "Settings",
                 detail: "Connection & interface",
                 icon: "gearshape"
