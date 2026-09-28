@@ -8,6 +8,8 @@ struct LaunchScreenView: View {
     @State private var scan = false
     @State private var pulse = false
     @State private var progress: CGFloat = 0
+    @State private var networkDraw: CGFloat = 0
+    @State private var orbit = false
 
     let completion: () -> Void
 
@@ -38,17 +40,46 @@ struct LaunchScreenView: View {
 
                 ZStack {
                     LaunchNetwork()
+                        .trim(from: 0, to: networkDraw)
                         .stroke(
                             LinearGradient(
-                                colors: [.white.opacity(0.06), VO1DStyle.ice.opacity(0.30), .white.opacity(0.04)],
+                                colors: [
+                                    .white.opacity(0.04),
+                                    .white.opacity(0.34),
+                                    .white.opacity(0.05)
+                                ],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             ),
-                            lineWidth: 0.7
+                            style: StrokeStyle(
+                                lineWidth: 0.7,
+                                lineCap: .round
+                            )
                         )
                         .frame(width: 260, height: 150)
-                        .scaleEffect(reveal ? 1 : 0.62)
+                        .scaleEffect(reveal ? 1 : 0.74)
                         .opacity(reveal ? 1 : 0)
+
+                    Circle()
+                        .trim(from: 0.02, to: 0.16)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.04),
+                                    .white.opacity(0.48),
+                                    .white.opacity(0.06)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            style: StrokeStyle(
+                                lineWidth: 1,
+                                lineCap: .round
+                            )
+                        )
+                        .frame(width: 116, height: 116)
+                        .rotationEffect(.degrees(orbit ? 360 : 0))
+                        .opacity(reduceMotion ? 0 : 1)
 
                     Circle()
                         .stroke(VO1DStyle.ice.opacity(pulse ? 0.03 : 0.23), lineWidth: 1)
@@ -132,6 +163,10 @@ struct LaunchScreenView: View {
                 }
 
                 if !reduceMotion {
+                    withAnimation(.easeOut(duration: 0.85)) {
+                        networkDraw = 1
+                    }
+
                     withAnimation(.linear(duration: 1.45)) {
                         scan = true
                     }
@@ -140,10 +175,15 @@ struct LaunchScreenView: View {
                         progress = 1
                     }
 
+                    withAnimation(.linear(duration: 2.8).repeatForever(autoreverses: false)) {
+                        orbit = true
+                    }
+
                     withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
                         pulse = true
                     }
                 } else {
+                    networkDraw = 1
                     progress = 1
                 }
 
