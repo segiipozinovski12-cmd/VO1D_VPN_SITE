@@ -1,10 +1,8 @@
-import Foundation
 import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject private var model: AppViewModel
     @Environment(\.vo1dReduceMotion) private var reduceMotion
-    @Environment(\.openURL) private var openURL
 
     @State private var key = ""
     @State private var appeared = false
@@ -54,12 +52,12 @@ struct LoginView: View {
 
                 RadialGradient(
                     colors: [
-                        .white.opacity(planGlow ? 0.040 : 0.015),
+                        VO1DStyle.frost.opacity(planGlow ? 0.055 : 0.018),
                         .clear
                     ],
-                    center: UnitPoint(x: 0.5, y: 0.38),
+                    center: UnitPoint(x: 0.5, y: 0.36),
                     startRadius: 0,
-                    endRadius: 360
+                    endRadius: 390
                 )
             }
             .ignoresSafeArea()
@@ -74,7 +72,7 @@ struct LoginView: View {
                 }
 
                 withAnimation(
-                    .easeInOut(duration: 2.8)
+                    .easeInOut(duration: 3.1)
                     .repeatForever(autoreverses: true)
                 ) {
                     planGlow = true
@@ -111,49 +109,65 @@ struct LoginView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Color.clear
-                        .frame(width: 56, height: 56)
+                        .frame(width: 58, height: 58)
                         .vo1dSystemGlass(
                             in: RoundedRectangle(
-                                cornerRadius: 18,
+                                cornerRadius: 19,
                                 style: .continuous
                             )
                         )
 
                     RoundedRectangle(
-                        cornerRadius: 18,
+                        cornerRadius: 19,
                         style: .continuous
                     )
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                .white.opacity(0.25),
-                                .white.opacity(0.055)
+                                .white.opacity(0.31),
+                                VO1DStyle.frost.opacity(0.08),
+                                .black.opacity(0.22)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         lineWidth: 1
                     )
-                    .frame(width: 56, height: 56)
+                    .frame(width: 58, height: 58)
 
-                    Image(systemName: model.isDemoMode ? "play.fill" : "shield.lefthalf.filled")
-                        .font(.system(size: 22, weight: .light))
-                        .foregroundStyle(.white)
+                    Image(
+                        systemName:
+                            model.isDemoMode
+                            ? "play.fill"
+                            : "shield.lefthalf.filled"
+                    )
+                    .font(.system(size: 22, weight: .ultraLight))
+                    .foregroundStyle(.white)
+                    .shadow(color: .white.opacity(0.12), radius: 8)
                 }
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Eyebrow(text: model.isDemoMode ? "LOCAL DEMO" : "FIRST CONNECTION")
+                    Eyebrow(
+                        text:
+                            model.isDemoMode
+                            ? "LOCAL DEMO"
+                            : "FIRST CONNECTION"
+                    )
 
-                    Text(model.isDemoMode ? "Explore VO1D" : "Choose access. Enter your key.")
-                        .font(.system(size: 22, weight: .semibold))
-                        .tracking(-0.5)
+                    Text(
+                        model.isDemoMode
+                        ? "Explore VO1D"
+                        : "Choose access. Enter your key."
+                    )
+                    .font(.system(size: 22, weight: .semibold))
+                    .tracking(-0.5)
                 }
             }
 
             Text(
                 model.isDemoMode
                 ? "The Simulator keeps the complete interface and animations, but network traffic stays local."
-                : "Pick a subscription, contact @vo1d_root to purchase it, then enter the fixed VO1D license key you receive."
+                : "VO1D uses a fixed set of 400 native licenses. No Telegram account, bot, or Telegram-generated key is required."
             )
             .font(.subheadline)
             .foregroundStyle(VO1DStyle.secondary)
@@ -167,8 +181,10 @@ struct LoginView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Eyebrow(text: "01 / CHOOSE ACCESS")
+
                 Spacer()
-                Text("400 LICENSES")
+
+                Text("100 KEYS / TIER")
                     .font(VO1DStyle.mono(8))
                     .tracking(0.8)
                     .foregroundStyle(VO1DStyle.secondary)
@@ -186,47 +202,36 @@ struct LoginView: View {
                 }
             }
 
-            Button {
-                guard let plan = plans.first(where: { $0.days == selectedPlan }) else { return }
-                openPurchase(plan)
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 14, weight: .semibold))
+            HStack(spacing: 12) {
+                ZStack {
+                    Color.clear
+                        .frame(width: 38, height: 38)
+                        .vo1dSystemGlass(
+                            in: RoundedRectangle(
+                                cornerRadius: 12,
+                                style: .continuous
+                            )
+                        )
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("BUY IN TELEGRAM")
-                            .font(VO1DStyle.mono(10))
-                            .tracking(0.7)
-
-                        Text("@vo1d_root · \(selectedPlanTitle)")
-                            .font(.caption)
-                            .foregroundStyle(.black.opacity(0.62))
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 13, weight: .bold))
+                    Image(systemName: "key.horizontal")
+                        .font(.system(size: 15, weight: .light))
+                        .foregroundStyle(.white.opacity(0.86))
                 }
-                .foregroundStyle(.black)
-                .padding(.horizontal, 17)
-                .frame(height: 58)
-                .background(
-                    LinearGradient(
-                        colors: [.white, Color(white: 0.87)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 17, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 17, style: .continuous)
-                        .strokeBorder(.white.opacity(0.92), lineWidth: 1)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("STATIC LICENSE SYSTEM")
+                        .font(VO1DStyle.mono(9))
+                        .tracking(0.7)
+
+                    Text("The key itself defines the real subscription duration.")
+                        .font(.caption)
+                        .foregroundStyle(VO1DStyle.secondary)
                 }
+
+                Spacer()
             }
-            .buttonStyle(ScaleButtonStyle())
-            .accessibilityIdentifier("purchase.telegram")
+            .padding(15)
+            .vo1dSurface(radius: 17)
         }
     }
 
@@ -235,7 +240,10 @@ struct LoginView: View {
 
         return Button {
             selectedPlan = plan.days
-            Haptics.play(.selection, enabled: model.preferences.haptics)
+            Haptics.play(
+                .selection,
+                enabled: model.preferences.haptics
+            )
         } label: {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
@@ -245,18 +253,40 @@ struct LoginView: View {
 
                     Spacer()
 
-                    Circle()
-                        .fill(selected ? .white : .white.opacity(0.16))
-                        .frame(width: 6, height: 6)
-                        .shadow(
-                            color: selected ? .white.opacity(0.35) : .clear,
-                            radius: 5
-                        )
+                    ZStack {
+                        Circle()
+                            .stroke(
+                                .white.opacity(selected ? 0.28 : 0.08),
+                                lineWidth: 1
+                            )
+                            .frame(width: 14, height: 14)
+
+                        Circle()
+                            .fill(
+                                selected
+                                ? .white.opacity(0.92)
+                                : .white.opacity(0.10)
+                            )
+                            .frame(width: selected ? 6 : 4, height: selected ? 6 : 4)
+                            .shadow(
+                                color:
+                                    selected
+                                    ? .white.opacity(0.24)
+                                    : .clear,
+                                radius: 5
+                            )
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(plan.price)
-                        .font(.system(size: 25, weight: .semibold, design: .rounded))
+                        .font(
+                            .system(
+                                size: 25,
+                                weight: .semibold,
+                                design: .rounded
+                            )
+                        )
                         .monospacedDigit()
 
                     Text(plan.detail)
@@ -268,11 +298,22 @@ struct LoginView: View {
             .padding(16)
             .vo1dSurface(highlighted: selected, radius: 18)
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(
-                        .white.opacity(selected ? 0.22 : 0.035),
-                        lineWidth: 1
-                    )
+                RoundedRectangle(
+                    cornerRadius: 18,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(selected ? 0.26 : 0.055),
+                            VO1DStyle.frost.opacity(selected ? 0.08 : 0.01),
+                            .black.opacity(0.10)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
             }
         }
         .buttonStyle(ScaleButtonStyle())
@@ -286,7 +327,7 @@ struct LoginView: View {
 
                 Spacer()
 
-                Text("12 CHARACTERS")
+                Text("VOID · 12")
                     .font(VO1DStyle.mono(8))
                     .foregroundStyle(VO1DStyle.secondary)
             }
@@ -307,7 +348,21 @@ struct LoginView: View {
                         activate()
                     }
                     .onChange(of: key) { _, value in
-                        key = formatKeyInput(value)
+                        let formatted = formatKeyInput(value)
+                        if formatted != key {
+                            key = formatted
+                        }
+
+                        if let license = AccessKeyVault.license(for: formatted),
+                           selectedPlan != license.days {
+                            withAnimation(
+                                reduceMotion
+                                ? nil
+                                : .snappy(duration: 0.26)
+                            ) {
+                                selectedPlan = license.days
+                            }
+                        }
                     }
                     .accessibilityIdentifier("login.key")
 
@@ -326,14 +381,40 @@ struct LoginView: View {
             .frame(height: 58)
             .vo1dSurface(highlighted: keyFocused, radius: 17)
 
+            if let license = AccessKeyVault.license(for: key) {
+                HStack(spacing: 9) {
+                    Image(systemName: "checkmark.seal")
+                        .font(.system(size: 13, weight: .light))
+
+                    Text("VALID · \(planName(for: license.days)) · \(license.days) DAYS")
+                        .font(VO1DStyle.mono(9))
+                        .tracking(0.45)
+
+                    Spacer()
+                }
+                .foregroundStyle(.white.opacity(0.82))
+                .padding(.horizontal, 2)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             PrimaryButton(
-                title: model.isActivating ? "VERIFYING KEY…" : "ACTIVATE VO1D",
-                icon: model.isActivating ? "ellipsis" : "arrow.right"
+                title:
+                    model.isActivating
+                    ? "VERIFYING KEY…"
+                    : "ACTIVATE VO1D",
+                icon:
+                    model.isActivating
+                    ? "ellipsis"
+                    : "arrow.right"
             ) {
                 activate()
             }
             .disabled(model.isActivating || !keyReady)
-            .opacity(model.isActivating || !keyReady ? 0.48 : 1)
+            .opacity(
+                model.isActivating || !keyReady
+                ? 0.48
+                : 1
+            )
             .accessibilityIdentifier("login.activate")
 
             if let error = model.errorMessage {
@@ -342,14 +423,20 @@ struct LoginView: View {
                         .padding(.top, 1)
 
                     Text(error)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .fixedSize(
+                            horizontal: false,
+                            vertical: true
+                        )
                 }
                 .font(.caption)
                 .foregroundStyle(VO1DStyle.red)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .vo1dSurface(radius: 14)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(
+                    .opacity
+                    .combined(with: .move(edge: .top))
+                )
             }
         }
     }
@@ -357,17 +444,24 @@ struct LoginView: View {
     private var demoEntry: some View {
         VStack(spacing: 14) {
             PrimaryButton(
-                title: model.isActivating ? "STARTING…" : "ENTER DEMO",
+                title:
+                    model.isActivating
+                    ? "STARTING…"
+                    : "ENTER DEMO",
                 icon: "play.fill"
             ) {
-                Task { _ = await model.activate(key: "") }
+                Task {
+                    _ = await model.activate(key: "")
+                }
             }
             .disabled(model.isActivating)
 
-            Text("No key, payment, backend, or real VPN tunnel is used in Simulator.")
-                .font(.caption)
-                .foregroundStyle(VO1DStyle.secondary)
-                .multilineTextAlignment(.center)
+            Text(
+                "No key, payment, backend, or real VPN tunnel is used in Simulator."
+            )
+            .font(.caption)
+            .foregroundStyle(VO1DStyle.secondary)
+            .multilineTextAlignment(.center)
         }
     }
 
@@ -379,17 +473,13 @@ struct LoginView: View {
             Text(
                 model.isDemoMode
                 ? "PREVIEW MODE"
-                : "KEY CHECKED LOCALLY · REAL VPN SESSION VIA VO1D API"
+                : "EMBEDDED KEY CHECK · NATIVE API · REAL PACKET TUNNEL"
             )
             .font(VO1DStyle.mono(8))
             .tracking(0.55)
         }
         .foregroundStyle(.white.opacity(0.34))
         .padding(.top, 4)
-    }
-
-    private var selectedPlanTitle: String {
-        plans.first(where: { $0.days == selectedPlan })?.title ?? "ACCESS"
     }
 
     private var keyReady: Bool {
@@ -399,29 +489,19 @@ struct LoginView: View {
     private func activate() {
         guard keyReady, !model.isActivating else { return }
         keyFocused = false
+
         Task {
             _ = await model.activate(key: key)
         }
     }
 
-    private func openPurchase(_ plan: AccessPlan) {
-        var components = URLComponents(string: "https://t.me/vo1d_root")
-        components?.queryItems = [
-            URLQueryItem(
-                name: "text",
-                value: "Хочу купить VO1D_VPN: \(plan.title), \(plan.price). Нужен ключ для iPhone."
-            )
-        ]
-
-        if let url = components?.url {
-            openURL(url)
-        }
+    private func planName(for days: Int) -> String {
+        plans.first(where: { $0.days == days })?.title ?? "\(days) DAYS"
     }
 
     private func formatKeyInput(_ input: String) -> String {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        var raw = trimmed
+        var raw = input
+            .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
             .filter { $0.isLetter || $0.isNumber }
 
@@ -438,7 +518,14 @@ struct LoginView: View {
         while index < raw.endIndex {
             let end = raw.index(
                 index,
-                offsetBy: min(4, raw.distance(from: index, to: raw.endIndex))
+                offsetBy:
+                    min(
+                        4,
+                        raw.distance(
+                            from: index,
+                            to: raw.endIndex
+                        )
+                    )
             )
             groups.append(String(raw[index..<end]))
             index = end
