@@ -221,13 +221,7 @@ final class AppViewModel: ObservableObject {
                 guard id == self.connectionID else { return }
                 if !self.switching { self.phase = .securing }
                 try await self.vpn.connect(tunnel: tunnel, options: options)
-                // A bounded wait also catches an extension that exits before connecting.
-                let deadline = ContinuousClock.now.advanced(by: .seconds(25))
-                while !self.vpn.isConnected {
-                    try Task.checkCancellation()
-                    guard ContinuousClock.now < deadline else { throw APIClientError.server("Connection timed out. Please try another location.") }
-                    try await Task.sleep(for: .milliseconds(100))
-                }
+                try await self.vpn.waitUntilConnected()
                 #endif
                 guard id == self.connectionID else { return }
                 self.defaults.set(server.code, forKey: "vo1d.selectedServer")
