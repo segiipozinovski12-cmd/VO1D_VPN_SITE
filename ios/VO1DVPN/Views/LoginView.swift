@@ -58,6 +58,7 @@ struct LoginView: View {
                     .font(.subheadline)
                     .foregroundStyle(VO1DStyle.secondary)
                 }
+                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.11)
 
                 if !model.isDemoMode {
                     HStack(spacing: 12) {
@@ -100,6 +101,7 @@ struct LoginView: View {
                     .foregroundStyle(VO1DStyle.red)
                     .padding(14)
                     .vo1dSurface(radius: 14)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 if !model.isDemoMode {
@@ -115,6 +117,7 @@ struct LoginView: View {
                         .vo1dSurface(radius: 16)
                     }
                     .buttonStyle(ScaleButtonStyle())
+                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.23)
                 }
 
                 Spacer(minLength: 32)
