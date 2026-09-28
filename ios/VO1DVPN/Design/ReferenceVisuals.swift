@@ -142,9 +142,17 @@ private struct ReferenceLineField: View {
     }
 
     private var lineTimeline: some View {
-        TimelineView(
+        let lowPower =
+            ProcessInfo.processInfo.isLowPowerModeEnabled
+
+        return TimelineView(
             .animation(
-                minimumInterval: reduceMotion ? 1.0 : 1.0 / 20.0
+                minimumInterval:
+                    reduceMotion
+                    ? 1.0
+                    : lowPower
+                        ? 1.0 / 12.0
+                        : 1.0 / 20.0
             )
         ) { timeline in
             Canvas(
@@ -938,14 +946,19 @@ struct ReferenceVortex: View {
     let busy: Bool
 
     var body: some View {
-        TimelineView(
+        let lowPower =
+            ProcessInfo.processInfo.isLowPowerModeEnabled
+
+        return TimelineView(
             .animation(
                 minimumInterval:
                     reduceMotion
                     ? 1.0
                     : active || busy
-                        ? 1.0 / 30.0
-                        : 1.0 / 15.0
+                        ? lowPower
+                            ? 1.0 / 24.0
+                            : 1.0 / 30.0
+                        : 1.0
             )
         ) { timeline in
             let time =
