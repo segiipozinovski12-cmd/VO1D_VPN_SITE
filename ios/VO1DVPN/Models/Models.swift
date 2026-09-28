@@ -53,6 +53,32 @@ struct BasicResponse: Codable {
     let ok: Bool
 }
 
+struct PaymentCreateResponse: Codable {
+    let ok: Bool
+    let orderId: String
+    let pollToken: String
+    let paymentId: String
+    let payUrl: String
+    let status: String
+    let amountRub: String
+    let planDays: Int
+    let method: String
+    let test: Bool
+}
+
+struct PaymentStatusResponse: Codable {
+    let ok: Bool
+    let orderId: String
+    let status: String
+    let amountRub: String
+    let planDays: Int
+    let method: String
+    let token: String?
+    let account: AccountState?
+    let servers: ServerCollection?
+    let supportUrl: String?
+}
+
 struct APIErrorEnvelope: Codable {
     let ok: Bool?
     let error: String?
