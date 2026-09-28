@@ -205,7 +205,7 @@ struct HomeView: View {
     private var atmosphereColor: Color {
         switch model.phase {
         case .connected:
-            return VO1DStyle.green
+            return VO1DStyle.frost
         case .preparing, .routing, .securing, .switching:
             return VO1DStyle.ice
         case .failed:
@@ -219,7 +219,7 @@ struct HomeView: View {
 
     private var atmosphereOpacity: Double {
         switch model.phase {
-        case .connected: return 0.070
+        case .connected: return 0.050
         case .preparing, .routing, .securing, .switching: return 0.045
         case .failed: return 0.060
         case .disconnecting: return 0.035

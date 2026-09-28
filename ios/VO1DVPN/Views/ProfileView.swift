@@ -118,7 +118,13 @@ struct ProfileView: View {
             HStack {
                 Eyebrow(text: "CURRENT SESSION")
                 Spacer()
-                Circle().fill(model.isConnected ? VO1DStyle.green : VO1DStyle.secondary).frame(width: 5, height: 5)
+                Circle()
+                    .fill(model.isConnected ? VO1DStyle.pearl : VO1DStyle.secondary)
+                    .frame(width: 5, height: 5)
+                    .shadow(
+                        color: model.isConnected ? .white.opacity(0.24) : .clear,
+                        radius: 4
+                    )
             }
             DetailRow(title: "State", value: model.phase.rawValue)
             DividerLine()
