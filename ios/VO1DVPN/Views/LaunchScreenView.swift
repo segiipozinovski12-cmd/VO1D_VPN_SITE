@@ -143,7 +143,7 @@ struct LaunchScreenView: View {
     private var coreGlass: some View {
         ReferenceGlassCard(
             radius: 28,
-            highlighted: true
+            highlighted: false
         ) {
             HStack(spacing: 18) {
                 ZStack {
@@ -160,14 +160,14 @@ struct LaunchScreenView: View {
                                 endRadius: 38
                             )
                         )
-                        .frame(width: 74, height: 74)
+                        .frame(width: 64, height: 64)
 
                     Circle()
                         .stroke(
                             .white.opacity(corePulse ? 0.58 : 0.18),
                             lineWidth: 1.0
                         )
-                        .frame(width: corePulse ? 68 : 56, height: corePulse ? 68 : 56)
+                        .frame(width: corePulse ? 58 : 48, height: corePulse ? 58 : 48)
                         .blur(radius: corePulse ? 1.8 : 0)
 
                     Circle()
@@ -187,6 +187,17 @@ struct LaunchScreenView: View {
                         )
                         .tracking(1.7)
 
+                    Text("SECURE BOOT SEQUENCE")
+                        .font(
+                            .system(
+                                size: 8,
+                                weight: .medium,
+                                design: .monospaced
+                            )
+                        )
+                        .tracking(1.3)
+                        .foregroundStyle(.white.opacity(0.34))
+
                     Text(
                         statuses[
                             min(
@@ -195,9 +206,15 @@ struct LaunchScreenView: View {
                             )
                         ]
                     )
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.48))
-                    .contentTransition(.opacity)
+                    .font(
+                        .system(
+                            size: 11,
+                            weight: .regular,
+                            design: .monospaced
+                        )
+                    )
+                    .foregroundStyle(.white.opacity(0.56))
+                    .lineLimit(1)
 
                     HStack(spacing: 8) {
                         ForEach(0..<4, id: \.self) { index in
