@@ -61,17 +61,20 @@ struct LoginView: View {
         GeometryReader { proxy in
             ZStack(alignment: .topTrailing) {
                 ReferencePlanet(
-                    diameter: max(300, proxy.size.width * 0.98),
-                    rotation: -7,
-                    glow: 0.12
+                    diameter: max(430, proxy.size.width * 1.38),
+                    rotation: -11,
+                    glow: 0.22
                 )
-                .offset(y: planetFloat ? -120 : -126)
+                .offset(
+                    x: -proxy.size.width * 0.12,
+                    y: planetFloat ? -184 : -194
+                )
                 .opacity(appeared ? 1 : 0)
-                .scaleEffect(appeared || reduceMotion ? 1 : 0.96)
+                .scaleEffect(appeared || reduceMotion ? 1 : 0.94)
 
                 VO1DBrandLockup(compact: true)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 35)
+                    .padding(.top, 30)
                     .opacity(appeared ? 1 : 0)
 
                 Button {
@@ -96,7 +99,7 @@ struct LoginView: View {
                 .accessibilityLabel("Jump to key entry")
             }
         }
-        .frame(height: 190)
+        .frame(height: 205)
     }
 
     private var heading: some View {
