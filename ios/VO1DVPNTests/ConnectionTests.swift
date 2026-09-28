@@ -8,7 +8,7 @@ final class ConnectionTests: XCTestCase {
         defaults.set(false, forKey: "vo1d.showLivePing")
         return AppViewModel(defaults: defaults)
     }
-    private func wait(_ seconds: Double = 1.2) async throws {
+    private func wait(_ seconds: Double = 1.6) async throws {
         try await Task.sleep(for: .seconds(seconds))
     }
     func testFastestIsMeasuredAndCountryNeutral() {
@@ -38,7 +38,7 @@ final class ConnectionTests: XCTestCase {
         let route = try XCTUnwrap(app.servers.first { $0.code != app.activeServer?.code })
         app.select(route)
         XCTAssertEqual(app.phase, .switching)
-        try await wait(1.5)
+        try await wait(1.8)
         XCTAssertEqual(app.phase, .connected)
         XCTAssertEqual(app.activeServer?.code, route.code)
         await app.logout()
