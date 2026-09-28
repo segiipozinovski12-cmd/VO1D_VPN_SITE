@@ -9,7 +9,7 @@ final class PreviewUITests: XCTestCase {
         app.launchArguments = [
             "-vo1d.autoconnect", "NO",
             "-vo1d.autoFastest", "YES",
-            "-vo1d.reduceAnimations", "NO"
+            "-vo1d.reduceAnimations", "YES"
         ]
         app.launch()
 
