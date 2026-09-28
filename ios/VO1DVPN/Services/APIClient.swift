@@ -20,13 +20,21 @@ enum APIClientError: LocalizedError {
 final class APIClient {
     static let shared = APIClient()
 
+    private let session: URLSession
     private let decoder: JSONDecoder = {
         let value = JSONDecoder()
         value.keyDecodingStrategy = .convertFromSnakeCase
         return value
     }()
 
-    private init() {}
+    private init() {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.waitsForConnectivity = true
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 30
+        session = URLSession(configuration: configuration)
+    }
 
     func activate(key: String) async throws -> ActivateResponse {
         let (deviceID, deviceName) = await MainActor.run {
@@ -101,7 +109,19 @@ final class APIClient {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            switch error.code {
+            case .notConnectedToInternet:
+                throw APIClientError.server("No internet connection.")
+            case .timedOut:
+                throw APIClientError.server("VO1D server timed out. Try again.")
+            default:
+                throw APIClientError.server("Could not reach the VO1D server.")
+            }
+        }
         guard let http = response as? HTTPURLResponse else {
             throw APIClientError.invalidResponse
         }
