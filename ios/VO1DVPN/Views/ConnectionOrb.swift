@@ -85,6 +85,7 @@ struct ConnectionOrb: View {
                     .id("ignition-\(phase.rawValue)")
             } else if connected {
                 ConnectedSweep(animated: motion, color: accent)
+                    .id("connected-sweep-\(motion)")
                     .padding(26)
             }
 
