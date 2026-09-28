@@ -22,7 +22,8 @@ class CoreLogicTests(unittest.TestCase):
             ):
                 c.execute(f"DELETE FROM {table}")
             c.execute("""UPDATE app_embedded_licenses
-              SET redeemed_user_id=0,redeemed_at=0,issued_at=0,active=1""")
+              SET redeemed_user_id=0,redeemed_at=0,issued_at=0,active=1,
+                  bound_device_id='',bound_device_name=''""")
 
     def add_user(self,uid=100,balance=0,sub_until=0,auto_renew=0,auto_renew_days=30):
         with app.db() as c:
@@ -181,6 +182,38 @@ class CoreLogicTests(unittest.TestCase):
         session=app.app_session_user(token)
         self.assertIsNotNone(session)
         self.assertEqual(int(session["id"]),int(row["id"]))
+
+    def test_iPhone_plan_key_binds_to_first_device(self):
+        key=next(
+            code for code,days in app.APP_EMBEDDED_KEYS.items()
+            if int(days)==90
+        )
+
+        token,row,status=app.activate_app_key(
+            key,
+            "iphone-owner",
+            "Owner iPhone"
+        )
+        self.assertEqual(status,"ok")
+        self.assertTrue(token)
+
+        token2,row2,status2=app.activate_app_key(
+            key,
+            "iphone-other",
+            "Other iPhone"
+        )
+        self.assertIsNone(token2)
+        self.assertIsNone(row2)
+        self.assertEqual(status2,"key_in_use")
+
+        token3,row3,status3=app.activate_app_key(
+            key,
+            "iphone-owner",
+            "Owner iPhone"
+        )
+        self.assertEqual(status3,"ok")
+        self.assertTrue(token3)
+        self.assertEqual(int(row3["id"]),int(row["id"]))
 
     def test_app_key_requires_active_subscription(self):
         self.add_user(sub_until=app.now()-1)
