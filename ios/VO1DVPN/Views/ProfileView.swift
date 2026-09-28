@@ -71,7 +71,7 @@ struct ProfileView: View {
                 ZStack(alignment: .bottomTrailing) {
                     Image(systemName: preferences.avatar).font(.system(size: 30, weight: .light))
                         .frame(width: 74, height: 74)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
+                        .vo1dSystemGlass(in: RoundedRectangle(cornerRadius: 25, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 25, style: .continuous)
                                 .strokeBorder(.white.opacity(0.11), lineWidth: 1)
@@ -137,7 +137,7 @@ struct ProfileView: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(VO1DStyle.ice)
                 .frame(width: 32, height: 32)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .vo1dSystemGlass(in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .strokeBorder(.white.opacity(0.07), lineWidth: 1)
