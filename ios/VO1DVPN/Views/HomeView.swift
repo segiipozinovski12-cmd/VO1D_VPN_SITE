@@ -253,6 +253,11 @@ struct HomeView: View {
                 busy: model.phase.isBusy || flash
             )
             .frame(width: 356, height: 356)
+            .opacity(
+                model.isConnected || model.phase.isBusy || flash
+                ? 1
+                : 0.72
+            )
             .scaleEffect(
                 model.isConnected
                 ? (pulse ? 1.025 : 0.990)
@@ -269,6 +274,35 @@ struct HomeView: View {
                 ),
                 value: flash
             )
+
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .black.opacity(
+                                model.isConnected || model.phase.isBusy
+                                ? 0.46
+                                : 0.90
+                            ),
+                            .black.opacity(
+                                model.isConnected || model.phase.isBusy
+                                ? 0.30
+                                : 0.74
+                            ),
+                            .black.opacity(
+                                model.isConnected || model.phase.isBusy
+                                ? 0.08
+                                : 0.24
+                            ),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 18,
+                        endRadius: 132
+                    )
+                )
+                .frame(width: 264, height: 264)
+                .allowsHitTesting(false)
 
             connectionShockwaves
             connectControl
@@ -315,6 +349,7 @@ struct HomeView: View {
                 .frame(width: 104, height: 104)
                 .scaleEffect(burstOne ? 2.65 : 0.78)
                 .blur(radius: burstOne ? 2.5 : 0)
+                .opacity(particleBurst ? 1 : 0)
 
             Circle()
                 .stroke(
@@ -324,6 +359,7 @@ struct HomeView: View {
                 .frame(width: 122, height: 122)
                 .scaleEffect(burstTwo ? 2.34 : 0.80)
                 .blur(radius: burstTwo ? 4.4 : 0.9)
+                .opacity(particleBurst ? 1 : 0)
 
             Circle()
                 .stroke(
@@ -341,7 +377,7 @@ struct HomeView: View {
                         : 0.91
                 )
                 .blur(radius: flash ? 2.8 : 0.8)
-                .opacity(model.isConnected || flash ? 1 : 0.42)
+                .opacity(model.isConnected || flash ? 1 : 0.14)
 
             Circle()
                 .fill(
@@ -426,7 +462,7 @@ struct HomeView: View {
                                 LinearGradient(
                                     colors: [
                                         .white.opacity(
-                                            model.isConnected ? 0.62 : 0.30
+                                            model.isConnected ? 0.62 : 0.18
                                         ),
                                         VO1DStyle.chrome.opacity(
                                             model.isConnected ? 0.18 : 0.06
@@ -465,7 +501,7 @@ struct HomeView: View {
                                 .white.opacity(
                                     model.isConnected || model.phase.isBusy
                                     ? 0.94
-                                    : 0.52
+                                    : 0.28
                                 ),
                                 .clear
                             ],
