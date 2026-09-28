@@ -75,7 +75,7 @@ struct ServersView: View {
             .padding(.horizontal, 22).padding(.bottom, 24)
         }
         .scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
-        .background(VO1DStyle.background)
+        .background { DeepSpaceBackdrop().ignoresSafeArea() }
         .accessibilityIdentifier("servers.screen")
     }
     private var searchField: some View {
