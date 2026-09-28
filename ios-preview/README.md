@@ -10,7 +10,7 @@ open VO1D_VPN_PREVIEW.xcodeproj
 
 Select **VO1D_VPN_PREVIEW**, choose an **iPhone Simulator**, and press **Run**. Requires Xcode with iOS 17 or newer and XcodeGen (`brew install xcodegen`).
 
-The first launch opens Home automatically. Connect takes about 1.1–1.3 seconds so PREPARE, ROUTE and SECURE remain visible. Demo ping and traffic are local simulations; no tunnel is installed. Log Out returns to an **Enter demo** button without requiring a key. Nickname, avatar, favorites, last manually selected location and preferences persist locally.
+The first launch opens Home automatically. Connect takes about 0.9–1.0 seconds so PREPARE, ROUTE and SECURE remain visible without feeling artificially delayed. Demo ping and traffic are local simulations; no tunnel is installed. Log Out returns to an **Enter demo** button without requiring a key. Nickname, avatar, favorites, last manually selected location and preferences persist locally.
 
 ## Validation
 
