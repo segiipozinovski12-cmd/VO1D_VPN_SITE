@@ -33,6 +33,8 @@ final class AppViewModel: ObservableObject {
     private var foreground = true
     private var didBootstrap = false
     private var authRevision = UUID()
+    private let pendingPaymentOrderKey = "vo1d.pendingPayment.orderID"
+    private let pendingPaymentPollKey = "vo1d.pendingPayment.pollToken"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -109,6 +111,7 @@ final class AppViewModel: ObservableObject {
             await refresh()
         } else {
             setupGuestCatalog()
+            await resumePendingPaymentIfNeeded()
         }
         #endif
         pings.start(
@@ -160,6 +163,83 @@ final class AppViewModel: ObservableObject {
             return true
         } catch { report(error); return false }
         #endif
+    }
+
+    func createPayment(
+        planDays: Int,
+        method: String
+    ) async throws -> PaymentCreateResponse {
+        errorMessage = nil
+        let response = try await api.createPayment(
+            planDays: planDays,
+            paymentMethod: method
+        )
+        defaults.set(response.orderId, forKey: pendingPaymentOrderKey)
+        defaults.set(response.pollToken, forKey: pendingPaymentPollKey)
+        return response
+    }
+
+    func paymentStatus(
+        orderID: String,
+        pollToken: String
+    ) async throws -> PaymentStatusResponse {
+        try await api.paymentStatus(
+            orderID: orderID,
+            pollToken: pollToken
+        )
+    }
+
+    @discardableResult
+    func finishPurchasedPayment(
+        _ response: PaymentStatusResponse
+    ) async -> Bool {
+        guard response.status == "paid",
+              let token = response.token,
+              let account = response.account,
+              let collection = response.servers
+        else {
+            return false
+        }
+
+        disconnect()
+        KeychainStore.saveToken(token)
+        sessionToken = token
+        isGuestMode = false
+        paywallRequested = false
+        errorMessage = nil
+        defaults.removeObject(forKey: pendingPaymentOrderKey)
+        defaults.removeObject(forKey: pendingPaymentPollKey)
+        apply(account: account, collection: collection)
+        await pings.refresh()
+        chooseInitialServer()
+        pings.start(live: preferences.livePing && foreground)
+        Haptics.play(.success, enabled: preferences.haptics)
+        return true
+    }
+
+    private func resumePendingPaymentIfNeeded() async {
+        guard let orderID = defaults.string(forKey: pendingPaymentOrderKey),
+              let pollToken = defaults.string(forKey: pendingPaymentPollKey),
+              !orderID.isEmpty,
+              !pollToken.isEmpty
+        else { return }
+
+        do {
+            let response = try await api.paymentStatus(
+                orderID: orderID,
+                pollToken: pollToken
+            )
+
+            if response.status == "paid" {
+                _ = await finishPurchasedPayment(response)
+            } else if ["expired", "canceled", "refunded", "chargeback", "error"]
+                .contains(response.status) {
+                defaults.removeObject(forKey: pendingPaymentOrderKey)
+                defaults.removeObject(forKey: pendingPaymentPollKey)
+            }
+        } catch {
+            // A pending payment should survive temporary network outages.
+        }
     }
 
     func refresh() async {
@@ -337,6 +417,9 @@ final class AppViewModel: ObservableObject {
         if active {
             pings.start(live: preferences.livePing && sessionToken != nil)
             if vpn.isConnected { startTrafficPolling() }
+            if sessionToken == nil {
+                Task { await resumePendingPaymentIfNeeded() }
+            }
         } else {
             pings.stop()
             stopTrafficPolling()
