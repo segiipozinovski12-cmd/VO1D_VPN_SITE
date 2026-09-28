@@ -49,37 +49,87 @@ private struct AdaptiveSystemGlass<S: Shape>: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if reduceTransparency {
-            content.background(
-                VO1DStyle.panel.opacity(0.98),
-                in: shape
-            )
-        } else {
-            #if compiler(>=6.2)
-            if #available(iOS 26.0, *) {
-                if interactive {
-                    content.glassEffect(
-                        .regular.interactive(),
-                        in: shape
-                    )
+        Group {
+            if reduceTransparency {
+                content.background(
+                    VO1DStyle.panel.opacity(0.98),
+                    in: shape
+                )
+            } else {
+                #if compiler(>=6.2)
+                if #available(iOS 26.0, *) {
+                    if interactive {
+                        content.glassEffect(
+                            .regular.interactive(),
+                            in: shape
+                        )
+                    } else {
+                        content.glassEffect(
+                            .regular,
+                            in: shape
+                        )
+                    }
                 } else {
-                    content.glassEffect(
-                        .regular,
+                    content.background(
+                        .ultraThinMaterial,
                         in: shape
                     )
                 }
-            } else {
+                #else
                 content.background(
                     .ultraThinMaterial,
                     in: shape
                 )
+                #endif
             }
-            #else
-            content.background(
-                .ultraThinMaterial,
-                in: shape
-            )
-            #endif
+        }
+        .background {
+            shape
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(reduceTransparency ? 0.03 : 0.055),
+                            VO1DStyle.panel.opacity(reduceTransparency ? 0.92 : 0.44),
+                            VO1DStyle.backgroundRaised.opacity(0.30)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .allowsHitTesting(false)
+        }
+        .overlay {
+            shape
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(reduceTransparency ? 0.02 : 0.075),
+                            .clear,
+                            .black.opacity(0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .blendMode(.screen)
+                .opacity(reduceTransparency ? 0.25 : 0.72)
+                .allowsHitTesting(false)
+        }
+        .overlay {
+            shape
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(reduceTransparency ? 0.10 : 0.22),
+                            .white.opacity(0.055),
+                            .black.opacity(0.20)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.75
+                )
+                .allowsHitTesting(false)
         }
     }
 }
@@ -111,10 +161,17 @@ struct DeepSpaceBackdrop: View {
             )
 
             RadialGradient(
-                colors: [.white.opacity(0.020), .clear],
+                colors: [.white.opacity(0.024), .clear],
                 center: UnitPoint(x: 0.88, y: 0.32),
                 startRadius: 0,
                 endRadius: 350
+            )
+
+            RadialGradient(
+                colors: [VO1DStyle.raised.opacity(0.10), .clear],
+                center: UnitPoint(x: 0.50, y: 0.72),
+                startRadius: 20,
+                endRadius: 420
             )
 
             LinearGradient(
