@@ -191,6 +191,7 @@ struct SettingsView: View {
                         )
                 }
                 .buttonStyle(ScaleButtonStyle(scale: 0.92))
+                .accessibilityLabel("Back")
 
                 Spacer()
             }
