@@ -4,6 +4,7 @@ struct LoginView: View {
     var onClose: () -> Void = {}
 
     @EnvironmentObject private var model: AppViewModel
+    @Environment(\.openURL) private var openURL
     @Environment(\.vo1dReduceMotion) private var reduceMotion
 
     @State private var key = ""
@@ -246,10 +247,15 @@ struct LoginView: View {
             title: "Get Subscription",
             icon: "chevron.right"
         ) {
-            Haptics.play(.selection, enabled: model.preferences.haptics)
+            Haptics.play(
+                .selection,
+                enabled: model.preferences.haptics
+            )
 
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.24)) {
-                keyFocused = true
+            if let url = URL(
+                string: "https://t.me/VO1D_VPNbot"
+            ) {
+                openURL(url)
             }
         }
         .accessibilityIdentifier("subscription.primary")
