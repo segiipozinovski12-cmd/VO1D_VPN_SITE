@@ -71,24 +71,36 @@ struct AppShell: View {
                     .frame(height: 46)
                     .background {
                         if tab == item {
-                            Capsule()
-                                .fill(.ultraThinMaterial)
-                                .overlay {
+                            Color.clear
+                                .vo1dSystemGlass(
+                                    in: Capsule(),
+                                    interactive: true
+                                )
+                                .background {
                                     Capsule()
                                         .fill(
                                             LinearGradient(
                                                 colors: [
-                                                    .white.opacity(0.12),
-                                                    VO1DStyle.ice.opacity(0.06),
-                                                    .white.opacity(0.035)
+                                                    .white.opacity(0.105),
+                                                    .white.opacity(0.050),
+                                                    .white.opacity(0.025)
                                                 ],
                                                 startPoint: .topLeading,
                                                 endPoint: .bottomTrailing
                                             )
                                         )
                                 }
-                                .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 1))
-                                .matchedGeometryEffect(id: "tab", in: tabSelection)
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(
+                                            .white.opacity(0.12),
+                                            lineWidth: 1
+                                        )
+                                )
+                                .matchedGeometryEffect(
+                                    id: "tab",
+                                    in: tabSelection
+                                )
                         }
                     }
                 }
