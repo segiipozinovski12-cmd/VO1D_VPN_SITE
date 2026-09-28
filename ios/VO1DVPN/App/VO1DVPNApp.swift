@@ -145,7 +145,7 @@ private struct ActivationSuccessOverlay: View {
 
             RadialGradient(
                 colors: [
-                    VO1DStyle.green.opacity(reveal ? 0.075 : 0.020),
+                    VO1DStyle.frost.opacity(reveal ? 0.055 : 0.012),
                     .clear
                 ],
                 center: .center,
@@ -182,7 +182,7 @@ private struct ActivationSuccessOverlay: View {
                             LinearGradient(
                                 colors: [
                                     .white.opacity(0.18),
-                                    VO1DStyle.green,
+                                    VO1DStyle.pearl,
                                     .white.opacity(0.12)
                                 ],
                                 startPoint: .topLeading,
@@ -208,7 +208,7 @@ private struct ActivationSuccessOverlay: View {
                     Image(systemName: "checkmark.shield.fill")
                         .font(.system(size: 35, weight: .light))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(VO1DStyle.green)
+                        .foregroundStyle(VO1DStyle.pearl)
                         .scaleEffect(reveal || reduceMotion ? 1 : 0.82)
                         .opacity(reveal ? 1 : 0)
                 }
@@ -227,7 +227,7 @@ private struct ActivationSuccessOverlay: View {
                     Text("ACCESS GRANTED")
                         .font(VO1DStyle.mono(9))
                         .tracking(2.5)
-                        .foregroundStyle(VO1DStyle.green)
+                        .foregroundStyle(VO1DStyle.pearl)
 
                     Text("Preparing your private network")
                         .font(.subheadline)
@@ -241,14 +241,14 @@ private struct ActivationSuccessOverlay: View {
 
                 HStack(spacing: 7) {
                     Circle()
-                        .fill(VO1DStyle.green)
+                        .fill(VO1DStyle.pearl)
                         .frame(width: 5, height: 5)
 
                     Text("SESSION VERIFIED")
                         .font(VO1DStyle.mono(8))
                         .tracking(1.5)
                 }
-                .foregroundStyle(VO1DStyle.green)
+                .foregroundStyle(VO1DStyle.pearl)
                 .padding(.bottom, 34)
                 .opacity(reveal ? 1 : 0)
             }
