@@ -50,47 +50,55 @@ struct ReferenceBackdrop: View {
 
 private struct ReferenceAmbientBloom: View {
     @Environment(\.vo1dReduceMotion) private var reduceMotion
-    @State private var drift = false
+    @State private var pulse = false
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                Circle()
-                    .fill(VO1DStyle.frost.opacity(0.11))
-                    .frame(width: proxy.size.width * 0.90)
-                    .blur(radius: 95)
-                    .offset(
-                        x: drift ? -proxy.size.width * 0.18 : -proxy.size.width * 0.34,
-                        y: drift ? -proxy.size.height * 0.33 : -proxy.size.height * 0.25
-                    )
+        ZStack {
+            RadialGradient(
+                colors: [
+                    VO1DStyle.frost.opacity(0.12),
+                    VO1DStyle.steel.opacity(0.035),
+                    .clear
+                ],
+                center: UnitPoint(x: 0.12, y: 0.10),
+                startRadius: 0,
+                endRadius: 420
+            )
 
-                Circle()
-                    .fill(VO1DStyle.steel.opacity(0.10))
-                    .frame(width: proxy.size.width * 0.72)
-                    .blur(radius: 110)
-                    .offset(
-                        x: drift ? proxy.size.width * 0.26 : proxy.size.width * 0.40,
-                        y: drift ? proxy.size.height * 0.18 : proxy.size.height * 0.34
-                    )
+            RadialGradient(
+                colors: [
+                    VO1DStyle.steel.opacity(0.095),
+                    VO1DStyle.midnight.opacity(0.035),
+                    .clear
+                ],
+                center: UnitPoint(x: 0.92, y: 0.66),
+                startRadius: 0,
+                endRadius: 390
+            )
 
-                Ellipse()
-                    .fill(.white.opacity(0.032))
-                    .frame(
-                        width: proxy.size.width * 1.18,
-                        height: proxy.size.height * 0.34
-                    )
-                    .blur(radius: 80)
-                    .rotationEffect(.degrees(-18))
-                    .offset(y: drift ? -18 : 34)
+            LinearGradient(
+                colors: [
+                    .clear,
+                    .white.opacity(pulse ? 0.035 : 0.018),
+                    .clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .rotationEffect(.degrees(-12))
+        }
+        .opacity(pulse ? 1.0 : 0.88)
+        .onAppear {
+            guard !reduceMotion else {
+                pulse = true
+                return
             }
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(
-                    .easeInOut(duration: 8.5)
-                    .repeatForever(autoreverses: true)
-                ) {
-                    drift = true
-                }
+
+            withAnimation(
+                .easeInOut(duration: 6.8)
+                .repeatForever(autoreverses: true)
+            ) {
+                pulse = true
             }
         }
         .allowsHitTesting(false)
@@ -136,10 +144,14 @@ private struct ReferenceLineField: View {
     private var lineTimeline: some View {
         TimelineView(
             .animation(
-                minimumInterval: reduceMotion ? 1.0 : 1.0 / 30.0
+                minimumInterval: reduceMotion ? 1.0 : 1.0 / 20.0
             )
         ) { timeline in
-            Canvas { context, size in
+            Canvas(
+                opaque: false,
+                colorMode: .linear,
+                rendersAsynchronously: true
+            ) { context, size in
                 let time =
                     reduceMotion
                     ? 0
@@ -169,7 +181,7 @@ private struct ReferenceLineField: View {
         focus: CGPoint?,
         impulse: CGFloat
     ) {
-        let rows = 18
+        let rows = 12
 
         for index in 0..<rows {
             let baseY =
@@ -228,26 +240,26 @@ private struct ReferenceLineField: View {
             path.addLine(to: p3)
             path.addLine(to: p4)
 
-            context.drawLayer { glow in
-                glow.addFilter(.blur(radius: 5.5))
+            if index.isMultiple(of: 3) {
+                context.drawLayer { glow in
+                    glow.addFilter(.blur(radius: 3.0))
 
-                glow.stroke(
-                    path,
-                    with: .color(
-                        VO1DStyle.frost.opacity(
-                            0.085 + Double(index % 4) * 0.016
+                    glow.stroke(
+                        path,
+                        with: .color(
+                            VO1DStyle.frost.opacity(0.10)
+                        ),
+                        style: StrokeStyle(
+                            lineWidth: 1.6,
+                            lineCap: .round,
+                            lineJoin: .round,
+                            dash: [
+                                22 + CGFloat(index % 4) * 7,
+                                14 + CGFloat(index % 3) * 5
+                            ]
                         )
-                    ),
-                    style: StrokeStyle(
-                        lineWidth: 2.4,
-                        lineCap: .round,
-                        lineJoin: .round,
-                        dash: [
-                            19 + CGFloat(index % 5) * 8,
-                            11 + CGFloat(index % 4) * 5
-                        ]
                     )
-                )
+                }
             }
 
             context.stroke(
@@ -290,9 +302,10 @@ private struct ReferenceLineField: View {
                         (sparkProgress - 0.82) / 0.18
                     )
 
-            context.drawLayer { sparkLayer in
-                sparkLayer.addFilter(.blur(radius: 4))
-                sparkLayer.fill(
+            if index.isMultiple(of: 2) {
+                context.drawLayer { sparkLayer in
+                    sparkLayer.addFilter(.blur(radius: 2.2))
+                    sparkLayer.fill(
                     Path(
                         ellipseIn: CGRect(
                             x: spark.x - 3.2,
@@ -307,6 +320,8 @@ private struct ReferenceLineField: View {
                         )
                     )
                 )
+            }
+
             }
 
             context.fill(
@@ -923,7 +938,12 @@ struct ReferenceVortex: View {
     var body: some View {
         TimelineView(
             .animation(
-                minimumInterval: reduceMotion ? 1.0 : 1.0 / 30.0
+                minimumInterval:
+                    reduceMotion
+                    ? 1.0
+                    : active || busy
+                        ? 1.0 / 30.0
+                        : 1.0 / 15.0
             )
         ) { timeline in
             let time =
@@ -931,7 +951,11 @@ struct ReferenceVortex: View {
                 ? 0
                 : timeline.date.timeIntervalSinceReferenceDate
 
-            Canvas { context, size in
+            Canvas(
+                opaque: false,
+                colorMode: .linear,
+                rendersAsynchronously: true
+            ) { context, size in
                 drawVortex(
                     context: &context,
                     size: size,
@@ -940,7 +964,6 @@ struct ReferenceVortex: View {
             }
         }
         .compositingGroup()
-        .drawingGroup()
         .accessibilityHidden(true)
     }
 
