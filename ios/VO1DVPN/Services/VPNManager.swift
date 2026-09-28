@@ -2,6 +2,11 @@ import Foundation
 import Combine
 import NetworkExtension
 
+struct TunnelTrafficDelta: Decodable, Equatable {
+    let received: Int64
+    let sent: Int64
+}
+
 @MainActor
 final class VPNManager: ObservableObject {
     @Published private(set) var status: NEVPNStatus = .invalid
@@ -82,6 +87,36 @@ final class VPNManager: ObservableObject {
         try Task.checkCancellation()
         try manager.connection.startVPNTunnel()
         refreshStatus()
+    }
+
+    func trafficDelta() async -> TunnelTrafficDelta? {
+        #if targetEnvironment(simulator)
+        return nil
+        #else
+        guard status == .connected,
+              let session = manager?.connection as? NETunnelProviderSession else {
+            return nil
+        }
+
+        return await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(Data("stats".utf8)) { data in
+                    guard let data else {
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    continuation.resume(
+                        returning: try? JSONDecoder().decode(
+                            TunnelTrafficDelta.self,
+                            from: data
+                        )
+                    )
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        #endif
     }
 
     func disconnect() {
