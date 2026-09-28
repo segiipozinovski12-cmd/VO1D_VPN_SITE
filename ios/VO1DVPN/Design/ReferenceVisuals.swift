@@ -963,7 +963,9 @@ struct ReferenceVortex: View {
                         ? lowPower
                             ? 1.0 / 24.0
                             : 1.0 / 30.0
-                        : 1.0
+                        : lowPower
+                            ? 1.0 / 15.0
+                            : 1.0 / 24.0
             )
         ) { timeline in
             let time =
@@ -1005,6 +1007,13 @@ struct ReferenceVortex: View {
                 ? 0.78
                 : 0.28
 
+        let energized = active || busy
+        let haloCount = energized ? 7 : 3
+        let glowCount = energized ? 20 : 7
+        let arcCount = energized ? 32 : 12
+        let chromeCount = energized ? 12 : 4
+        let orbitCount = energized ? 4 : 2
+
         // deep halo
         context.drawLayer { halo in
             halo.addFilter(
@@ -1013,7 +1022,7 @@ struct ReferenceVortex: View {
                 )
             )
 
-            for ring in 0..<7 {
+            for ring in 0..<haloCount {
                 let radius =
                     side * (0.235 + CGFloat(ring) * 0.048)
                 let rect = CGRect(
@@ -1047,7 +1056,7 @@ struct ReferenceVortex: View {
                 )
             )
 
-            for index in 0..<20 {
+            for index in 0..<glowCount {
                 let base =
                     Double(index) * 25.7 +
                     time * (active ? 23 : busy ? 34 : 8)
@@ -1095,7 +1104,7 @@ struct ReferenceVortex: View {
         }
 
         // crisp energy arcs
-        for index in 0..<32 {
+        for index in 0..<arcCount {
             let direction = index.isMultiple(of: 2) ? 1.0 : -1.0
             let base =
                 Double(index) * 15.0 +
@@ -1147,7 +1156,7 @@ struct ReferenceVortex: View {
                 .blur(radius: active ? 2.8 : 1.4)
             )
 
-            for index in 0..<12 {
+            for index in 0..<chromeCount {
                 let base =
                     Double(index) * 31.0 -
                     time * (active ? 13.0 : busy ? 19.0 : 4.0)
@@ -1184,7 +1193,7 @@ struct ReferenceVortex: View {
         }
 
         // inner orbit rings
-        for ring in 0..<4 {
+        for ring in 0..<orbitCount {
             let radius =
                 side * (0.18 + CGFloat(ring) * 0.040)
 
