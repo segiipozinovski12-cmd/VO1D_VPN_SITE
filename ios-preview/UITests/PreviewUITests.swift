@@ -14,20 +14,22 @@ final class PreviewUITests: XCTestCase {
         capture("02-home", app: app)
         control.tap()
         XCTAssertTrue(app.staticTexts["connection.status"].waitForExistence(timeout: 2))
+        Thread.sleep(forTimeInterval: 0.35)
+        capture("03-connecting", app: app)
         let connected = NSPredicate(format: "value == %@", "CONNECTED")
         expectation(for: connected, evaluatedWith: control)
         waitForExpectations(timeout: 5)
-        capture("03-connected", app: app)
+        capture("04-connected", app: app)
         app.swipeUp()
-        capture("04-dashboard", app: app)
+        capture("05-dashboard", app: app)
         app.buttons["tab.locations"].tap()
         let search = app.textFields["servers.search"]
         XCTAssertTrue(search.waitForExistence(timeout: 3))
-        capture("05-locations", app: app)
+        capture("06-locations", app: app)
         search.tap(); search.typeText("Russia")
         app.buttons["favorite.RU"].tap()
         app.buttons["server.RU"].tap()
-        capture("06-switching", app: app)
+        capture("07-switching", app: app)
         app.buttons["tab.home"].tap()
         expectation(for: connected, evaluatedWith: app.buttons["connection.control"])
         waitForExpectations(timeout: 5)
@@ -43,7 +45,7 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.buttons["server.RU"].exists)
         app.buttons["tab.profile"].tap()
         XCTAssertTrue(app.textFields["profile.nickname"].waitForExistence(timeout: 3))
-        capture("07-profile", app: app)
+        capture("08-profile", app: app)
         app.buttons["profile.avatar"].tap()
         let avatarChoice = app.buttons["avatar.moon.stars.fill"]
         XCTAssertTrue(avatarChoice.waitForExistence(timeout: 3))
@@ -61,7 +63,7 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(settingsTitle.waitForExistence(timeout: 5))
         let autoConnect = app.switches.matching(NSPredicate(format: "label CONTAINS[c] %@", "Auto Connect")).firstMatch
         XCTAssertTrue(autoConnect.waitForExistence(timeout: 3))
-        capture("08-settings", app: app)
+        capture("09-settings", app: app)
         if autoConnect.isHittable { autoConnect.tap() }
         app.swipeUp()
         let switches = app.switches
@@ -69,7 +71,7 @@ final class PreviewUITests: XCTestCase {
             let last = switches.element(boundBy: switches.count - 1)
             if last.isHittable { last.tap() }
         }
-        capture("09-interface", app: app)
+        capture("10-interface", app: app)
     }
     @MainActor
     private func capture(_ name: String, app: XCUIApplication) {
