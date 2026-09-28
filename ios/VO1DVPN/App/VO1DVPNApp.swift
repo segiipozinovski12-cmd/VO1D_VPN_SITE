@@ -27,7 +27,7 @@ private struct RootView: View {
 
     var body: some View {
         ZStack {
-            VO1DStyle.background.ignoresSafeArea()
+            DeepSpaceBackdrop().ignoresSafeArea()
             Group {
                 if model.sessionToken == nil { LoginView() }
                 else { AppShell() }
@@ -37,8 +37,13 @@ private struct RootView: View {
             .allowsHitTesting(!showSplash)
             .accessibilityHidden(showSplash)
             if showSplash {
-                LaunchScreenView { splashFinished = true }
-                    .transition(.opacity).zIndex(2)
+                LaunchScreenView {
+                    withAnimation(motionReduced ? nil : .easeOut(duration: 0.38)) {
+                        splashFinished = true
+                    }
+                }
+                .transition(motionReduced ? .opacity : .opacity.combined(with: .scale(scale: 1.015)))
+                .zIndex(2)
             }
         }
         .environment(\.vo1dReduceMotion, motionReduced)
