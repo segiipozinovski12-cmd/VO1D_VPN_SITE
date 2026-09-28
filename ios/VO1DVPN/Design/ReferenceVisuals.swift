@@ -391,9 +391,13 @@ private struct ReferenceLineField: View {
 
 private struct ReferenceNoise: View {
     var body: some View {
-        Canvas { context, size in
-            let columns = 54
-            let rows = 96
+        Canvas(
+            opaque: false,
+            colorMode: .linear,
+            rendersAsynchronously: true
+        ) { context, size in
+            let columns = 38
+            let rows = 68
 
             for y in 0..<rows {
                 for x in 0..<columns {
@@ -419,8 +423,8 @@ private struct ReferenceNoise: View {
                 }
             }
 
-            for line in 0..<16 {
-                let y = size.height * CGFloat(line + 1) / 17
+            for line in 0..<10 {
+                let y = size.height * CGFloat(line + 1) / 11
                 let width = size.width * CGFloat(0.06 + Double((line * 19) % 29) / 100)
                 let x = size.width * CGFloat(Double((line * 31) % 68) / 100)
                 context.fill(
