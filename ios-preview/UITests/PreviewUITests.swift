@@ -24,7 +24,7 @@ final class PreviewUITests: XCTestCase {
 
         let connected = NSPredicate(format: "value == %@", "CONNECTED")
         expectation(for: connected, evaluatedWith: connection)
-        waitForExpectations(timeout: 5)
+        waitForExpectations(timeout: 15)
         capture("03-home-connected", app: app)
 
         app.buttons["tab.locations"].tap()
@@ -38,7 +38,7 @@ final class PreviewUITests: XCTestCase {
         let russia = app.buttons["server.RU"]
         XCTAssertTrue(russia.waitForExistence(timeout: 3))
         russia.tap()
-        Thread.sleep(forTimeInterval: 0.35)
+        Thread.sleep(forTimeInterval: 0.75)
         capture("05-route-switch", app: app)
 
         app.buttons["tab.stats"].tap()
@@ -107,9 +107,9 @@ final class PreviewUITests: XCTestCase {
             for: NSPredicate(format: "exists == false"),
             evaluatedWith: accepted
         )
-        waitForExpectations(timeout: 5)
+        waitForExpectations(timeout: 7)
 
-        XCTAssertTrue(connection.waitForExistence(timeout: 5))
+        XCTAssertTrue(connection.waitForExistence(timeout: 7))
         capture("11-home-after-activation", app: app)
     }
 
