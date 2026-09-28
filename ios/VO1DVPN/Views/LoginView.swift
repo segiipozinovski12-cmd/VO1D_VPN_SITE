@@ -153,7 +153,7 @@ struct LoginView: View {
             Text(
                 model.isDemoMode
                 ? "The Simulator keeps the complete interface and animations, but network traffic stays local."
-                : "Pick a subscription, message @vo1d_root to purchase it, then activate the license key you receive."
+                : "Pick a subscription, contact @vo1d_root to purchase it, then enter the fixed VO1D license key you receive."
             )
             .font(.subheadline)
             .foregroundStyle(VO1DStyle.secondary)
@@ -379,7 +379,7 @@ struct LoginView: View {
             Text(
                 model.isDemoMode
                 ? "PREVIEW MODE"
-                : "KEY VALIDATION HAPPENS ON THE VO1D BACKEND"
+                : "KEY CHECKED LOCALLY · REAL VPN SESSION VIA VO1D API"
             )
             .font(VO1DStyle.mono(8))
             .tracking(0.55)
@@ -424,10 +424,6 @@ struct LoginView: View {
 
     private func formatKeyInput(_ input: String) -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if trimmed.uppercased().hasPrefix("VO1D1.") {
-            return trimmed
-        }
 
         var raw = trimmed
             .uppercased()
