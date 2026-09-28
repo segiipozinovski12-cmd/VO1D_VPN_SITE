@@ -154,49 +154,7 @@ extension View {
 
 struct DeepSpaceBackdrop: View {
     var body: some View {
-        ZStack {
-            VO1DStyle.background
-
-            RadialGradient(
-                colors: [.white.opacity(0.035), .clear],
-                center: UnitPoint(x: 0.16, y: 0.05),
-                startRadius: 0,
-                endRadius: 410
-            )
-
-            RadialGradient(
-                colors: [
-                    VO1DStyle.frost.opacity(0.026),
-                    .white.opacity(0.012),
-                    .clear
-                ],
-                center: UnitPoint(x: 0.88, y: 0.32),
-                startRadius: 0,
-                endRadius: 360
-            )
-
-            RadialGradient(
-                colors: [
-                    VO1DStyle.steel.opacity(0.12),
-                    VO1DStyle.raised.opacity(0.06),
-                    .clear
-                ],
-                center: UnitPoint(x: 0.50, y: 0.72),
-                startRadius: 20,
-                endRadius: 440
-            )
-
-            LinearGradient(
-                colors: [
-                    .white.opacity(0.010),
-                    .clear,
-                    Color.black.opacity(0.30)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .accessibilityHidden(true)
+        ReferenceBackdrop()
     }
 }
 
