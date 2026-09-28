@@ -59,6 +59,7 @@ final class PreviewUITests: XCTestCase {
         if !settings.isHittable { app.swipeUp() }
         XCTAssertTrue(settings.isHittable)
         settings.tap()
+        capture("09-settings-attempt", app: app)
 
         let settingsBack = app.buttons["Back"]
         XCTAssertTrue(settingsBack.waitForExistence(timeout: 5))
