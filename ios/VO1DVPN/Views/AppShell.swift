@@ -68,27 +68,82 @@ struct AppShell: View {
                 Button {
                     select(item)
                 } label: {
-                    VStack(spacing: 6) {
-                        Image(systemName: item.icon)
-                            .font(
-                                .system(
-                                    size: 18,
-                                    weight:
-                                        tab == item
-                                        ? .semibold
-                                        : .regular
+                    ZStack {
+                        if tab == item {
+                            RoundedRectangle(
+                                cornerRadius: 16,
+                                style: .continuous
+                            )
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        .white.opacity(0.12),
+                                        VO1DStyle.frost.opacity(0.055),
+                                        VO1DStyle.midnight.opacity(0.44)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
                             )
-                            .symbolRenderingMode(.hierarchical)
+                            .overlay {
+                                RoundedRectangle(
+                                    cornerRadius: 16,
+                                    style: .continuous
+                                )
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [
+                                            .white.opacity(0.32),
+                                            VO1DStyle.chrome.opacity(0.10),
+                                            .white.opacity(0.04)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 0.7
+                                )
+                            }
+                            .shadow(
+                                color: VO1DStyle.frost.opacity(0.08),
+                                radius: 10
+                            )
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 5)
+                            .transition(
+                                .scale(scale: 0.92)
+                                .combined(with: .opacity)
+                            )
+                        }
 
-                        Text(item.rawValue)
-                            .font(.system(size: 10, weight: .medium))
+                        VStack(spacing: 6) {
+                            Image(systemName: item.icon)
+                                .font(
+                                    .system(
+                                        size: 18,
+                                        weight:
+                                            tab == item
+                                            ? .semibold
+                                            : .regular
+                                    )
+                                )
+                                .symbolRenderingMode(.hierarchical)
+                                .shadow(
+                                    color:
+                                        tab == item
+                                        ? .white.opacity(0.24)
+                                        : .clear,
+                                    radius: 6
+                                )
+
+                            Text(item.rawValue)
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(
+                            tab == item
+                            ? .white
+                            : .white.opacity(0.34)
+                        )
                     }
-                    .foregroundStyle(
-                        tab == item
-                        ? .white
-                        : .white.opacity(0.34)
-                    )
                     .frame(maxWidth: .infinity)
                     .frame(height: 60)
                     .contentShape(Rectangle())
