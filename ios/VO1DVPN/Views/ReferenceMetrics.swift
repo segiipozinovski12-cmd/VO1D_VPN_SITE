@@ -10,7 +10,7 @@ struct ReferenceMetricCard: View {
     var body: some View {
         ReferenceGlassCard(
             radius: 16,
-            highlighted: large
+            highlighted: false
         ) {
             ZStack(alignment: .topTrailing) {
                 VStack(alignment: .leading, spacing: large ? 10 : 6) {
