@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 // MARK: - VO1D cinematic reference visual system
