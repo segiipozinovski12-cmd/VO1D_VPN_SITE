@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct LoginView: View {
@@ -396,7 +397,7 @@ struct LoginView: View {
         if clean.uppercased().hasPrefix("VO1D1.") {
             return clean.count > 16
         }
-        return clean.filter(\.isLetterOrNumber).count == 16
+        return clean.filter { $0.isLetter || $0.isNumber }.count == 16
     }
 
     private func activate() {
