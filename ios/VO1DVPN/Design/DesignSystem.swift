@@ -43,6 +43,40 @@ extension EnvironmentValues {
     }
 }
 
+private extension View {
+    @ViewBuilder
+    func vo1dSystemGlass<S: Shape>(
+        in shape: S,
+        interactive: Bool = false
+    ) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            if interactive {
+                self.glassEffect(
+                    .regular.interactive(),
+                    in: shape
+                )
+            } else {
+                self.glassEffect(
+                    .regular,
+                    in: shape
+                )
+            }
+        } else {
+            self.background(
+                .ultraThinMaterial,
+                in: shape
+            )
+        }
+        #else
+        self.background(
+            .ultraThinMaterial,
+            in: shape
+        )
+        #endif
+    }
+}
+
 struct DeepSpaceBackdrop: View {
     var body: some View {
         ZStack {
@@ -85,13 +119,18 @@ struct Surface: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
 
-        content
-            .background(
-                reduceTransparency
-                ? AnyShapeStyle(VO1DStyle.panel.opacity(0.98))
-                : AnyShapeStyle(.ultraThinMaterial),
-                in: shape
-            )
+        Group {
+            if reduceTransparency {
+                content.background(
+                    VO1DStyle.panel.opacity(0.98),
+                    in: shape
+                )
+            } else {
+                content.vo1dSystemGlass(
+                    in: shape
+                )
+            }
+        }
             .background(
                 shape.fill(
                     LinearGradient(
@@ -150,13 +189,19 @@ struct GlassCircle: ViewModifier {
     var highlighted = false
 
     func body(content: Content) -> some View {
-        content
-            .background(
-                reduceTransparency
-                ? AnyShapeStyle(VO1DStyle.raised.opacity(0.98))
-                : AnyShapeStyle(.ultraThinMaterial),
-                in: Circle()
-            )
+        Group {
+            if reduceTransparency {
+                content.background(
+                    VO1DStyle.raised.opacity(0.98),
+                    in: Circle()
+                )
+            } else {
+                content.vo1dSystemGlass(
+                    in: Circle(),
+                    interactive: true
+                )
+            }
+        }
             .background(
                 Circle().fill(
                     LinearGradient(
