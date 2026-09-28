@@ -92,6 +92,8 @@ struct StatsView: View {
                             busy: model.phase.isBusy
                         )
                         .frame(width: 52, height: 52)
+                        .clipShape(Circle())
+                        .contentShape(Circle())
                     }
                 }
 
