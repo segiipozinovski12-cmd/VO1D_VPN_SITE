@@ -116,9 +116,14 @@ final class VPNManager: ObservableObject {
         let generation = UUID()
         demoGeneration = generation
         status = .connecting
-        for phase in [ConnectionPhase.preparing, .routing, .securing] {
+        let sequence: [(ConnectionPhase, Int)] = [
+            (.preparing, 270),
+            (.routing, 300),
+            (.securing, 340)
+        ]
+        for (phase, delay) in sequence {
             stage(phase)
-            try await Task.sleep(for: .milliseconds(380))
+            try await Task.sleep(for: .milliseconds(delay))
             try Task.checkCancellation()
             guard generation == demoGeneration else { throw CancellationError() }
         }
