@@ -530,6 +530,7 @@ def send(chat_id,text,kb=None,disable_preview=True):
 
 
 def admin_alert(key,text,cooldown=None):
+    if not TOKEN:return False
     cooldown=max(0,int(ALERT_COOLDOWN_SECONDS if cooldown is None else cooldown))
     ts=now()
     with _ALERT_LOCK:
@@ -2623,6 +2624,7 @@ def mark_reminder(uid,key):
     with db() as c:c.execute("INSERT OR IGNORE INTO reminders(user_id,event_key,sent_at) VALUES(?,?,?)",(uid,key,now()))
 
 def send_once(uid,key,text,kb=None):
+    if not TOKEN:return False
     if reminder_sent(uid,key):return False
     try:
         send(uid,text,kb)
@@ -2631,6 +2633,7 @@ def send_once(uid,key,text,kb=None):
     except Exception:return False
 
 def refresh_node_statuses(notify_changes=True):
+    notify_changes=bool(notify_changes and TOKEN)
     transitions=[]
     for i,node in enumerate(VPN_NODES):
         online,lat=probe_node(i)
