@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct LoginView: View {
+    var onClose: () -> Void = {}
+
     @EnvironmentObject private var model: AppViewModel
     @Environment(\.vo1dReduceMotion) private var reduceMotion
 
@@ -88,7 +90,9 @@ struct LoginView: View {
             .opacity(appeared ? 1 : 0)
 
             Button {
-                keyFocused = true
+                keyFocused = false
+                model.errorMessage = nil
+                onClose()
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 14, weight: .medium))
@@ -116,7 +120,7 @@ struct LoginView: View {
             .buttonStyle(ScaleButtonStyle(scale: 0.94))
             .padding(.top, 12)
             .padding(.trailing, 18)
-            .accessibilityLabel("Jump to key entry")
+            .accessibilityLabel("Close subscription screen")
         }
         .frame(height: 112)
     }
