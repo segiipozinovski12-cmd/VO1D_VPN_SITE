@@ -185,6 +185,13 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 142)
                 }
+                .frame(height: 142)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: 15,
+                        style: .continuous
+                    )
+                )
 
                 if let discount = plan.discount {
                     Text(discount)
