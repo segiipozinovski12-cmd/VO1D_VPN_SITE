@@ -75,11 +75,25 @@ struct HomeView: View {
                     appeared = true
                 }
 
+            }
+        }
+        .onChange(of: model.isConnected) { _, connected in
+            guard !reduceMotion else {
+                pulse = connected
+                return
+            }
+
+            if connected {
+                pulse = false
                 withAnimation(
-                    .easeInOut(duration: 2.6)
+                    .easeInOut(duration: 2.8)
                     .repeatForever(autoreverses: true)
                 ) {
                     pulse = true
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.22)) {
+                    pulse = false
                 }
             }
         }
@@ -88,8 +102,6 @@ struct HomeView: View {
 
     private var homeBackdrop: some View {
         ZStack {
-            ReferenceBackdrop(impact: flash)
-
             RadialGradient(
                 colors: [
                     VO1DStyle.frost.opacity(
@@ -163,8 +175,17 @@ struct HomeView: View {
                 .frame(width: 38, height: 38)
                 .background {
                     Circle()
-                        .fill(Color.white.opacity(0.045))
-                        .background(.ultraThinMaterial, in: Circle())
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.09),
+                                    VO1DStyle.graphite.opacity(0.78),
+                                    .black.opacity(0.90)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                 }
                 .overlay {
                     Circle()
