@@ -135,7 +135,7 @@ struct ServersView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .background { DeepSpaceBackdrop().ignoresSafeArea() }
+        .background { ReferenceBackdrop() }
         .animation(
             reduceMotion ? nil : .snappy(duration: 0.26),
             value: model.phase == .switching
@@ -156,11 +156,14 @@ struct ServersView: View {
 
     private var header: some View {
         HStack(alignment: .top) {
-            PageHeading(
-                number: "02",
-                title: "Locations",
-                subtitle: "A world of possibilities. One connection."
-            )
+            VStack(alignment: .leading, spacing: 6) {
+                Text("LOCATIONS")
+                    .font(.system(size: 28, weight: .semibold))
+                Text("Choose your route")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.44))
+            }
+            .padding(.top, 16)
 
             Button {
                 Haptics.play(
