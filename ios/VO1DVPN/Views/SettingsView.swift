@@ -133,6 +133,9 @@ struct SettingsView: View {
                 networkSection
                     .settingsReveal(appeared, delay: 0.14, reduceMotion: reduceMotion)
 
+                legalSection
+                    .settingsReveal(appeared, delay: 0.17, reduceMotion: reduceMotion)
+
                 if model.isDemoMode {
                     Text("SIMULATOR DEMO / NO REAL VPN TRAFFIC")
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
@@ -343,6 +346,104 @@ struct SettingsView: View {
                 .padding(.horizontal, 16)
             }
         }
+    }
+
+    private var legalSection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Text("LEGAL")
+                .font(
+                    .system(
+                        size: 9,
+                        weight: .medium,
+                        design: .monospaced
+                    )
+                )
+                .tracking(1.7)
+                .foregroundStyle(.white.opacity(0.38))
+
+            Text("Privacy, payments and service terms.")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.34))
+
+            ReferenceGlassCard(radius: 22) {
+                VStack(spacing: 0) {
+                    NavigationLink {
+                        LegalDocumentView(document: .privacy)
+                    } label: {
+                        legalRow(
+                            title: "Privacy Policy",
+                            detail: "RollyPay.io · August 12, 2026",
+                            icon: "hand.raised"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.privacy")
+
+                    divider
+
+                    NavigationLink {
+                        LegalDocumentView(document: .terms)
+                    } label: {
+                        legalRow(
+                            title: "User Agreement",
+                            detail: "Public offer · RollyPay.io",
+                            icon: "doc.text"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.terms")
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func legalRow(
+        title: String,
+        detail: String,
+        icon: String
+    ) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(
+                    cornerRadius: 10,
+                    style: .continuous
+                )
+                .fill(.white.opacity(0.045))
+                .frame(width: 34, height: 34)
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: 10,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        .white.opacity(0.08),
+                        lineWidth: 0.8
+                    )
+                }
+
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .light))
+                    .foregroundStyle(.white.opacity(0.82))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+
+                Text(detail)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.34))
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.34))
+        }
+        .padding(.vertical, 14)
     }
 
     private func networkRow(
