@@ -7,57 +7,90 @@ struct ReferenceBackdrop: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.004, green: 0.005, blue: 0.008)
+            Color(red: 0.002, green: 0.003, blue: 0.006)
 
             LinearGradient(
                 colors: [
-                    Color(red: 0.030, green: 0.034, blue: 0.045),
-                    Color(red: 0.010, green: 0.012, blue: 0.018),
+                    VO1DStyle.midnight.opacity(0.88),
+                    Color(red: 0.007, green: 0.010, blue: 0.018),
                     .black
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            RadialGradient(
-                colors: [
-                    VO1DStyle.frost.opacity(0.070),
-                    VO1DStyle.steel.opacity(0.030),
-                    .clear
-                ],
-                center: UnitPoint(x: 0.18, y: 0.12),
-                startRadius: 0,
-                endRadius: 430
-            )
-
-            RadialGradient(
-                colors: [
-                    .white.opacity(0.050),
-                    .clear
-                ],
-                center: UnitPoint(x: 0.88, y: 0.70),
-                startRadius: 0,
-                endRadius: 360
-            )
+            ReferenceAmbientBloom()
 
             ReferenceLineField(interactive: interactive)
-                .opacity(0.72)
+                .opacity(0.84)
+                .blendMode(.screen)
 
             ReferenceNoise()
                 .blendMode(.screen)
-                .opacity(0.30)
+                .opacity(0.34)
 
             LinearGradient(
                 colors: [
+                    .black.opacity(0.04),
                     .clear,
-                    .black.opacity(0.08),
-                    .black.opacity(0.50)
+                    .black.opacity(0.20),
+                    .black.opacity(0.70)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
         }
         .ignoresSafeArea()
+    }
+}
+
+private struct ReferenceAmbientBloom: View {
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
+    @State private var drift = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Circle()
+                    .fill(VO1DStyle.frost.opacity(0.11))
+                    .frame(width: proxy.size.width * 0.90)
+                    .blur(radius: 95)
+                    .offset(
+                        x: drift ? -proxy.size.width * 0.18 : -proxy.size.width * 0.34,
+                        y: drift ? -proxy.size.height * 0.33 : -proxy.size.height * 0.25
+                    )
+
+                Circle()
+                    .fill(VO1DStyle.steel.opacity(0.10))
+                    .frame(width: proxy.size.width * 0.72)
+                    .blur(radius: 110)
+                    .offset(
+                        x: drift ? proxy.size.width * 0.26 : proxy.size.width * 0.40,
+                        y: drift ? proxy.size.height * 0.18 : proxy.size.height * 0.34
+                    )
+
+                Ellipse()
+                    .fill(.white.opacity(0.032))
+                    .frame(
+                        width: proxy.size.width * 1.18,
+                        height: proxy.size.height * 0.34
+                    )
+                    .blur(radius: 80)
+                    .rotationEffect(.degrees(-18))
+                    .offset(y: drift ? -18 : 34)
+            }
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(
+                    .easeInOut(duration: 8.5)
+                    .repeatForever(autoreverses: true)
+                ) {
+                    drift = true
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -81,7 +114,7 @@ private struct ReferenceLineField: View {
                             impulse = 1
                         }
                         .onEnded { _ in
-                            withAnimation(.easeOut(duration: 0.8)) {
+                            withAnimation(.easeOut(duration: 0.85)) {
                                 impulse = 0
                             }
                             dragPoint = nil
@@ -125,48 +158,51 @@ private struct ReferenceLineField: View {
         focus: CGPoint?,
         impulse: CGFloat
     ) {
-        let rows = 14
+        let rows = 18
 
         for index in 0..<rows {
             let baseY =
                 size.height *
-                (0.07 + CGFloat(index) * 0.067)
+                (0.035 + CGFloat(index) * 0.055)
 
             let phase =
-                time * (0.17 + Double(index % 4) * 0.045) +
-                Double(index) * 0.71
+                time * (0.13 + Double(index % 5) * 0.031) +
+                Double(index) * 0.63
 
             let drift =
-                CGFloat(sin(phase)) * 16
+                CGFloat(sin(phase)) * (12 + CGFloat(index % 4) * 3)
 
             let startX =
                 size.width *
                 (
                     index.isMultiple(of: 2)
-                    ? -0.08
-                    : 0.10
+                    ? -0.12
+                    : 0.04
                 ) +
                 drift
 
             let width =
                 size.width *
-                (0.46 + CGFloat((index * 7) % 5) * 0.08)
+                (0.50 + CGFloat((index * 9) % 6) * 0.07)
 
             let p1 = CGPoint(
                 x: startX,
                 y: baseY
             )
+
             var p2 = CGPoint(
-                x: startX + width * 0.34,
-                y: baseY + CGFloat(sin(phase * 1.8)) * 14
+                x: startX + width * 0.31,
+                y: baseY + CGFloat(sin(phase * 1.62)) * 17
             )
+
             var p3 = CGPoint(
-                x: startX + width * 0.69,
-                y: baseY - CGFloat(cos(phase * 1.35)) * 18
+                x: startX + width * 0.67,
+                y: baseY - CGFloat(cos(phase * 1.27)) * 21
             )
+
             var p4 = CGPoint(
                 x: startX + width,
-                y: baseY + CGFloat(sin(phase * 1.13)) * 9
+                y: baseY + CGFloat(sin(phase * 1.11)) * 11
             )
 
             if let focus {
@@ -175,65 +211,130 @@ private struct ReferenceLineField: View {
                 p4 = displaced(p4, from: focus, impulse: impulse)
             }
 
-            var glowPath = Path()
-            glowPath.move(to: p1)
-            glowPath.addLine(to: p2)
-            glowPath.addLine(to: p3)
-            glowPath.addLine(to: p4)
+            var path = Path()
+            path.move(to: p1)
+            path.addLine(to: p2)
+            path.addLine(to: p3)
+            path.addLine(to: p4)
 
             context.drawLayer { glow in
-                glow.addFilter(.blur(radius: 4.5))
+                glow.addFilter(.blur(radius: 5.5))
+
                 glow.stroke(
-                    glowPath,
+                    path,
                     with: .color(
                         VO1DStyle.frost.opacity(
-                            0.080 + Double(index % 3) * 0.020
+                            0.085 + Double(index % 4) * 0.016
                         )
                     ),
                     style: StrokeStyle(
-                        lineWidth: 2.2,
+                        lineWidth: 2.4,
                         lineCap: .round,
                         lineJoin: .round,
                         dash: [
-                            24 + CGFloat(index % 4) * 7,
-                            13 + CGFloat(index % 3) * 5
+                            19 + CGFloat(index % 5) * 8,
+                            11 + CGFloat(index % 4) * 5
                         ]
                     )
                 )
             }
 
             context.stroke(
-                glowPath,
+                path,
                 with: .color(
                     .white.opacity(
-                        0.11 + Double(index % 4) * 0.018
+                        0.12 + Double(index % 5) * 0.017
                     )
                 ),
                 style: StrokeStyle(
-                    lineWidth: 0.75,
+                    lineWidth: index.isMultiple(of: 4) ? 0.95 : 0.70,
                     lineCap: .round,
                     lineJoin: .round,
                     dash: [
-                        24 + CGFloat(index % 4) * 7,
-                        13 + CGFloat(index % 3) * 5
+                        19 + CGFloat(index % 5) * 8,
+                        11 + CGFloat(index % 4) * 5
                     ]
                 )
+            )
+
+            let sparkProgress =
+                CGFloat(
+                    (time * (0.09 + Double(index % 4) * 0.018) +
+                     Double(index) * 0.071)
+                    .truncatingRemainder(dividingBy: 1)
+                )
+
+            let spark =
+                sparkProgress < 0.50
+                ? lerp(p1, p2, sparkProgress * 2)
+                : sparkProgress < 0.82
+                    ? lerp(
+                        p2,
+                        p3,
+                        (sparkProgress - 0.50) / 0.32
+                    )
+                    : lerp(
+                        p3,
+                        p4,
+                        (sparkProgress - 0.82) / 0.18
+                    )
+
+            context.drawLayer { sparkLayer in
+                sparkLayer.addFilter(.blur(radius: 4))
+                sparkLayer.fill(
+                    Path(
+                        ellipseIn: CGRect(
+                            x: spark.x - 3.2,
+                            y: spark.y - 3.2,
+                            width: 6.4,
+                            height: 6.4
+                        )
+                    ),
+                    with: .color(
+                        VO1DStyle.pearl.opacity(
+                            index.isMultiple(of: 3) ? 0.58 : 0.34
+                        )
+                    )
+                )
+            }
+
+            context.fill(
+                Path(
+                    ellipseIn: CGRect(
+                        x: spark.x - 1.1,
+                        y: spark.y - 1.1,
+                        width: 2.2,
+                        height: 2.2
+                    )
+                ),
+                with: .color(.white.opacity(0.78))
             )
 
             for point in [p1, p4] {
                 context.fill(
                     Path(
                         ellipseIn: CGRect(
-                            x: point.x - 1.6,
-                            y: point.y - 1.6,
-                            width: 3.2,
-                            height: 3.2
+                            x: point.x - 1.5,
+                            y: point.y - 1.5,
+                            width: 3,
+                            height: 3
                         )
                     ),
-                    with: .color(.white.opacity(0.55))
+                    with: .color(.white.opacity(0.52))
                 )
             }
         }
+    }
+
+    private func lerp(
+        _ a: CGPoint,
+        _ b: CGPoint,
+        _ t: CGFloat
+    ) -> CGPoint {
+        CGPoint(
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t
+        )
     }
 
     private func displaced(
@@ -244,7 +345,7 @@ private struct ReferenceLineField: View {
         let dx = point.x - focus.x
         let dy = point.y - focus.y
         let distance = max(18, sqrt(dx * dx + dy * dy))
-        let force = max(0, 1 - distance / 240) * impulse * 95
+        let force = max(0, 1 - distance / 260) * impulse * 110
 
         return CGPoint(
             x: point.x + dx / distance * force,
