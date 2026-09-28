@@ -2,493 +2,472 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var session: SessionMonitor
+    @EnvironmentObject private var pings: PingStore
     @EnvironmentObject private var preferences: Preferences
     @Environment(\.vo1dReduceMotion) private var reduceMotion
 
     let openLocations: () -> Void
     let openProfile: () -> Void
 
-    @State private var appeared = false
+    @State private var reveal = false
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 22) {
+            VStack(spacing: 16) {
                 header
-                    .entrance(appeared, reduceMotion: reduceMotion, delay: 0.00)
+                    .referenceEntrance(
+                        reveal,
+                        reduceMotion: reduceMotion,
+                        delay: 0.00
+                    )
 
-                connectionSection
-                    .entrance(appeared, reduceMotion: reduceMotion, delay: 0.04)
+                serverCard
+                    .referenceEntrance(
+                        reveal,
+                        reduceMotion: reduceMotion,
+                        delay: 0.04
+                    )
 
-                QuickActions()
-                    .entrance(appeared, reduceMotion: reduceMotion, delay: 0.10)
+                connectionHero
+                    .referenceEntrance(
+                        reveal,
+                        reduceMotion: reduceMotion,
+                        delay: 0.08
+                    )
 
-                SelectedRouteCard(action: openLocations)
-                    .entrance(appeared, reduceMotion: reduceMotion, delay: 0.15)
+                speedRow
+                    .referenceEntrance(
+                        reveal,
+                        reduceMotion: reduceMotion,
+                        delay: 0.12
+                    )
 
-                if !model.isDemoMode && model.account == nil {
-                    PrimaryButton(
-                        title: model.isRefreshingAccount ? "Syncing account…" : "Retry account sync",
-                        icon: "arrow.clockwise"
-                    ) {
-                        Task { await model.refresh() }
-                    }
-                    .disabled(model.isRefreshingAccount)
-                }
-
-                if model.isConnected {
-                    ConnectionDashboard()
-                        .transition(
-                            reduceMotion
-                            ? .opacity
-                            : .opacity.combined(with: .move(edge: .bottom))
-                        )
-                } else {
-                    readinessCard
-                        .transition(.opacity)
-                }
-
-                HStack(spacing: 8) {
-                    Image(systemName: "waveform.path")
-                        .symbolRenderingMode(.hierarchical)
-
-                    Text(model.isDemoMode ? "SIMULATED NETWORK / NO VPN TRAFFIC" : "VLESS / REALITY")
-                }
-                .font(VO1DStyle.mono(9))
-                .tracking(0.5)
-                .foregroundStyle(VO1DStyle.secondary)
-                .entrance(appeared, reduceMotion: reduceMotion, delay: 0.20)
+                compactStats
+                    .referenceEntrance(
+                        reveal,
+                        reduceMotion: reduceMotion,
+                        delay: 0.16
+                    )
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 18)
         }
         .background {
             ZStack {
-                DeepSpaceBackdrop()
+                ReferenceBackdrop()
+
                 RadialGradient(
-                    colors: [atmosphereColor.opacity(atmosphereOpacity), .clear],
-                    center: UnitPoint(x: 0.5, y: 0.27),
-                    startRadius: 12,
-                    endRadius: 290
+                    colors: [
+                        .white.opacity(
+                            model.isConnected ? 0.055 : 0.018
+                        ),
+                        .clear
+                    ],
+                    center: UnitPoint(x: 0.50, y: 0.42),
+                    startRadius: 10,
+                    endRadius: 310
                 )
             }
-            .ignoresSafeArea()
         }
         .scrollIndicators(.hidden)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.35), value: model.isConnected)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.30), value: model.phase)
         .onAppear {
-            guard !appeared else { return }
             if reduceMotion {
-                appeared = true
+                reveal = true
             } else {
-                withAnimation(.easeOut(duration: 0.45)) {
-                    appeared = true
+                withAnimation(.easeOut(duration: 0.44)) {
+                    reveal = true
                 }
             }
         }
         .accessibilityIdentifier("home.screen")
     }
 
-    private var connectionSection: some View {
-        VStack(spacing: 0) {
+    private var header: some View {
+        ZStack {
             HStack {
-                Eyebrow(text: "01 / CONNECTION")
+                chromeButton(
+                    "line.3.horizontal",
+                    label: "Open locations",
+                    action: openLocations
+                )
+
                 Spacer()
 
-                if model.isDemoMode {
-                    Text("DEMO")
-                        .font(VO1DStyle.mono(9))
-                        .foregroundStyle(VO1DStyle.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .vo1dSystemGlass(in: Capsule())
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(
-                                    .white.opacity(0.08),
-                                    lineWidth: 1
-                                )
-                        )
-                }
-            }
-
-            ConnectionOrb(
-                phase: model.phase,
-                action: model.toggleConnection
-            )
-            .padding(.top, 2)
-
-            Text(model.phase.rawValue)
-                .font(.system(size: 23, weight: .medium, design: .monospaced))
-                .tracking(1)
-                .contentTransition(.opacity)
-                .accessibilityIdentifier("connection.status")
-
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(VO1DStyle.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.top, 9)
-
-            if model.phase.isBusy {
-                ConnectionStageRail(phase: model.phase)
-                    .padding(.top, 18)
-                    .transition(
-                        reduceMotion
-                        ? .opacity
-                        : .opacity.combined(with: .move(edge: .bottom))
-                    )
-            }
-        }
-    }
-
-    private var readinessCard: some View {
-        HStack(alignment: .top, spacing: 13) {
-            ZStack {
-                Color.clear
-                    .frame(width: 38, height: 38)
-                    .vo1dSystemGlass(in: Circle())
-                    .overlay(
-                        Circle()
-                            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
-                    )
-
-                Image(systemName: "point.3.connected.trianglepath.dotted")
-                    .font(.system(size: 17, weight: .light))
-                    .foregroundStyle(VO1DStyle.ice)
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Your route. Your choice.")
-                    .font(.subheadline.weight(.medium))
-
-                Text(
-                    model.isDemoMode
-                    ? "Explore every control. Connections and traffic are simulated on this device."
-                    : "Choose a location, or let Fastest select the lowest measured latency."
+                chromeButton(
+                    "gearshape",
+                    label: "Open settings",
+                    action: openProfile
                 )
-                .font(.caption)
-                .foregroundStyle(VO1DStyle.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer(minLength: 0)
-        }
-        .padding(18)
-        .vo1dSurface()
-    }
-
-    private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(spacing: 3) {
                 Text("VO1D_VPN")
-                    .font(.system(size: 21, weight: .bold, design: .monospaced))
-                    .tracking(0.7)
-
-                StatusPill(
-                    text: model.isConnected ? "CONNECTED" : model.phase.isBusy ? "CONNECTING" : "READY",
-                    connected: model.isConnected
-                )
-            }
-
-            Spacer()
-
-            IconButton(
-                icon: preferences.avatar,
-                label: "Open profile",
-                action: openProfile
-            )
-        }
-    }
-
-    private var atmosphereColor: Color {
-        switch model.phase {
-        case .connected:
-            return VO1DStyle.frost
-        case .preparing, .routing, .securing, .switching:
-            return VO1DStyle.ice
-        case .failed:
-            return VO1DStyle.red
-        case .disconnecting:
-            return .white
-        case .ready:
-            return .white
-        }
-    }
-
-    private var atmosphereOpacity: Double {
-        switch model.phase {
-        case .connected: return 0.050
-        case .preparing, .routing, .securing, .switching: return 0.045
-        case .failed: return 0.060
-        case .disconnecting: return 0.035
-        case .ready: return 0.022
-        }
-    }
-
-    private var subtitle: String {
-        switch model.phase {
-        case .connected:
-            return model.isDemoMode ? "Demo route established" : "Tunnel established"
-        case .preparing:
-            return "Preparing your connection"
-        case .routing:
-            return "Finding the cleanest route"
-        case .securing:
-            return "Establishing the secure tunnel"
-        case .switching:
-            return "Moving to \(model.selectedServer?.name ?? "your location")"
-        case .disconnecting:
-            return "Closing the current session"
-        case .failed:
-            return "Choose a location and try again"
-        case .ready:
-            return "One tap to your next connection"
-        }
-    }
-}
-
-private struct ConnectionStageRail: View {
-    let phase: ConnectionPhase
-    @Namespace private var activeStage
-
-    private let stages = ["PREPARE", "ROUTE", "SECURE"]
-
-    private var activeIndex: Int {
-        switch phase {
-        case .preparing: return 0
-        case .routing, .switching: return 1
-        case .securing, .disconnecting: return 2
-        default: return 2
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 7) {
-            ForEach(Array(stages.enumerated()), id: \.offset) { index, title in
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(index <= activeIndex ? VO1DStyle.ice : .white.opacity(0.12))
-                        .frame(width: 5, height: 5)
-                        .shadow(
-                            color: index == activeIndex ? VO1DStyle.ice.opacity(0.45) : .clear,
-                            radius: 5
+                    .font(
+                        .system(
+                            size: 20,
+                            weight: .black,
+                            design: .monospaced
                         )
+                    )
+                    .tracking(1.0)
 
-                    Text(title)
-                        .font(VO1DStyle.mono(8))
-                        .tracking(0.5)
-                        .foregroundStyle(index <= activeIndex ? .white.opacity(0.82) : VO1DStyle.secondary.opacity(0.55))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .vo1dSystemGlass(in: Capsule())
-                .background {
-                    if index == activeIndex {
-                        Capsule()
-                            .fill(.white.opacity(0.055))
-                            .matchedGeometryEffect(id: "active-stage", in: activeStage)
-                    }
-                }
-                .overlay(
-                    Capsule()
-                        .strokeBorder(
-                            .white.opacity(index == activeIndex ? 0.16 : 0.055),
-                            lineWidth: 1
-                        )
-                )
+                Text("ZERO LOGS")
+                    .font(VO1DStyle.mono(6))
+                    .tracking(3.0)
+                    .foregroundStyle(.white.opacity(0.42))
             }
         }
-        .accessibilityHidden(true)
-    }
-}
-
-private struct QuickActions: View {
-    @EnvironmentObject private var model: AppViewModel
-    @EnvironmentObject private var preferences: Preferences
-    @EnvironmentObject private var pings: PingStore
-
-    var body: some View {
-        HStack(spacing: 8) {
-            action(
-                "FASTEST",
-                icon: "bolt",
-                detail: model.fastestServer?.code ?? "FIND",
-                active: preferences.autoFastest
-            ) {
-                preferences.autoFastest = true
-                Task { await model.connectFastest() }
-            }
-            .disabled(model.phase.isBusy)
-            .accessibilityIdentifier("quick.fastest")
-
-            action(
-                "REFRESH PING",
-                icon: "arrow.clockwise",
-                detail: pings.isRefreshing ? "CHECKING" : "MEASURE",
-                active: pings.isRefreshing
-            ) {
-                Haptics.play(
-                    .selection,
-                    enabled: preferences.haptics
-                )
-                Task { await pings.refresh() }
-            }
-            .disabled(pings.isRefreshing)
-            .accessibilityIdentifier("quick.ping")
-
-            action(
-                "AUTO CONNECT",
-                icon: "power.circle",
-                detail: preferences.autoConnect ? "ON" : "OFF",
-                active: preferences.autoConnect
-            ) {
-                preferences.autoConnect.toggle()
-                Haptics.play(.selection, enabled: preferences.haptics)
-            }
-            .accessibilityIdentifier("quick.auto")
-        }
+        .frame(height: 48)
     }
 
-    private func action(
-        _ title: String,
-        icon: String,
-        detail: String,
-        active: Bool,
-        perform: @escaping () -> Void
+    private func chromeButton(
+        _ icon: String,
+        label: String,
+        action: @escaping () -> Void
     ) -> some View {
-        Button(action: perform) {
-            VStack(spacing: 9) {
-                HStack {
-                    Image(systemName: icon)
-                        .font(.system(size: 17, weight: .light))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.white)
-                        .symbolEffect(.bounce, value: active)
-                        .rotationEffect(
-                            .degrees(
-                                title == "REFRESH PING" && pings.isRefreshing
-                                ? 360
-                                : 0
-                            )
-                        )
-                        .animation(
-                            title == "REFRESH PING" && pings.isRefreshing
-                            ? .linear(duration: 0.85).repeatForever(autoreverses: false)
-                            : .easeOut(duration: 0.16),
-                            value: pings.isRefreshing
-                        )
-
-                    Spacer(minLength: 0)
-
-                    Circle()
-                        .fill(active ? VO1DStyle.ice : .white.opacity(0.13))
-                        .frame(width: 5, height: 5)
-                        .shadow(color: active ? VO1DStyle.ice.opacity(0.45) : .clear, radius: 5)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(VO1DStyle.mono(8))
-                        .tracking(0.15)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-
-                    Text(detail)
-                        .font(VO1DStyle.mono(9))
-                        .foregroundStyle(active ? .white.opacity(0.82) : VO1DStyle.secondary)
-                        .contentTransition(.opacity)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity)
-            .vo1dSurface(highlighted: active, radius: 16)
-        }
-        .buttonStyle(ScaleButtonStyle())
-        .accessibilityLabel(title)
-        .accessibilityValue(detail)
-    }
-}
-
-private struct SelectedRouteCard: View {
-    @EnvironmentObject private var model: AppViewModel
-    @EnvironmentObject private var pings: PingStore
-    @EnvironmentObject private var preferences: Preferences
-
-    let action: () -> Void
-
-    var body: some View {
-        let route = model.isConnected
-            ? model.activeServer
-            : preferences.autoFastest
-                ? (model.fastestServer ?? model.selectedServer)
-                : model.selectedServer
-
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Eyebrow(text: model.isConnected ? "CURRENT ROUTE" : "SELECTED LOCATION")
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.86))
+                .frame(width: 38, height: 38)
+                .background(
+                    .black.opacity(0.42),
+                    in: RoundedRectangle(
+                        cornerRadius: 12,
+                        style: .continuous
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: 12,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        .white.opacity(0.09),
+                        lineWidth: 1
+                    )
+                }
+        }
+        .buttonStyle(ScaleButtonStyle(scale: 0.93))
+        .accessibilityLabel(label)
+    }
+
+    private var serverCard: some View {
+        Button(action: openLocations) {
+            ReferenceGlassPanel(radius: 22) {
+                HStack(spacing: 13) {
+                    Text(currentServer?.flag ?? "◌")
+                        .font(.system(size: 30))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(currentServer?.name ?? "Fastest location")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+
+                        Text(currentServer?.label ?? "Select your route")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.42))
+                            .lineLimit(1)
+                    }
+
                     Spacer()
 
-                    Image(systemName: "arrow.up.right")
-                        .foregroundStyle(VO1DStyle.secondary)
-                }
+                    HStack(spacing: 6) {
+                        Text(activePing.map { "\($0) ms" } ?? "— ms")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.54))
+                            .monospacedDigit()
 
-                HStack(spacing: 12) {
-                    Text(route?.flag ?? "◎")
-                        .font(.system(size: 30))
-                        .frame(width: 48, height: 48)
-                        .vo1dSystemGlass(in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                .strokeBorder(.white.opacity(0.09), lineWidth: 1)
-                        }
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(route?.name ?? "Choose location")
-                            .font(.system(size: 18, weight: .medium))
-
-                        Text(
-                            preferences.autoFastest
-                            ? "FASTEST · AUTOMATIC"
-                            : (route?.protocolName.uppercased() ?? "AVAILABLE LOCATIONS")
-                        )
-                        .font(VO1DStyle.mono(9))
-                        .foregroundStyle(VO1DStyle.secondary)
-                    }
-
-                    Spacer(minLength: 4)
-
-                    if preferences.livePing {
-                        PingBadge(
-                            ping: route.flatMap { pings.values[$0.code] }
-                        )
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.72))
                     }
                 }
+                .padding(.horizontal, 16)
+                .frame(height: 70)
             }
-            .padding(18)
-            .vo1dSurface(highlighted: model.isConnected)
         }
-        .buttonStyle(ScaleButtonStyle())
-        .accessibilityIdentifier("home.route")
+        .buttonStyle(ScaleButtonStyle(scale: 0.985))
+        .accessibilityIdentifier("home.server")
+    }
+
+    private var connectionHero: some View {
+        ZStack {
+            ReferenceVortexView(
+                connected: model.isConnected,
+                busy: model.phase.isBusy
+            )
+            .frame(width: 330, height: 330)
+
+            VStack(spacing: 10) {
+                Button {
+                    Haptics.play(
+                        .medium,
+                        enabled: preferences.haptics
+                    )
+                    model.toggleConnection()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(.black.opacity(0.38))
+                            .frame(width: 74, height: 74)
+                            .overlay {
+                                Circle()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [
+                                                .white.opacity(0.36),
+                                                .white.opacity(0.06)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            }
+                            .shadow(
+                                color: .white.opacity(
+                                    model.isConnected ? 0.08 : 0.02
+                                ),
+                                radius: 12
+                            )
+
+                        Image(
+                            systemName:
+                                model.isConnected
+                                ? "stop.fill"
+                                : "power"
+                        )
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(ScaleButtonStyle(scale: 0.93))
+                .disabled(model.phase.isBusy)
+                .accessibilityIdentifier("connection.toggle")
+
+                Text(connectionTitle)
+                    .font(
+                        .system(
+                            size: 14,
+                            weight: .semibold,
+                            design: .monospaced
+                        )
+                    )
+                    .tracking(2.4)
+                    .contentTransition(.opacity)
+
+                Text(
+                    model.isConnected
+                    ? session.stats.durationText
+                    : connectionSubtitle
+                )
+                .font(
+                    .system(
+                        size: model.isConnected ? 12 : 10,
+                        design: .monospaced
+                    )
+                )
+                .foregroundStyle(.white.opacity(0.52))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            }
+        }
+        .frame(height: 324)
+    }
+
+    private var speedRow: some View {
+        HStack(spacing: 10) {
+            speedCard(
+                title: "Download",
+                value:
+                    session.hasTrafficMeasurements
+                    ? String(
+                        format: "%.1f",
+                        session.stats.downloadMbps
+                    )
+                    : "—",
+                unit: "Mbps",
+                rising: false
+            )
+
+            speedCard(
+                title: "Upload",
+                value:
+                    session.hasTrafficMeasurements
+                    ? String(
+                        format: "%.1f",
+                        session.stats.uploadMbps
+                    )
+                    : "—",
+                unit: "Mbps",
+                rising: true
+            )
+        }
+    }
+
+    private func speedCard(
+        title: String,
+        value: String,
+        unit: String,
+        rising: Bool
+    ) -> some View {
+        ReferenceGlassPanel(radius: 19) {
+            VStack(alignment: .leading, spacing: 9) {
+                Text(title)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.62))
+
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(value)
+                        .font(
+                            .system(
+                                size: 23,
+                                weight: .semibold,
+                                design: .rounded
+                            )
+                        )
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+
+                    Text(unit)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.44))
+                }
+
+                MiniTrafficChart(
+                    seed: rising ? 8 : 4,
+                    rising: rising
+                )
+                .frame(height: 40)
+            }
+            .padding(14)
+        }
+    }
+
+    private var compactStats: some View {
+        HStack(spacing: 9) {
+            compactCard(
+                "Traffic",
+                session.hasTrafficMeasurements
+                    ? "\(session.stats.trafficValue) \(session.stats.trafficUnit)"
+                    : "—"
+            )
+
+            compactCard(
+                "Ping",
+                activePing.map { "\($0) ms" } ?? "—"
+            )
+
+            compactCard(
+                "Quality",
+                qualityLabel
+            )
+        }
+    }
+
+    private func compactCard(
+        _ title: String,
+        _ value: String
+    ) -> some View {
+        ReferenceGlassPanel(radius: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.54))
+
+                Text(value)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(13)
+        }
+    }
+
+    private var currentServer: VO1DServer? {
+        model.activeServer ?? model.selectedServer
+    }
+
+    private var activePing: Int? {
+        guard let code = currentServer?.code else {
+            return nil
+        }
+        return pings.values[code]
+    }
+
+    private var qualityLabel: String {
+        let raw = VO1DStyle.quality(activePing)
+        return raw
+            .lowercased()
+            .capitalized
+    }
+
+    private var connectionTitle: String {
+        switch model.phase {
+        case .connected:
+            return "CONNECTED"
+        case .ready:
+            return "CONNECT"
+        case .preparing:
+            return "PREPARING"
+        case .routing:
+            return "ROUTING"
+        case .securing:
+            return "SECURING"
+        case .disconnecting:
+            return "DISCONNECTING"
+        case .switching:
+            return "SWITCHING"
+        case .failed:
+            return "TRY AGAIN"
+        }
+    }
+
+    private var connectionSubtitle: String {
+        switch model.phase {
+        case .ready:
+            return "Tap to connect"
+        case .preparing:
+            return "Initializing core..."
+        case .routing:
+            return "Routing network..."
+        case .securing:
+            return "Establishing tunnel..."
+        case .disconnecting:
+            return "Closing session..."
+        case .switching:
+            return "Switching route..."
+        case .failed:
+            return "Connection failed"
+        case .connected:
+            return ""
+        }
     }
 }
 
 private extension View {
-    func entrance(
+    func referenceEntrance(
         _ visible: Bool,
         reduceMotion: Bool,
         delay: Double
     ) -> some View {
-        self
-            .opacity(visible ? 1 : 0)
-            .offset(y: visible || reduceMotion ? 0 : 9)
+        opacity(visible ? 1 : 0)
+            .offset(
+                y:
+                    visible || reduceMotion
+                    ? 0
+                    : 9
+            )
             .animation(
                 reduceMotion
                 ? nil
-                : .easeOut(duration: 0.42).delay(delay),
+                : .easeOut(duration: 0.42)
+                    .delay(delay),
                 value: visible
             )
     }
