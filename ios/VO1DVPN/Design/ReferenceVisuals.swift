@@ -72,163 +72,12 @@ struct ReferencePlanetView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let side = min(
-                compact ? proxy.size.width * 0.92 : proxy.size.width * 1.52,
-                compact ? 330 : 620
+            let side = planetSide(for: proxy.size.width)
+
+            planetComposition(
+                side: side,
+                container: proxy.size
             )
-
-            ZStack {
-                Ellipse()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                .white.opacity(0.22),
-                                Color(red: 0.16, green: 0.18, blue: 0.21).opacity(0.75),
-                                Color(red: 0.025, green: 0.028, blue: 0.034),
-                                .black
-                            ],
-                            center: UnitPoint(x: 0.42, y: 0.32),
-                            startRadius: 0,
-                            endRadius: side * 0.58
-                        )
-                    )
-                    .frame(width: side, height: side)
-                    .overlay {
-                        Ellipse()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        .white.opacity(0.12),
-                                        .clear,
-                                        .black.opacity(0.82)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
-                    .overlay {
-                        PlanetLongitudeLines()
-                            .stroke(
-                                .white.opacity(0.075),
-                                style: StrokeStyle(
-                                    lineWidth: 0.6,
-                                    lineCap: .round
-                                )
-                            )
-                            .padding(side * 0.09)
-                    }
-                    .overlay {
-                        PlanetLandHints()
-                            .fill(.white.opacity(0.13))
-                            .blur(radius: 0.4)
-                            .padding(side * 0.13)
-                    }
-                    .overlay {
-                        PlanetNetwork()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        .white.opacity(0.08),
-                                        .white.opacity(0.48),
-                                        .white.opacity(0.07)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                style: StrokeStyle(
-                                    lineWidth: 0.75,
-                                    lineCap: .round
-                                )
-                            )
-                            .padding(side * 0.08)
-                            .rotationEffect(.degrees(orbit ? 360 : 0))
-                    }
-                    .overlay {
-                        PlanetNodes()
-                            .fill(.white.opacity(0.92))
-                            .shadow(color: .white.opacity(0.55), radius: 4)
-                            .padding(side * 0.09)
-                    }
-                    .overlay {
-                        PlanetCityLights()
-                            .fill(.white.opacity(0.72))
-                            .shadow(
-                                color: .white.opacity(0.42),
-                                radius: 2.6
-                            )
-                            .padding(side * 0.10)
-                    }
-                    .overlay {
-                        Ellipse()
-                            .trim(from: 0.56, to: 0.94)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        .clear,
-                                        .white.opacity(0.18),
-                                        .white.opacity(0.76),
-                                        .white.opacity(0.12),
-                                        .clear
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                ),
-                                style: StrokeStyle(
-                                    lineWidth: compact ? 1.4 : 2.1,
-                                    lineCap: .round
-                                )
-                            )
-                            .blur(radius: compact ? 0.3 : 0.7)
-                    }
-                    .shadow(
-                        color: glow ? .white.opacity(breathe ? 0.12 : 0.045) : .clear,
-                        radius: glow ? 30 : 0
-                    )
-                    .mask(
-                        Ellipse()
-                            .frame(width: side, height: side)
-                    )
-
-                Ellipse()
-                    .trim(from: 0.05, to: 0.56)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                .clear,
-                                .white.opacity(0.36),
-                                .white.opacity(0.06),
-                                .clear
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
-                        style: StrokeStyle(
-                            lineWidth: compact ? 0.8 : 1.1,
-                            lineCap: .round
-                        )
-                    )
-                    .frame(width: side * 1.04, height: side * 0.88)
-                    .rotationEffect(.degrees(-13))
-
-                Ellipse()
-                    .trim(from: 0.60, to: 0.92)
-                    .stroke(
-                        .white.opacity(0.08),
-                        style: StrokeStyle(
-                            lineWidth: 0.65,
-                            lineCap: .round
-                        )
-                    )
-                    .frame(width: side * 1.16, height: side * 0.70)
-                    .rotationEffect(.degrees(18))
-            }
-            .frame(
-                width: proxy.size.width,
-                height: proxy.size.height,
-                alignment: .top
-            )
-            .offset(y: compact ? -side * 0.56 : -side * 0.16)
         }
         .onAppear {
             withAnimation(
@@ -246,6 +95,239 @@ struct ReferencePlanetView: View {
             }
         }
         .accessibilityHidden(true)
+    }
+
+    private func planetSide(for width: CGFloat) -> CGFloat {
+        min(
+            compact ? width * 0.92 : width * 1.52,
+            compact ? 330 : 620
+        )
+    }
+
+    @ViewBuilder
+    private func planetComposition(
+        side: CGFloat,
+        container: CGSize
+    ) -> some View {
+        ZStack {
+            planetDisc(side: side)
+            primaryOrbit(side: side)
+            secondaryOrbit(side: side)
+        }
+        .frame(
+            width: container.width,
+            height: container.height,
+            alignment: .top
+        )
+        .offset(
+            y:
+                compact
+                ? -side * 0.56
+                : -side * 0.16
+        )
+    }
+
+    @ViewBuilder
+    private func planetDisc(side: CGFloat) -> some View {
+        ZStack {
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white.opacity(0.22),
+                            Color(
+                                red: 0.16,
+                                green: 0.18,
+                                blue: 0.21
+                            )
+                            .opacity(0.75),
+                            Color(
+                                red: 0.025,
+                                green: 0.028,
+                                blue: 0.034
+                            ),
+                            .black
+                        ],
+                        center: UnitPoint(
+                            x: 0.42,
+                            y: 0.32
+                        ),
+                        startRadius: 0,
+                        endRadius: side * 0.58
+                    )
+                )
+
+            Ellipse()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.12),
+                            .clear,
+                            .black.opacity(0.82)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            PlanetLongitudeLines()
+                .stroke(
+                    .white.opacity(0.075),
+                    style: StrokeStyle(
+                        lineWidth: 0.6,
+                        lineCap: .round
+                    )
+                )
+                .padding(side * 0.09)
+
+            PlanetLandHints()
+                .fill(.white.opacity(0.13))
+                .blur(radius: 0.4)
+                .padding(side * 0.13)
+
+            PlanetNetwork()
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.08),
+                            .white.opacity(0.48),
+                            .white.opacity(0.07)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    style: StrokeStyle(
+                        lineWidth: 0.75,
+                        lineCap: .round
+                    )
+                )
+                .padding(side * 0.08)
+                .rotationEffect(
+                    .degrees(
+                        orbit
+                        ? 360
+                        : 0
+                    )
+                )
+
+            PlanetNodes()
+                .fill(.white.opacity(0.92))
+                .shadow(
+                    color: .white.opacity(0.55),
+                    radius: 4
+                )
+                .padding(side * 0.09)
+
+            PlanetCityLights()
+                .fill(.white.opacity(0.72))
+                .shadow(
+                    color: .white.opacity(0.42),
+                    radius: 2.6
+                )
+                .padding(side * 0.10)
+
+            Ellipse()
+                .trim(from: 0.56, to: 0.94)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            .white.opacity(0.18),
+                            .white.opacity(0.76),
+                            .white.opacity(0.12),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    style: StrokeStyle(
+                        lineWidth:
+                            compact
+                            ? 1.4
+                            : 2.1,
+                        lineCap: .round
+                    )
+                )
+                .blur(
+                    radius:
+                        compact
+                        ? 0.3
+                        : 0.7
+                )
+        }
+        .frame(
+            width: side,
+            height: side
+        )
+        .mask(
+            Ellipse()
+                .frame(
+                    width: side,
+                    height: side
+                )
+        )
+        .shadow(
+            color:
+                glow
+                ? .white.opacity(
+                    breathe
+                    ? 0.12
+                    : 0.045
+                )
+                : .clear,
+            radius:
+                glow
+                ? 30
+                : 0
+        )
+    }
+
+    @ViewBuilder
+    private func primaryOrbit(side: CGFloat) -> some View {
+        Ellipse()
+            .trim(from: 0.05, to: 0.56)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        .clear,
+                        .white.opacity(0.36),
+                        .white.opacity(0.06),
+                        .clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ),
+                style: StrokeStyle(
+                    lineWidth:
+                        compact
+                        ? 0.8
+                        : 1.1,
+                    lineCap: .round
+                )
+            )
+            .frame(
+                width: side * 1.04,
+                height: side * 0.88
+            )
+            .rotationEffect(.degrees(-13))
+    }
+
+    @ViewBuilder
+    private func secondaryOrbit(side: CGFloat) -> some View {
+        Ellipse()
+            .trim(from: 0.60, to: 0.92)
+            .stroke(
+                .white.opacity(0.08),
+                style: StrokeStyle(
+                    lineWidth: 0.65,
+                    lineCap: .round
+                )
+            )
+            .frame(
+                width: side * 1.16,
+                height: side * 0.70
+            )
+            .rotationEffect(.degrees(18))
     }
 }
 
