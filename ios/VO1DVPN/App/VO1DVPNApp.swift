@@ -152,14 +152,6 @@ private struct ActivationSuccessOverlay: View {
             ZStack {
                 ReferenceBackdrop()
 
-                ReferencePlanet(
-                    diameter: min(proxy.size.width * 1.28, 530),
-                    rotation: -11,
-                    glow: 0.11
-                )
-                .offset(x: -proxy.size.width * 0.18, y: proxy.size.height * 0.32)
-                .opacity(0.34)
-
                 ReferenceVortex(active: true, busy: true)
                     .frame(width: 360, height: 360)
                     .rotationEffect(.degrees(rotate ? 360 : 0))
