@@ -18,6 +18,7 @@ enum AppTab: String, CaseIterable {
 
 struct AppShell: View {
     @Environment(\.vo1dReduceMotion) private var reduceMotion
+    @EnvironmentObject private var model: AppViewModel
     @EnvironmentObject private var preferences: Preferences
 
     @State private var tab: AppTab = .home
@@ -60,6 +61,20 @@ struct AppShell: View {
             : .snappy(duration: 0.30),
             value: tab
         )
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { model.paywallRequested },
+                set: { shown in
+                    if !shown {
+                        model.dismissPaywall()
+                    }
+                }
+            )
+        ) {
+            LoginView {
+                model.dismissPaywall()
+            }
+        }
     }
 
     private var referenceTabBar: some View {
