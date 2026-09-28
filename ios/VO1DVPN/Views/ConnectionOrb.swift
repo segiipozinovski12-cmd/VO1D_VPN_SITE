@@ -23,15 +23,6 @@ struct ConnectionOrb: View {
         }
     }
 
-    private var accentOpacity: Double {
-        switch phase {
-        case .connected: return 0.82
-        case .failed: return 0.72
-        case .preparing, .routing, .securing, .switching, .disconnecting: return 0.74
-        case .ready: return 0.48
-        }
-    }
-
     var body: some View {
         ZStack {
             Circle()
@@ -151,7 +142,10 @@ struct ConnectionOrb: View {
                 }
                 .foregroundStyle(.white)
                 .frame(width: 154, height: 154)
-                .background(.ultraThinMaterial, in: Circle())
+                .vo1dSystemGlass(
+                    in: Circle(),
+                    interactive: true
+                )
                 .background(
                     Circle()
                         .fill(
