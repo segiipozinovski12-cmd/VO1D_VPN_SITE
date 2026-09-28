@@ -21,6 +21,27 @@ final class ConnectionTests: XCTestCase {
         XCTAssertNil(ServerRanking.fastest(routes, pings: [:]))
         XCTAssertEqual(ServerRanking.sorted(routes, pings: ["DE": 31, "RU": 31]).map(\.code), ["DE", "RU", "NL"])
     }
+    func testEmbeddedAccessKeyVault() {
+        XCTAssertEqual(AccessKeyVault.totalCount, 400)
+        XCTAssertEqual(
+            AccessKeyVault.license(for: "VOID-W8AU-VYWV-DM6A")?.days,
+            30
+        )
+        XCTAssertEqual(
+            AccessKeyVault.license(for: "void-pdlp-59s3-nbq7")?.days,
+            90
+        )
+        XCTAssertEqual(
+            AccessKeyVault.license(for: "VOID-Q97W-VYTY-MGA9")?.days,
+            180
+        )
+        XCTAssertEqual(
+            AccessKeyVault.license(for: "VOID-6YL7-7Y8S-J6MF")?.days,
+            365
+        )
+        XCTAssertNil(AccessKeyVault.license(for: "VOID-XXXX-XXXX-XXXX"))
+    }
+
     func testDemoConnectCancelSwitchAndLogout() async throws {
         let app = model()
         await app.bootstrap()
