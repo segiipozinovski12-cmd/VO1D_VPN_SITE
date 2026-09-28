@@ -47,7 +47,13 @@ struct ProfileView: View {
             Button { showAvatars = true } label: {
                 ZStack(alignment: .bottomTrailing) {
                     Image(systemName: preferences.avatar).font(.system(size: 30, weight: .light))
-                        .frame(width: 74, height: 74).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 25))
+                        .frame(width: 74, height: 74)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 25, style: .continuous)
+                                .strokeBorder(.white.opacity(0.11), lineWidth: 1)
+                        }
+                        .shadow(color: VO1DStyle.violet.opacity(0.16), radius: 16, y: 8)
                     Image(systemName: "pencil").font(.system(size: 9, weight: .semibold)).padding(6)
                         .background(VO1DStyle.raised, in: Circle())
                 }
@@ -100,16 +106,38 @@ struct ProfileView: View {
             DetailRow(title: "Favorites", value: String(model.favoriteCodes.count))
         }.padding(18).vo1dSurface()
     }
+    @ViewBuilder
     private func actionRow(_ title: String, subtitle: String, icon: String, surface: Bool = true) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon).font(.system(size: 19, weight: .light)).frame(width: 25)
+        let row = HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .light))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(VO1DStyle.ice)
+                .frame(width: 32, height: 32)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(.white.opacity(0.07), lineWidth: 1)
+                }
+
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.subheadline.weight(.medium))
                 Text(subtitle).font(.caption).foregroundStyle(VO1DStyle.secondary)
             }
+
             Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(VO1DStyle.secondary)
-        }.padding(18).background(surface ? VO1DStyle.panel : .clear, in: RoundedRectangle(cornerRadius: 22))
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11))
+                .foregroundStyle(VO1DStyle.secondary)
+        }
+        .padding(18)
+
+        if surface {
+            row.vo1dSurface()
+        } else {
+            row
+        }
     }
     private var avatarPicker: some View {
         VStack(spacing: 26) {
@@ -127,7 +155,7 @@ struct ProfileView: View {
                 }
             }
         }.padding(24).presentationDetents([.height(310)]).presentationDragIndicator(.visible)
-            .presentationBackground(VO1DStyle.background)
+            .presentationBackground(.ultraThinMaterial)
     }
     private var remainingDays: Int {
         guard let until = model.account?.until else { return 0 }
@@ -168,6 +196,6 @@ private struct ChangeKeyView: View {
             }.disabled(model.isActivating || (!model.isDemoMode && key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
             if let error = model.errorMessage { Text(error).font(.caption).foregroundStyle(VO1DStyle.red) }
             Spacer(minLength: 0)
-        }.padding(24).presentationDetents([.medium]).presentationDragIndicator(.visible).presentationBackground(VO1DStyle.background)
+        }.padding(24).presentationDetents([.medium]).presentationDragIndicator(.visible).presentationBackground(.ultraThinMaterial)
     }
 }
