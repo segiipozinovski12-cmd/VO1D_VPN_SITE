@@ -88,7 +88,7 @@ struct HomeView: View {
 
     private var homeBackdrop: some View {
         ZStack {
-            ReferenceBackdrop()
+            ReferenceBackdrop(impact: flash)
 
             RadialGradient(
                 colors: [
