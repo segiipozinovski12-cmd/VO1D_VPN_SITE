@@ -204,7 +204,7 @@ struct HomeView: View {
             VStack(spacing: 10) {
                 Button {
                     Haptics.play(
-                        .medium,
+                        .connect,
                         enabled: preferences.haptics
                     )
                     model.toggleConnection()
