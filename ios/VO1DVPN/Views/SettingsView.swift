@@ -65,14 +65,23 @@ struct SettingsView: View {
     private func toggle(_ title: String, detail: String, icon: String, value: Binding<Bool>, id: String) -> some View {
         Toggle(isOn: value) {
             HStack(spacing: 12) {
-                Image(systemName: icon).font(.system(size: 17, weight: .light)).frame(width: 22)
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .light))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(VO1DStyle.ice)
+                    .frame(width: 30, height: 30)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(.white.opacity(0.07), lineWidth: 1)
+                    }
                 VStack(alignment: .leading, spacing: 5) {
                     Text(title).font(.subheadline.weight(.medium))
                     Text(detail).font(.caption2).foregroundStyle(VO1DStyle.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .tint(Color(white: 0.42)).padding(.vertical, 15).accessibilityIdentifier("settings.\(id)")
+        .tint(VO1DStyle.ice).padding(.vertical, 15).accessibilityIdentifier("settings.\(id)")
     }
 }
 
