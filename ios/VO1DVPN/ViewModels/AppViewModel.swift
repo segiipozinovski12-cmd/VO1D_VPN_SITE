@@ -25,6 +25,7 @@ final class AppViewModel: ObservableObject {
     private let defaults: UserDefaults
     private var subscriptions = Set<AnyCancellable>()
     private var connectionTask: Task<Void, Never>?
+    private var trafficTask: Task<Void, Never>?
     private var connectionID = UUID()
     private var switching = false
     private var foreground = true
@@ -176,6 +177,7 @@ final class AppViewModel: ObservableObject {
         connectionID = UUID()
         connectionTask?.cancel()
         connectionTask = nil
+        stopTrafficPolling()
         switching = false
         phase = vpn.isConnected || vpn.isBusy ? .disconnecting : .ready
         vpn.disconnect()
@@ -246,13 +248,18 @@ final class AppViewModel: ObservableObject {
             switching = false
             activeServer = selectedServer
             phase = .connected
+            startTrafficPolling()
             Haptics.play(.success, enabled: preferences.haptics)
-        case .reasserting: phase = .securing
+        case .reasserting:
+            stopTrafficPolling()
+            phase = .securing
         case .connecting:
             if !switching && !phase.isBusy { phase = .securing }
         case .disconnecting:
+            stopTrafficPolling()
             if !switching && phase != .failed { phase = .disconnecting }
         case .disconnected, .invalid:
+            stopTrafficPolling()
             activeServer = nil
             if !switching && (phase == .disconnecting || phase == .connected) { phase = .ready }
         @unknown default: phase = .ready
@@ -262,8 +269,41 @@ final class AppViewModel: ObservableObject {
     func setForeground(_ active: Bool) {
         foreground = active
         session.setForeground(active)
-        if active { pings.start(live: preferences.livePing && sessionToken != nil) }
-        else { pings.stop() }
+
+        if active {
+            pings.start(live: preferences.livePing && sessionToken != nil)
+            if vpn.isConnected { startTrafficPolling() }
+        } else {
+            pings.stop()
+            stopTrafficPolling()
+        }
+    }
+
+    private func startTrafficPolling() {
+        #if !targetEnvironment(simulator)
+        guard foreground, vpn.isConnected else { return }
+        trafficTask?.cancel()
+        trafficTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+
+                if let delta = await self.vpn.trafficDelta() {
+                    self.session.applyTransfer(delta)
+                }
+
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+            }
+        }
+        #endif
+    }
+
+    private func stopTrafficPolling() {
+        trafficTask?.cancel()
+        trafficTask = nil
     }
     func toggleFavorite(_ server: VO1DServer) {
         if favoriteCodes.contains(server.code) { favoriteCodes.remove(server.code) }
@@ -330,5 +370,8 @@ final class AppViewModel: ObservableObject {
               collection: ServerCollection(countries: routes, totalCountries: routes.count))
     }
     #endif
-    deinit { connectionTask?.cancel() }
+    deinit {
+        connectionTask?.cancel()
+        trafficTask?.cancel()
+    }
 }
