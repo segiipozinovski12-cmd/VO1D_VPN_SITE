@@ -36,8 +36,21 @@ final class PreviewUITests: XCTestCase {
         app.buttons["connection.control"].tap()
         expectation(for: NSPredicate(format: "value == %@", "READY"), evaluatedWith: app.buttons["connection.control"])
         waitForExpectations(timeout: 4)
-        app.buttons["quick.ping"].tap()
-        app.buttons["quick.fastest"].tap()
+        let pingRefresh = app.buttons["quick.ping"]
+        XCTAssertTrue(pingRefresh.waitForExistence(timeout: 3))
+        XCTAssertTrue(pingRefresh.isHittable)
+        pingRefresh.tap()
+
+        // Demo ping measurement is intentionally short (240 ms), but the
+        // accessibility tree can take another frame to settle on CI.
+        Thread.sleep(forTimeInterval: 0.6)
+        XCTAssertEqual(pingRefresh.value as? String, "MEASURE")
+
+        let fastest = app.buttons["quick.fastest"]
+        XCTAssertTrue(fastest.waitForExistence(timeout: 3))
+        XCTAssertTrue(fastest.isHittable)
+        fastest.tap()
+
         expectation(for: connected, evaluatedWith: app.buttons["connection.control"])
         waitForExpectations(timeout: 5)
         app.buttons["tab.locations"].tap()
