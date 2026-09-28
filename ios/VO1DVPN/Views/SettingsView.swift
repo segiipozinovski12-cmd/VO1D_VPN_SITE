@@ -15,39 +15,18 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-                HStack {
-                    IconButton(
-                        icon: "chevron.left",
-                        label: "Back"
-                    ) {
-                        dismiss()
-                    }
+            VStack(spacing: 18) {
+                topBar
+                    .settingsReveal(appeared, delay: 0.00, reduceMotion: reduceMotion)
 
-                    Spacer()
+                titleBlock
+                    .settingsReveal(appeared, delay: 0.03, reduceMotion: reduceMotion)
 
-                    Eyebrow(text: "VO1D / PREFERENCES")
-                }
-                .vo1dReveal(
-                    appeared,
-                    reduceMotion: reduceMotion,
-                    delay: 0.00
-                )
-
-                Text("Fine-tune\nyour connection.")
-                    .font(.system(size: 34, weight: .medium))
-                    .tracking(-1)
-                    .vo1dReveal(
-                        appeared,
-                        reduceMotion: reduceMotion,
-                        delay: 0.04
-                    )
-
-                section(
-                    "CONNECTION",
+                settingsSection(
+                    title: "CONNECTION",
                     detail: "Route options apply on the next connection."
                 ) {
-                    toggle(
+                    referenceToggle(
                         "Auto Connect",
                         detail: "Connect when the app starts",
                         icon: "power",
@@ -55,39 +34,39 @@ struct SettingsView: View {
                         id: "autoConnect"
                     )
 
-                    DividerLine()
+                    divider
 
-                    toggle(
+                    referenceToggle(
                         "Auto Fastest Server",
-                        detail: "Use the lowest ping on Connect",
-                        icon: "bolt",
+                        detail: "Use the lowest measured ping",
+                        icon: "bolt.fill",
                         value: $preferences.autoFastest,
                         id: "autoFastest"
                     )
 
-                    DividerLine()
+                    divider
 
-                    toggle(
+                    referenceToggle(
                         "Kill Switch",
-                        detail: "Route all networks through the VPN",
+                        detail: "Keep traffic inside the VPN route",
                         icon: "shield",
                         value: $preferences.killSwitch,
                         id: "killSwitch"
                     )
 
-                    DividerLine()
+                    divider
 
-                    toggle(
+                    referenceToggle(
                         "Secure DNS",
-                        detail: "Use the secure DNS route inside the tunnel",
+                        detail: "Resolve DNS inside the tunnel",
                         icon: "lock",
                         value: $preferences.secureDNS,
                         id: "secureDNS"
                     )
 
-                    DividerLine()
+                    divider
 
-                    toggle(
+                    referenceToggle(
                         "IPv6 Protection",
                         detail: "Include IPv6 in the tunnel route",
                         icon: "network",
@@ -95,123 +74,84 @@ struct SettingsView: View {
                         id: "ipv6Protection"
                     )
                 }
-                .vo1dReveal(
-                    appeared,
-                    reduceMotion: reduceMotion,
-                    delay: 0.08
-                )
+                .settingsReveal(appeared, delay: 0.06, reduceMotion: reduceMotion)
 
                 if pendingOptions {
-                    PrimaryButton(
-                        title: "Reconnect to apply changes",
+                    ReferencePrimaryButton(
+                        title: "Reconnect to Apply",
                         icon: "arrow.triangle.2.circlepath",
                         action: model.reconnect
                     )
                     .accessibilityIdentifier("settings.apply")
-                    .transition(
-                        reduceMotion
-                        ? .opacity
-                        : .opacity.combined(with: .move(edge: .top))
-                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                section(
-                    "INTERFACE",
-                    detail: "Make VO1D work your way."
+                settingsSection(
+                    title: "INTERFACE",
+                    detail: "Keep the experience clean and responsive."
                 ) {
-                    toggle(
+                    referenceToggle(
                         "Live Ping",
-                        detail: "Measure routes every eight seconds",
+                        detail: "Measure route latency periodically",
                         icon: "waveform.path.ecg",
                         value: $preferences.livePing,
                         id: "livePing"
                     )
 
-                    DividerLine()
+                    divider
 
-                    toggle(
+                    referenceToggle(
                         "Reduce Animations",
-                        detail: "Stop looping motion and transitions",
+                        detail: "Minimize looping motion and transitions",
                         icon: "circle.dotted",
                         value: $preferences.reduceAnimations,
                         id: "reduceMotion"
                     )
 
-                    DividerLine()
+                    divider
 
-                    toggle(
+                    referenceToggle(
                         "Compact Server List",
-                        detail: "Show more locations at a glance",
+                        detail: "Fit more locations on screen",
                         icon: "line.3.horizontal",
                         value: $preferences.compactServers,
                         id: "compactServers"
                     )
 
-                    DividerLine()
+                    divider
 
-                    toggle(
+                    referenceToggle(
                         "Haptic Feedback",
-                        detail: "Tactile responses on iPhone",
+                        detail: "Tactile feedback on supported iPhones",
                         icon: "hand.tap",
                         value: $preferences.haptics,
                         id: "haptics"
                     )
                 }
-                .vo1dReveal(
-                    appeared,
-                    reduceMotion: reduceMotion,
-                    delay: 0.13
-                )
+                .settingsReveal(appeared, delay: 0.10, reduceMotion: reduceMotion)
 
-                section(
-                    "NETWORK",
-                    detail: "Current session information."
-                ) {
-                    DetailRow(
-                        title: "Protocol",
-                        value:
-                            model.activeServer?.protocolName ??
-                            model.selectedServer?.protocolName ??
-                            "—"
-                    )
-
-                    DividerLine()
-
-                    DetailRow(
-                        title: "Current Route",
-                        value: model.activeServer?.name ?? "Not connected"
-                    )
-
-                    DividerLine()
-
-                    SettingsQualityRow(
-                        code: model.activeServer?.code
-                    )
-                }
-                .vo1dReveal(
-                    appeared,
-                    reduceMotion: reduceMotion,
-                    delay: 0.18
-                )
+                networkSection
+                    .settingsReveal(appeared, delay: 0.14, reduceMotion: reduceMotion)
 
                 if model.isDemoMode {
-                    Text("DEMO / Changes are saved locally. No VPN traffic is generated.")
-                        .font(.caption)
-                        .foregroundStyle(VO1DStyle.secondary)
-                        .vo1dReveal(
-                            appeared,
-                            reduceMotion: reduceMotion,
-                            delay: 0.22
-                        )
+                    Text("SIMULATOR DEMO / NO REAL VPN TRAFFIC")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .tracking(1.2)
+                        .foregroundStyle(.white.opacity(0.30))
+                        .padding(.top, 2)
                 }
             }
-            .padding(22)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
         }
-        .background { DeepSpaceBackdrop().ignoresSafeArea() }
         .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
+        .background { ReferenceBackdrop() }
         .animation(
-            reduceMotion ? nil : .snappy(duration: 0.28),
+            reduceMotion
+            ? nil
+            : .snappy(duration: 0.28),
             value: pendingOptions
         )
         .onAppear {
@@ -220,7 +160,7 @@ struct SettingsView: View {
             if reduceMotion {
                 appeared = true
             } else {
-                withAnimation(.easeOut(duration: 0.44)) {
+                withAnimation(.easeOut(duration: 0.42)) {
                     appeared = true
                 }
             }
@@ -228,25 +168,85 @@ struct SettingsView: View {
         .accessibilityIdentifier("settings.screen")
     }
 
-    private func section<Content: View>(
-        _ title: String,
+    private var topBar: some View {
+        ZStack {
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.86))
+                        .frame(width: 38, height: 38)
+                        .background(
+                            Color.white.opacity(0.045),
+                            in: Circle()
+                        )
+                        .overlay(
+                            Circle()
+                                .strokeBorder(
+                                    .white.opacity(0.10),
+                                    lineWidth: 0.8
+                                )
+                        )
+                }
+                .buttonStyle(ScaleButtonStyle(scale: 0.92))
+
+                Spacer()
+            }
+
+            VO1DBrandLockup(compact: true)
+        }
+        .frame(height: 48)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("SETTINGS")
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .tracking(2.1)
+                .foregroundStyle(.white.opacity(0.38))
+
+            Text("Fine-tune VO1D")
+                .font(.system(size: 28, weight: .semibold))
+                .tracking(-0.7)
+
+            Text("Connection behavior, interface and live network state.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.40))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func settingsSection<Content: View>(
+        title: String,
         detail: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 11) {
-            Eyebrow(text: title)
+            HStack {
+                Text(title)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .tracking(1.7)
+                    .foregroundStyle(.white.opacity(0.38))
+
+                Spacer()
+            }
 
             Text(detail)
-                .font(.caption)
-                .foregroundStyle(VO1DStyle.secondary)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.34))
 
-            VStack(spacing: 0, content: content)
+            ReferenceGlassCard(radius: 22) {
+                VStack(spacing: 0) {
+                    content()
+                }
                 .padding(.horizontal, 16)
-                .vo1dSurface()
+            }
         }
     }
 
-    private func toggle(
+    private func referenceToggle(
         _ title: String,
         detail: String,
         icon: String,
@@ -267,42 +267,108 @@ struct SettingsView: View {
             )
         ) {
             HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .light))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white.opacity(0.90))
-                    .frame(width: 30, height: 30)
-                    .vo1dSystemGlass(
-                        in: RoundedRectangle(
-                            cornerRadius: 9,
-                            style: .continuous
-                        )
+                ZStack {
+                    RoundedRectangle(
+                        cornerRadius: 10,
+                        style: .continuous
                     )
-                    .overlay {
+                    .fill(.white.opacity(0.045))
+                    .frame(width: 34, height: 34)
+                    .overlay(
                         RoundedRectangle(
-                            cornerRadius: 9,
+                            cornerRadius: 10,
                             style: .continuous
                         )
                         .strokeBorder(
-                            .white.opacity(0.07),
-                            lineWidth: 1
+                            .white.opacity(0.08),
+                            lineWidth: 0.8
                         )
-                    }
+                    )
 
-                VStack(alignment: .leading, spacing: 5) {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .light))
+                        .foregroundStyle(.white.opacity(0.82))
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.subheadline.weight(.medium))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
 
                     Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(VO1DStyle.secondary)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.34))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .tint(.white.opacity(0.82))
-        .padding(.vertical, 15)
+        .tint(.white)
+        .padding(.vertical, 14)
         .accessibilityIdentifier("settings.\(id)")
+    }
+
+    private var networkSection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Text("NETWORK")
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .tracking(1.7)
+                .foregroundStyle(.white.opacity(0.38))
+
+            Text("Current session information.")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.34))
+
+            ReferenceGlassCard(radius: 22) {
+                VStack(spacing: 0) {
+                    networkRow(
+                        "Protocol",
+                        model.activeServer?.protocolName ??
+                        model.selectedServer?.protocolName ??
+                        "—"
+                    )
+
+                    divider
+
+                    networkRow(
+                        "Current Route",
+                        model.activeServer?.name ?? "Not connected"
+                    )
+
+                    divider
+
+                    SettingsQualityRow(
+                        code: model.activeServer?.code
+                    )
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func networkRow(
+        _ title: String,
+        _ value: String
+    ) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.42))
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.vertical, 14)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(.white.opacity(0.07))
+            .frame(height: 1)
     }
 }
 
@@ -311,12 +377,38 @@ private struct SettingsQualityRow: View {
     let code: String?
 
     var body: some View {
-        DetailRow(
-            title: "Connection Quality",
-            value:
+        HStack {
+            Text("Connection Quality")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.42))
+
+            Spacer()
+
+            Text(
                 code.map {
                     VO1DStyle.quality(pings.values[$0])
                 } ?? "Not connected"
-        )
+            )
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.white.opacity(0.78))
+        }
+        .padding(.vertical, 14)
+    }
+}
+
+private extension View {
+    func settingsReveal(
+        _ visible: Bool,
+        delay: Double,
+        reduceMotion: Bool
+    ) -> some View {
+        opacity(visible ? 1 : 0)
+            .offset(y: visible || reduceMotion ? 0 : 12)
+            .animation(
+                reduceMotion
+                ? nil
+                : .easeOut(duration: 0.42).delay(delay),
+                value: visible
+            )
     }
 }
