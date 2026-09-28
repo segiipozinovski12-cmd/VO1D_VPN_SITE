@@ -13,6 +13,8 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var isActivating = false
     @Published private(set) var isRefreshingAccount = false
     @Published private(set) var isBootstrapping = true
+    @Published private(set) var isGuestMode = false
+    @Published private(set) var paywallRequested = false
     @Published private(set) var favoriteCodes: Set<String>
     @Published private(set) var appliedOptions: ConnectionOptions?
     @Published var errorMessage: String?
@@ -56,6 +58,13 @@ final class AppViewModel: ObservableObject {
         #endif
     }
     var isConnected: Bool { phase == .connected }
+
+    var hasActiveSubscription: Bool {
+        account?.active == true &&
+        account?.banned == false &&
+        (account?.until ?? 0) > Int64(Date().timeIntervalSince1970)
+    }
+
     var fastestServer: VO1DServer? { ServerRanking.fastest(servers, pings: pings.values) }
 
     func bootstrap() async {
@@ -85,8 +94,22 @@ final class AppViewModel: ObservableObject {
         }
         #else
         sessionToken = KeychainStore.loadToken()
-        do { try await vpn.prepare() } catch { report(error) }
-        if sessionToken != nil { await refresh() }
+
+        do {
+            try await vpn.prepare()
+        } catch {
+            // Browsing the interface must not be blocked by Network Extension
+            // provisioning. Surface this only for an already-authenticated user.
+            if sessionToken != nil {
+                report(error)
+            }
+        }
+
+        if sessionToken != nil {
+            await refresh()
+        } else {
+            setupGuestCatalog()
+        }
         #endif
         pings.start(
             live:
@@ -128,6 +151,8 @@ final class AppViewModel: ObservableObject {
             disconnect()
             KeychainStore.saveToken(response.token)
             sessionToken = response.token
+            isGuestMode = false
+            paywallRequested = false
             apply(account: response.account, collection: response.servers)
             await pings.refresh()
             chooseInitialServer()
@@ -159,6 +184,11 @@ final class AppViewModel: ObservableObject {
     }
 
     func toggleConnection() {
+        guard hasActiveSubscription else {
+            presentPaywall()
+            return
+        }
+
         if phase.isBusy || vpn.isConnected {
             Haptics.play(.selection, enabled: preferences.haptics)
             disconnect()
@@ -174,6 +204,11 @@ final class AppViewModel: ObservableObject {
     }
 
     func connectFastest() async {
+        guard hasActiveSubscription else {
+            presentPaywall()
+            return
+        }
+
         guard !phase.isBusy else { return }
         if fastestServer == nil { await pings.refresh() }
         guard !phase.isBusy else { return }
@@ -195,6 +230,11 @@ final class AppViewModel: ObservableObject {
     }
 
     func reconnect() {
+        guard hasActiveSubscription else {
+            presentPaywall()
+            return
+        }
+
         guard !phase.isBusy, let server = activeServer ?? selectedServer else { return }
         beginConnection(to: server)
     }
@@ -211,10 +251,8 @@ final class AppViewModel: ObservableObject {
     }
 
     private func beginConnection(to server: VO1DServer) {
-        guard account?.active == true, account?.banned == false,
-              (account?.until ?? 0) > Int64(Date().timeIntervalSince1970) else {
-            errorMessage = "Your subscription is inactive. Update your access key in Profile."
-            Haptics.play(.error, enabled: preferences.haptics)
+        guard hasActiveSubscription else {
+            presentPaywall()
             return
         }
         connectionTask?.cancel()
@@ -331,6 +369,76 @@ final class AppViewModel: ObservableObject {
         trafficTask?.cancel()
         trafficTask = nil
     }
+    func enterGuestMode() {
+        guard sessionToken == nil else { return }
+
+        setupGuestCatalog()
+        isGuestMode = true
+        paywallRequested = false
+        errorMessage = nil
+    }
+
+    func presentPaywall() {
+        guard sessionToken == nil || !hasActiveSubscription else { return }
+
+        paywallRequested = true
+        errorMessage = nil
+        Haptics.play(
+            .selection,
+            enabled: preferences.haptics
+        )
+    }
+
+    func dismissPaywall() {
+        paywallRequested = false
+        errorMessage = nil
+    }
+
+    private func setupGuestCatalog() {
+        let countries = [
+            ("DE", "Germany", "🇩🇪"),
+            ("NL", "Netherlands", "🇳🇱"),
+            ("RU", "Russia", "🇷🇺"),
+            ("FI", "Finland", "🇫🇮"),
+            ("FR", "France", "🇫🇷"),
+            ("UK", "United Kingdom", "🇬🇧"),
+            ("TR", "Turkey", "🇹🇷"),
+            ("US", "United States", "🇺🇸"),
+            ("CA", "Canada", "🇨🇦"),
+            ("SG", "Singapore", "🇸🇬"),
+            ("JP", "Japan", "🇯🇵")
+        ]
+
+        let routes = countries.map { code, name, flag in
+            VO1DServer(
+                id: code,
+                code: code,
+                name: name,
+                flag: flag,
+                label: "VO1D · \(code)",
+                nodes: 0,
+                probeHost: "",
+                probePort: 443,
+                protocolName: "VLESS · Reality"
+            )
+        }
+
+        servers = routes.sorted { $0.name < $1.name }
+
+        if let selectedServer {
+            self.selectedServer = servers.first {
+                $0.code == selectedServer.code
+            }
+        }
+
+        if selectedServer == nil {
+            selectedServer = servers.first
+        }
+
+        activeServer = nil
+        pings.configure(servers)
+    }
+
     func toggleFavorite(_ server: VO1DServer) {
         if favoriteCodes.contains(server.code) { favoriteCodes.remove(server.code) }
         else { favoriteCodes.insert(server.code) }
@@ -345,10 +453,10 @@ final class AppViewModel: ObservableObject {
         session.reset()
         sessionToken = nil
         account = nil
-        servers = []
-        selectedServer = nil
-        activeServer = nil
         errorMessage = nil
+        paywallRequested = false
+        setupGuestCatalog()
+        isGuestMode = true
         #if !targetEnvironment(simulator)
         KeychainStore.deleteToken()
         if let previousToken { await api.logout(token: previousToken) }
