@@ -62,7 +62,18 @@ struct HomeView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
-        .background { DeepSpaceBackdrop().ignoresSafeArea() }
+        .background {
+            ZStack {
+                DeepSpaceBackdrop()
+                RadialGradient(
+                    colors: [atmosphereColor.opacity(atmosphereOpacity), .clear],
+                    center: UnitPoint(x: 0.5, y: 0.27),
+                    startRadius: 12,
+                    endRadius: 290
+                )
+            }
+            .ignoresSafeArea()
+        }
         .scrollIndicators(.hidden)
         .animation(reduceMotion ? nil : .snappy(duration: 0.35), value: model.isConnected)
         .animation(reduceMotion ? nil : .snappy(duration: 0.30), value: model.phase)
@@ -179,6 +190,31 @@ struct HomeView: View {
                 label: "Open profile",
                 action: openProfile
             )
+        }
+    }
+
+    private var atmosphereColor: Color {
+        switch model.phase {
+        case .connected:
+            return VO1DStyle.green
+        case .preparing, .routing, .securing, .switching:
+            return VO1DStyle.ice
+        case .failed:
+            return VO1DStyle.red
+        case .disconnecting:
+            return VO1DStyle.violet
+        case .ready:
+            return VO1DStyle.teal
+        }
+    }
+
+    private var atmosphereOpacity: Double {
+        switch model.phase {
+        case .connected: return 0.10
+        case .preparing, .routing, .securing, .switching: return 0.085
+        case .failed: return 0.075
+        case .disconnecting: return 0.07
+        case .ready: return 0.045
         }
     }
 
