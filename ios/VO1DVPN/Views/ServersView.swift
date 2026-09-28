@@ -163,6 +163,10 @@ struct ServersView: View {
             )
 
             Button {
+                Haptics.play(
+                    .selection,
+                    enabled: preferences.haptics
+                )
                 Task { await pings.refresh() }
             } label: {
                 Image(systemName: "arrow.clockwise")
@@ -223,6 +227,10 @@ struct ServersView: View {
                 return
             }
 
+            Haptics.play(
+                .selection,
+                enabled: preferences.haptics
+            )
             model.select(fastest)
             preferences.autoFastest = true
         } label: {
@@ -274,6 +282,10 @@ struct ServersView: View {
         HStack(spacing: 3) {
             ForEach(Filter.allCases, id: \.self) { item in
                 Button {
+                    Haptics.play(
+                        .selection,
+                        enabled: preferences.haptics
+                    )
                     withAnimation(
                         reduceMotion
                         ? nil
