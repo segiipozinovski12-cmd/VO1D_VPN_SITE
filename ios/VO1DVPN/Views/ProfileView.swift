@@ -3,19 +3,25 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject private var model: AppViewModel
     @EnvironmentObject private var preferences: Preferences
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
     @State private var showAvatars = false
     @State private var showKey = false
     @State private var showLogout = false
     @State private var showSettings = false
+    @State private var appeared = false
     @FocusState private var editingName: Bool
 
     var body: some View {
         ScrollView {
             VStack(spacing: 22) {
                 PageHeading(number: "03", title: "Your space", subtitle: "A connection that feels like yours.")
+                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.00)
                 identity
+                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.05)
                 subscription
+                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.10)
                 sessionCard
+                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.14)
                 Button {
                     showSettings = true
                 } label: {
@@ -23,14 +29,21 @@ struct ProfileView: View {
                 }
                 .buttonStyle(ScaleButtonStyle())
                 .accessibilityIdentifier("profile.settings")
+                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.18)
                 VStack(spacing: 0) {
                     Button { showKey = true } label: { actionRow("Change Key", subtitle: "Update your access", icon: "key", surface: false) }
                         .buttonStyle(ScaleButtonStyle()).accessibilityIdentifier("profile.changeKey")
                     DividerLine().padding(.horizontal, 18)
                     Button { showLogout = true } label: { actionRow("Log Out", subtitle: model.isDemoMode ? "Leave this demo session" : "Remove this device session", icon: "rectangle.portrait.and.arrow.right", surface: false) }
                         .buttonStyle(ScaleButtonStyle()).accessibilityIdentifier("profile.logout")
-                }.vo1dSurface()
-                if model.isDemoMode { Eyebrow(text: "DEMO / IPHONE SIMULATOR") }
+                }
+                .vo1dSurface()
+                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.22)
+
+                if model.isDemoMode {
+                    Eyebrow(text: "DEMO / IPHONE SIMULATOR")
+                        .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.25)
+                }
             }.padding(.horizontal, 22).padding(.bottom, 28)
         }
         .background { DeepSpaceBackdrop().ignoresSafeArea() }.scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
@@ -39,6 +52,16 @@ struct ProfileView: View {
         .sheet(isPresented: $showKey) { ChangeKeyView() }
         .confirmationDialog("Log out of VO1D?", isPresented: $showLogout, titleVisibility: .visible) {
             Button("Log Out", role: .destructive) { Task { await model.logout() } }
+        }
+        .onAppear {
+            guard !appeared else { return }
+            if reduceMotion {
+                appeared = true
+            } else {
+                withAnimation(.easeOut(duration: 0.44)) {
+                    appeared = true
+                }
+            }
         }
         .accessibilityIdentifier("profile.screen")
     }
@@ -53,7 +76,7 @@ struct ProfileView: View {
                             RoundedRectangle(cornerRadius: 25, style: .continuous)
                                 .strokeBorder(.white.opacity(0.11), lineWidth: 1)
                         }
-                        .shadow(color: VO1DStyle.violet.opacity(0.16), radius: 16, y: 8)
+                        .shadow(color: .black.opacity(0.34), radius: 16, y: 8)
                     Image(systemName: "pencil").font(.system(size: 9, weight: .semibold)).padding(6)
                         .background(VO1DStyle.raised, in: Circle())
                 }
