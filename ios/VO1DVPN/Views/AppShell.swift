@@ -111,7 +111,17 @@ struct AppShell: View {
                 cornerRadius: 24,
                 style: .continuous
             )
-            .fill(Color(white: 0.035).opacity(0.96))
+            .fill(
+                LinearGradient(
+                    colors: [
+                        .white.opacity(0.11),
+                        VO1DStyle.graphite.opacity(0.82),
+                        .black.opacity(0.94)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .background(
                 .ultraThinMaterial,
                 in: RoundedRectangle(
@@ -128,8 +138,9 @@ struct AppShell: View {
             .strokeBorder(
                 LinearGradient(
                     colors: [
-                        .white.opacity(0.12),
-                        .white.opacity(0.035)
+                        .white.opacity(0.36),
+                        .white.opacity(0.08),
+                        VO1DStyle.frost.opacity(0.16)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -137,7 +148,25 @@ struct AppShell: View {
                 lineWidth: 0.8
             )
         }
-        .shadow(color: .black.opacity(0.55), radius: 20, y: 10)
+        .overlay(alignment: .topLeading) {
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.46),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 92, height: 1.2)
+                .padding(.leading, 30)
+                .padding(.top, 1)
+                .blur(radius: 0.5)
+        }
+        .shadow(color: .white.opacity(0.05), radius: 14)
+        .shadow(color: .black.opacity(0.68), radius: 22, y: 12)
         .padding(.horizontal, 18)
         .padding(.top, 8)
         .padding(.bottom, 4)
