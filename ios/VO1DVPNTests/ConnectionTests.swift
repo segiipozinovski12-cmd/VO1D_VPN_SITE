@@ -87,6 +87,22 @@ final class ConnectionTests: XCTestCase {
         a.cancel(); b.cancel()
         app.disconnect()
     }
+
+    func testWaitUntilConnectedFailsFastWhenTunnelNeverStarts() async throws {
+        let vpn = VPNManager()
+        try await vpn.prepare()
+
+        let started = ContinuousClock.now
+
+        do {
+            try await vpn.waitUntilConnected()
+            XCTFail("A disconnected tunnel should not wait for the full connection timeout.")
+        } catch {
+            let elapsed = ContinuousClock.now - started
+            XCTAssertLessThan(elapsed, .seconds(3))
+        }
+    }
+
     func testPreferencesAndFavoritesPersist() async throws {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let app = AppViewModel(defaults: defaults)
