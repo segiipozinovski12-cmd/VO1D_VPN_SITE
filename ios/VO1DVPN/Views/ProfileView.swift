@@ -6,6 +6,7 @@ struct ProfileView: View {
     @State private var showAvatars = false
     @State private var showKey = false
     @State private var showLogout = false
+    @State private var showSettings = false
     @FocusState private var editingName: Bool
 
     var body: some View {
@@ -15,9 +16,13 @@ struct ProfileView: View {
                 identity
                 subscription
                 sessionCard
-                NavigationLink { SettingsView() } label: {
+                Button {
+                    showSettings = true
+                } label: {
                     actionRow("Settings", subtitle: "Connection & interface", icon: "slider.horizontal.3")
-                }.buttonStyle(ScaleButtonStyle()).accessibilityIdentifier("profile.settings")
+                }
+                .buttonStyle(ScaleButtonStyle())
+                .accessibilityIdentifier("profile.settings")
                 VStack(spacing: 0) {
                     Button { showKey = true } label: { actionRow("Change Key", subtitle: "Update your access", icon: "key", surface: false) }
                         .buttonStyle(ScaleButtonStyle()).accessibilityIdentifier("profile.changeKey")
@@ -29,6 +34,7 @@ struct ProfileView: View {
             }.padding(.horizontal, 22).padding(.bottom, 28)
         }
         .background(VO1DStyle.background).scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
+        .navigationDestination(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showAvatars) { avatarPicker }
         .sheet(isPresented: $showKey) { ChangeKeyView() }
         .confirmationDialog("Log out of VO1D?", isPresented: $showLogout, titleVisibility: .visible) {
