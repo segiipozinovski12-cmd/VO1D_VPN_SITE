@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_CEILING
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from community_nodes import COMMUNITY_POOL, community_worker
 from pinned_ru import build_pinned_ru_uri
+from app_embedded_keys import APP_EMBEDDED_KEYS
 
 TOKEN=os.getenv("BOT_TOKEN","").strip()
 ADMIN_ID=int(os.getenv("ADMIN_ID","8632158680"))
@@ -248,6 +249,17 @@ def init_db():
           last_seen INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_app_sessions_user ON app_sessions(user_id);
+        CREATE TABLE IF NOT EXISTS app_embedded_licenses(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code_hash TEXT NOT NULL UNIQUE,
+          plan_days INTEGER NOT NULL,
+          redeemed_user_id INTEGER NOT NULL DEFAULT 0,
+          redeemed_at INTEGER NOT NULL DEFAULT 0,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_app_embedded_licenses_plan
+          ON app_embedded_licenses(plan_days,active,redeemed_user_id);
         CREATE TABLE IF NOT EXISTS meta(
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -264,6 +276,9 @@ def init_db():
         ensure_column(c,"users","app_key_hash","TEXT NOT NULL DEFAULT ''")
         ensure_column(c,"users","app_key_created_at","INTEGER NOT NULL DEFAULT 0")
         ensure_column(c,"payments","reference","TEXT NOT NULL DEFAULT ''")
+        ensure_column(c,"app_embedded_licenses","issued_at","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(c,"app_embedded_licenses","bound_device_id","TEXT NOT NULL DEFAULT ''")
+        ensure_column(c,"app_embedded_licenses","bound_device_name","TEXT NOT NULL DEFAULT ''")
         rows=c.execute("SELECT id FROM users WHERE vpn_uuid='' OR vpn_uuid IS NULL").fetchall()
         for r in rows:
             c.execute("UPDATE users SET vpn_uuid=? WHERE id=?",(str(uuid.uuid4()),r["id"]))
@@ -295,6 +310,15 @@ def init_db():
                         continue
             c.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('private_promos_v2',?)",
                       (json.dumps(generated),))
+        # Mirror the fixed 400-key app manifest into persistent state only
+        # to remember which license has already been activated.
+        for code,plan_days in APP_EMBEDDED_KEYS.items():
+            raw="".join(ch for ch in str(code).upper() if ch.isalnum())
+            if raw.startswith("VOID"):raw=raw[4:]
+            digest=hashlib.sha256(raw.encode()).hexdigest()
+            c.execute("""INSERT OR IGNORE INTO app_embedded_licenses
+              (code_hash,plan_days,redeemed_user_id,redeemed_at,active,created_at)
+              VALUES(?,?,0,0,1,?)""",(digest,int(plan_days),now()))
 init_db()
 
 PINNED_RU_URI=""
@@ -850,23 +874,81 @@ def app_key_screen(uid,rotate=False):
       "Если потеряешь — создай новый ключ в профиле.",
       [[button("🔄 Сбросить ключ","app_key_reset")],[button("◀️ Профиль","profile")]])
 
+def _create_app_only_user(c,key_row):
+    key_id=int(key_row["id"])
+    uid=-(1_000_000+key_id)
+    row=c.execute("SELECT * FROM users WHERE id=?",(uid,)).fetchone()
+    if row:return row
+
+    created=now()
+    end=created+int(key_row["plan_days"])*86400
+    sub_token=secrets.token_urlsafe(24)
+    c.execute("""INSERT INTO users(
+      id,username,first_name,joined_at,last_seen,trial_claimed,sub_until,banned,
+      balance_cents,sub_token
+    ) VALUES(?,?,?,?,?,1,?,0,0,?)""",
+      (uid,f"ios_license_{key_id}","VO1D iPhone",created,created,end,sub_token))
+    c.execute("""UPDATE users
+      SET vpn_uuid=?,notifications=0,welcome_done=1,app_key_created_at=?
+      WHERE id=?""",
+      (str(uuid.uuid4()),created,uid))
+    c.execute("""INSERT INTO subscription_events(user_id,days,source,created_at,sub_until)
+      VALUES(?,?,?,?,?)""",
+      (uid,int(key_row["plan_days"]),"ios_license",created,end))
+    return c.execute("SELECT * FROM users WHERE id=?",(uid,)).fetchone()
+
+def _open_app_session(c,row,device_id,device_name):
+    if row["banned"]:return None,None,"blocked"
+    if int(row["sub_until"])<=now():return None,None,"expired_key"
+    token=secrets.token_urlsafe(32)
+    token_hash=_secret_hash(token)
+    c.execute("DELETE FROM app_sessions WHERE user_id=? AND device_id=?",(int(row["id"]),device_id))
+    c.execute("""INSERT INTO app_sessions(token_hash,user_id,device_id,device_name,created_at,last_seen)
+      VALUES(?,?,?,?,?,?)""",(token_hash,int(row["id"]),device_id,device_name,now(),now()))
+    return token,row,"ok"
+
 def activate_app_key(raw_key,device_id="",device_name=""):
     normalized=normalize_app_key(raw_key)
-    if len(normalized)!=16:return None,None,"invalid_key"
+    if len(normalized) not in (12,16):return None,None,"invalid_key"
     key_hash=_secret_hash(normalized)
     device_id=str(device_id or "").strip()[:128] or secrets.token_hex(8)
     device_name=str(device_name or "").strip()[:80]
     with db() as c:
         c.execute("BEGIN IMMEDIATE")
+
+        # Fixed native iPhone license: VOID-XXXX-XXXX-XXXX.
+        if len(normalized)==12:
+            key_row=c.execute(
+              "SELECT * FROM app_embedded_licenses WHERE code_hash=? AND active=1",(key_hash,)
+            ).fetchone()
+            if not key_row:return None,None,"invalid_key"
+
+            bound_uid=int(key_row["redeemed_user_id"] or 0)
+            bound_device=str(key_row["bound_device_id"] or "")
+            if bound_uid:
+                if bound_device and bound_device!=device_id:
+                    return None,None,"key_in_use"
+                row=c.execute("SELECT * FROM users WHERE id=?",(bound_uid,)).fetchone()
+                if not row:return None,None,"invalid_key"
+                if not bound_device:
+                    c.execute("""UPDATE app_embedded_licenses
+                      SET bound_device_id=?,bound_device_name=?
+                      WHERE id=?""",(device_id,device_name,int(key_row["id"])))
+            else:
+                row=_create_app_only_user(c,key_row)
+                c.execute("""UPDATE app_embedded_licenses
+                  SET redeemed_user_id=?,redeemed_at=?,
+                      bound_device_id=?,bound_device_name=?
+                  WHERE id=?""",(
+                    int(row["id"]),now(),device_id,device_name,int(key_row["id"])
+                ))
+
+            return _open_app_session(c,row,device_id,device_name)
+
+        # Legacy per-user application key: VOID-XXXX-XXXX-XXXX-XXXX.
         row=c.execute("SELECT * FROM users WHERE app_key_hash=?",(key_hash,)).fetchone()
         if not row:return None,None,"invalid_key"
-        if row["banned"]:return None,None,"blocked"
-        token=secrets.token_urlsafe(32)
-        token_hash=_secret_hash(token)
-        c.execute("DELETE FROM app_sessions WHERE user_id=? AND device_id=?",(int(row["id"]),device_id))
-        c.execute("""INSERT INTO app_sessions(token_hash,user_id,device_id,device_name,created_at,last_seen)
-          VALUES(?,?,?,?,?,?)""",(token_hash,int(row["id"]),device_id,device_name,now(),now()))
-        return token,row,"ok"
+        return _open_app_session(c,row,device_id,device_name)
 
 def app_session_user(raw_token):
     token=str(raw_token or "").strip()
@@ -2343,6 +2425,10 @@ class Web(BaseHTTPRequestHandler):
                 return self.reply_json(401,{"ok":False,"error":"invalid_key","message":"Неверный ключ VO1D."})
             if status=="blocked":
                 return self.reply_json(403,{"ok":False,"error":"blocked","message":"Доступ заблокирован."})
+            if status=="expired_key":
+                return self.reply_json(403,{"ok":False,"error":"expired_key","message":"Срок этого ключа закончился. Выбери новый тариф."})
+            if status=="key_in_use":
+                return self.reply_json(409,{"ok":False,"error":"key_in_use","message":"Этот ключ уже активирован на другом iPhone."})
             return self.reply_json(200,{"ok":True,"token":token,**app_user_payload(row)})
 
         if path=="/api/app/logout":
