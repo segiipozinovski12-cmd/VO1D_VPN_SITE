@@ -37,8 +37,10 @@ private struct RootView: View {
 
             if splashFinished {
                 Group {
-                    if model.sessionToken == nil {
-                        LoginView()
+                    if model.sessionToken == nil && !model.isGuestMode {
+                        LoginView {
+                            model.enterGuestMode()
+                        }
                     } else {
                         AppShell()
                     }
