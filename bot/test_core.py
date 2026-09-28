@@ -21,6 +21,8 @@ class CoreLogicTests(unittest.TestCase):
                 "app_sessions","devices","gift_codes","promo_redemptions","payments","users",
             ):
                 c.execute(f"DELETE FROM {table}")
+            c.execute("""UPDATE app_plan_keys
+              SET issued_at=0,redeemed_user_id=0,redeemed_at=0,active=1""")
 
     def add_user(self,uid=100,balance=0,sub_until=0,auto_renew=0,auto_renew_days=30):
         with app.db() as c:
@@ -102,6 +104,44 @@ class CoreLogicTests(unittest.TestCase):
         self.assertEqual(int(session["id"]),100)
         app.revoke_app_session(token)
         self.assertIsNone(app.app_session_user(token))
+
+    def test_iPhone_plan_inventory_has_exactly_400_keys(self):
+        inventory=app.app_license_inventory()
+        self.assertEqual(set(inventory),{30,90,180,365})
+        total=0
+        for days in (30,90,180,365):
+            state=inventory[days]
+            count=state["available"]+state["issued"]+state["redeemed"]
+            self.assertEqual(count,100)
+            total+=count
+        self.assertEqual(total,400)
+
+    def test_iPhone_plan_key_activates_real_subscription(self):
+        license_row=app.issue_app_plan_license(30)
+        self.assertIsNotNone(license_row)
+        key=license_row["code"]
+        self.assertTrue(key.startswith("VOID-"))
+        self.assertEqual(len(key.split("-")),4)
+
+        started=app.now()
+        token,row,status=app.activate_app_key(
+            key,
+            "iphone-license-test",
+            "iPhone"
+        )
+
+        self.assertEqual(status,"ok")
+        self.assertTrue(token)
+        self.assertLess(int(row["id"]),0)
+        self.assertGreaterEqual(int(row["sub_until"]),started+30*86400-2)
+
+        inventory=app.app_license_inventory()[30]
+        self.assertEqual(inventory["redeemed"],1)
+        self.assertEqual(inventory["available"],99)
+
+        session=app.app_session_user(token)
+        self.assertIsNotNone(session)
+        self.assertEqual(int(session["id"]),int(row["id"]))
 
     def test_app_key_requires_active_subscription(self):
         self.add_user(sub_until=app.now()-1)
