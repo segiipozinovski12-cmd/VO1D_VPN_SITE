@@ -73,6 +73,8 @@ struct DeepSpaceBackdrop: View {
 }
 
 struct Surface: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     var highlighted = false
     var radius: CGFloat = 22
 
@@ -80,7 +82,12 @@ struct Surface: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
 
         content
-            .background(.ultraThinMaterial, in: shape)
+            .background(
+                reduceTransparency
+                ? AnyShapeStyle(VO1DStyle.panel.opacity(0.98))
+                : AnyShapeStyle(.ultraThinMaterial),
+                in: shape
+            )
             .background(
                 shape.fill(
                     LinearGradient(
@@ -124,16 +131,27 @@ struct Surface: ViewModifier {
                     )
                     .allowsHitTesting(false)
             }
-            .shadow(color: .black.opacity(0.22), radius: 18, y: 9)
+            .shadow(
+                color: .black.opacity(highlighted ? 0.24 : 0.15),
+                radius: highlighted ? 15 : 8,
+                y: highlighted ? 8 : 4
+            )
     }
 }
 
 struct GlassCircle: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     var highlighted = false
 
     func body(content: Content) -> some View {
         content
-            .background(.ultraThinMaterial, in: Circle())
+            .background(
+                reduceTransparency
+                ? AnyShapeStyle(VO1DStyle.raised.opacity(0.98))
+                : AnyShapeStyle(.ultraThinMaterial),
+                in: Circle()
+            )
             .background(
                 Circle().fill(
                     LinearGradient(
