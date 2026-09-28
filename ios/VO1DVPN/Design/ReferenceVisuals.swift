@@ -764,18 +764,19 @@ struct ReferencePrimaryButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 10) {
                 Spacer()
 
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
+                    .tracking(-0.1)
                     .foregroundStyle(.white)
 
                 Spacer()
 
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.94))
+                    .foregroundStyle(.white.opacity(0.96))
             }
             .padding(.horizontal, 18)
             .frame(height: 60)
@@ -784,9 +785,10 @@ struct ReferencePrimaryButton: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                .white.opacity(0.50),
-                                .white.opacity(0.18),
-                                Color(white: 0.08).opacity(0.96)
+                                .white.opacity(0.34),
+                                VO1DStyle.chrome.opacity(0.12),
+                                VO1DStyle.midnight.opacity(0.78),
+                                .black.opacity(0.95)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -799,12 +801,28 @@ struct ReferencePrimaryButton: View {
             }
             .overlay {
                 Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.20),
+                                .clear,
+                                VO1DStyle.frost.opacity(0.06)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .blendMode(.screen)
+            }
+            .overlay {
+                Capsule()
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                .white.opacity(0.92),
-                                .white.opacity(0.18),
-                                .white.opacity(0.54)
+                                .white.opacity(0.96),
+                                VO1DStyle.chrome.opacity(0.34),
+                                .white.opacity(0.08),
+                                VO1DStyle.frost.opacity(0.42)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -812,18 +830,73 @@ struct ReferencePrimaryButton: View {
                         lineWidth: 1.0
                     )
             }
-            .overlay(alignment: .topLeading) {
+            .overlay {
                 Capsule()
-                    .fill(.white.opacity(0.78))
-                    .frame(width: 92, height: 1.3)
-                    .blur(radius: 0.6)
-                    .padding(.leading, 25)
-                    .padding(.top, 1)
+                    .inset(by: 3)
+                    .strokeBorder(
+                        .white.opacity(0.07),
+                        lineWidth: 0.7
+                    )
             }
-            .shadow(color: .white.opacity(0.26), radius: 18)
-            .shadow(color: .black.opacity(0.58), radius: 18, y: 10)
+            .overlay {
+                ReferenceButtonShimmer()
+                    .clipShape(Capsule())
+            }
+            .shadow(
+                color: VO1DStyle.frost.opacity(0.18),
+                radius: 18
+            )
+            .shadow(
+                color: .black.opacity(0.72),
+                radius: 20,
+                y: 11
+            )
         }
-        .buttonStyle(ScaleButtonStyle(scale: 0.975))
+        .buttonStyle(
+            ScaleButtonStyle(scale: 0.965)
+        )
+    }
+}
+
+private struct ReferenceButtonShimmer: View {
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
+    @State private var shift: CGFloat = -0.55
+
+    var body: some View {
+        GeometryReader { proxy in
+            LinearGradient(
+                colors: [
+                    .clear,
+                    VO1DStyle.frost.opacity(0.05),
+                    .white.opacity(0.20),
+                    .white.opacity(0.42),
+                    .clear
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(
+                width: proxy.size.width * 0.28,
+                height: proxy.size.height * 1.8
+            )
+            .rotationEffect(.degrees(-18))
+            .offset(
+                x: proxy.size.width * shift,
+                y: -proxy.size.height * 0.35
+            )
+            .blur(radius: 4)
+            .onAppear {
+                guard !reduceMotion else { return }
+
+                withAnimation(
+                    .linear(duration: 3.8)
+                    .repeatForever(autoreverses: false)
+                ) {
+                    shift = 1.60
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
