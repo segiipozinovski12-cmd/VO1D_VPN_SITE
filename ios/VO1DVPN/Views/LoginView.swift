@@ -259,10 +259,18 @@ struct LoginView: View {
                 enabled: model.preferences.haptics
             )
 
-            if let url = URL(
-                string: "https://t.me/VO1D_VPNbot"
+            if let telegram = URL(
+                string: "tg://resolve?domain=VO1D_VPNbot"
             ) {
-                openURL(url)
+                openURL(telegram) { accepted in
+                    guard !accepted,
+                          let web = URL(
+                            string: "https://t.me/VO1D_VPNbot"
+                          )
+                    else { return }
+
+                    openURL(web)
+                }
             }
         }
         .accessibilityIdentifier("subscription.primary")
