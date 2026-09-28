@@ -15,7 +15,7 @@ struct ConnectionOrb: View {
     private var accent: Color {
         switch phase {
         case .connected:
-            return VO1DStyle.green
+            return VO1DStyle.pearl
         case .failed:
             return VO1DStyle.red
         default:
@@ -113,6 +113,9 @@ struct ConnectionOrb: View {
                     .id("ignition-\(phase.rawValue)")
             } else if connected {
                 ZStack {
+                    ConnectedPhotonRings(animated: motion)
+                        .id("connected-photons-\(motion)")
+
                     ConnectedArrivalBurst(
                         animated: motion,
                         color: accent
@@ -125,7 +128,7 @@ struct ConnectionOrb: View {
                     )
                     .id("connected-sweep-\(motion)")
                 }
-                .padding(26)
+                .padding(22)
             }
 
             Button(action: action) {
@@ -313,6 +316,100 @@ private struct BreathingHalo: View {
     }
 }
 
+
+private struct ConnectedPhotonRings: View {
+    let animated: Bool
+
+    @State private var rotateOuter = false
+    @State private var rotateInner = false
+    @State private var breathe = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .trim(from: 0.02, to: 0.19)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            .white.opacity(0.88),
+                            VO1DStyle.frost.opacity(0.20),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    style: StrokeStyle(
+                        lineWidth: 1.35,
+                        lineCap: .round
+                    )
+                )
+                .rotationEffect(.degrees(rotateOuter ? 360 : 0))
+                .shadow(color: .white.opacity(0.16), radius: 5)
+
+            Circle()
+                .trim(from: 0.48, to: 0.63)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            .white.opacity(0.44),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    style: StrokeStyle(
+                        lineWidth: 0.8,
+                        lineCap: .round
+                    )
+                )
+                .padding(15)
+                .rotationEffect(.degrees(rotateInner ? -360 : 0))
+
+            Circle()
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(breathe ? 0.035 : 0.12),
+                            VO1DStyle.frost.opacity(breathe ? 0.018 : 0.070),
+                            .white.opacity(breathe ? 0.020 : 0.075)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.9
+                )
+                .padding(breathe ? 5 : 0)
+                .blur(radius: breathe ? 0.35 : 0)
+        }
+        .onAppear {
+            guard animated else { return }
+
+            withAnimation(
+                .linear(duration: 6.8)
+                .repeatForever(autoreverses: false)
+            ) {
+                rotateOuter = true
+            }
+
+            withAnimation(
+                .linear(duration: 10.5)
+                .repeatForever(autoreverses: false)
+            ) {
+                rotateInner = true
+            }
+
+            withAnimation(
+                .easeInOut(duration: 2.6)
+                .repeatForever(autoreverses: true)
+            ) {
+                breathe = true
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
 
 private struct ConnectedArrivalBurst: View {
     let animated: Bool
