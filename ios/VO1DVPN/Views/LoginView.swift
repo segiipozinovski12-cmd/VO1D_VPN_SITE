@@ -7,7 +7,6 @@ struct LoginView: View {
     @State private var key = ""
     @State private var selectedPlan = 30
     @State private var appeared = false
-    @State private var planetFloat = false
     @FocusState private var keyFocused: Bool
 
     private let plans = [
@@ -45,61 +44,81 @@ struct LoginView: View {
                 withAnimation(.easeOut(duration: 0.48)) {
                     appeared = true
                 }
-
-                withAnimation(
-                    .easeInOut(duration: 4.2)
-                    .repeatForever(autoreverses: true)
-                ) {
-                    planetFloat = true
-                }
             }
         }
         .accessibilityIdentifier("login.screen")
     }
 
     private var hero: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .topTrailing) {
-                ReferencePlanet(
-                    diameter: max(430, proxy.size.width * 1.38),
-                    rotation: -11,
-                    glow: 0.22
-                )
-                .offset(
-                    x: -proxy.size.width * 0.12,
-                    y: planetFloat ? -184 : -194
-                )
-                .opacity(appeared ? 1 : 0)
-                .scaleEffect(appeared || reduceMotion ? 1 : 0.94)
-
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 10) {
                 VO1DBrandLockup(compact: true)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 30)
-                    .opacity(appeared ? 1 : 0)
 
-                Button {
-                    keyFocused = true
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .medium))
-                        .frame(width: 36, height: 36)
-                        .foregroundStyle(.white.opacity(0.84))
-                        .background(
-                            Color.white.opacity(0.055),
-                            in: Circle()
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(.white.opacity(0.75))
+                        .frame(width: 3, height: 3)
+
+                    Rectangle()
+                        .fill(.white.opacity(0.16))
+                        .frame(width: 34, height: 0.8)
+
+                    Text("PRIVATE ACCESS")
+                        .font(
+                            .system(
+                                size: 8,
+                                weight: .medium,
+                                design: .monospaced
+                            )
                         )
-                        .overlay(
-                            Circle()
-                                .strokeBorder(.white.opacity(0.11), lineWidth: 0.8)
-                        )
+                        .tracking(2.0)
+                        .foregroundStyle(.white.opacity(0.42))
+
+                    Rectangle()
+                        .fill(.white.opacity(0.16))
+                        .frame(width: 34, height: 0.8)
+
+                    Circle()
+                        .fill(.white.opacity(0.75))
+                        .frame(width: 3, height: 3)
                 }
-                .buttonStyle(ScaleButtonStyle(scale: 0.94))
-                .padding(.top, 14)
-                .padding(.trailing, 18)
-                .accessibilityLabel("Jump to key entry")
             }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 22)
+            .opacity(appeared ? 1 : 0)
+
+            Button {
+                keyFocused = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(.white.opacity(0.84))
+                    .background(
+                        .ultraThinMaterial,
+                        in: Circle()
+                    )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        .white.opacity(0.30),
+                                        .white.opacity(0.07)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 0.9
+                            )
+                    )
+            }
+            .buttonStyle(ScaleButtonStyle(scale: 0.94))
+            .padding(.top, 12)
+            .padding(.trailing, 18)
+            .accessibilityLabel("Jump to key entry")
         }
-        .frame(height: 205)
+        .frame(height: 112)
     }
 
     private var heading: some View {
