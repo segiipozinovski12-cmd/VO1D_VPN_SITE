@@ -28,7 +28,6 @@ struct StatsView: View {
             .padding(.bottom, 20)
         }
         .scrollIndicators(.hidden)
-        .background { ReferenceBackdrop() }
         .onAppear {
             guard !appeared else { return }
 
