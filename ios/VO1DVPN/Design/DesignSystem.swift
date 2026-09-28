@@ -186,6 +186,26 @@ struct GlassCircle: ViewModifier {
     }
 }
 
+private struct RevealModifier: ViewModifier {
+    let visible: Bool
+    let reduceMotion: Bool
+    let delay: Double
+    let distance: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(visible ? 1 : 0)
+            .offset(y: visible || reduceMotion ? 0 : distance)
+            .scaleEffect(visible || reduceMotion ? 1 : 0.992)
+            .animation(
+                reduceMotion
+                ? nil
+                : .easeOut(duration: 0.44).delay(delay),
+                value: visible
+            )
+    }
+}
+
 extension View {
     func vo1dSurface(highlighted: Bool = false, radius: CGFloat = 22) -> some View {
         modifier(Surface(highlighted: highlighted, radius: radius))
@@ -193,6 +213,22 @@ extension View {
 
     func vo1dGlassCircle(highlighted: Bool = false) -> some View {
         modifier(GlassCircle(highlighted: highlighted))
+    }
+
+    func vo1dReveal(
+        _ visible: Bool,
+        reduceMotion: Bool,
+        delay: Double = 0,
+        distance: CGFloat = 10
+    ) -> some View {
+        modifier(
+            RevealModifier(
+                visible: visible,
+                reduceMotion: reduceMotion,
+                delay: delay,
+                distance: distance
+            )
+        )
     }
 }
 
