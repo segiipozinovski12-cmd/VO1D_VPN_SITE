@@ -4,12 +4,12 @@ struct LoginView: View {
     var onClose: () -> Void = {}
 
     @EnvironmentObject private var model: AppViewModel
-    @Environment(\.openURL) private var openURL
     @Environment(\.vo1dReduceMotion) private var reduceMotion
 
     @State private var key = ""
     @State private var selectedPlan = 30
     @State private var appeared = false
+    @State private var showCheckout = false
     @FocusState private var keyFocused: Bool
 
     private let plans = [
@@ -47,6 +47,20 @@ struct LoginView: View {
                 withAnimation(.easeOut(duration: 0.48)) {
                     appeared = true
                 }
+            }
+        }
+        .sheet(isPresented: $showCheckout) {
+            if let plan = plans.first(where: { $0.days == selectedPlan }) {
+                PaymentCheckoutView(
+                    planDays: plan.days,
+                    planTitle: plan.title,
+                    displayPrice: plan.price
+                )
+                .environmentObject(model)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationCornerRadius(32)
+                .presentationBackground(.black)
             }
         }
         .accessibilityIdentifier("login.screen")
@@ -254,24 +268,12 @@ struct LoginView: View {
             title: "Get Subscription",
             icon: "chevron.right"
         ) {
+            keyFocused = false
             Haptics.play(
                 .selection,
                 enabled: model.preferences.haptics
             )
-
-            if let telegram = URL(
-                string: "tg://resolve?domain=VO1D_VPNbot"
-            ) {
-                openURL(telegram) { accepted in
-                    guard !accepted,
-                          let web = URL(
-                            string: "https://t.me/VO1D_VPNbot"
-                          )
-                    else { return }
-
-                    openURL(web)
-                }
-            }
+            showCheckout = true
         }
         .accessibilityIdentifier("subscription.primary")
     }
