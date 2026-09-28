@@ -329,6 +329,10 @@ private struct QuickActions: View {
                 detail: pings.isRefreshing ? "CHECKING" : "MEASURE",
                 active: pings.isRefreshing
             ) {
+                Haptics.play(
+                    .selection,
+                    enabled: preferences.haptics
+                )
                 Task { await pings.refresh() }
             }
             .disabled(pings.isRefreshing)
@@ -361,6 +365,7 @@ private struct QuickActions: View {
                         .font(.system(size: 17, weight: .light))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.white)
+                        .symbolEffect(.bounce, value: active)
                         .rotationEffect(
                             .degrees(
                                 title == "REFRESH PING" && pings.isRefreshing
