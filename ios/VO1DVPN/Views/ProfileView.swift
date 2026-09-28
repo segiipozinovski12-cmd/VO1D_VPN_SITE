@@ -191,9 +191,17 @@ struct ProfileView: View {
 }
 
 private struct ProfileTrafficRow: View {
+    @EnvironmentObject private var model: AppViewModel
     @EnvironmentObject private var session: SessionMonitor
+
     var body: some View {
-        DetailRow(title: "Traffic", value: session.hasTrafficMeasurements ? "\(session.stats.trafficValue) \(session.stats.trafficUnit) · Demo" : "Unavailable")
+        let suffix = model.isDemoMode ? " · Demo" : ""
+        DetailRow(
+            title: "Traffic",
+            value: session.hasTrafficMeasurements
+                ? "\(session.stats.trafficValue) \(session.stats.trafficUnit)\(suffix)"
+                : "Measuring…"
+        )
     }
 }
 
