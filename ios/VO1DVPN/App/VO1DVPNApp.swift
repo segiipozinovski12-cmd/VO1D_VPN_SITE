@@ -1,7 +1,20 @@
 import SwiftUI
+import UIKit
+
+final class VO1DAppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        .portrait
+    }
+}
 
 @main
 struct VO1DVPNApp: App {
+    @UIApplicationDelegateAdaptor(VO1DAppDelegate.self)
+    private var appDelegate
+
     @StateObject private var model = AppViewModel()
 
     var body: some Scene {
