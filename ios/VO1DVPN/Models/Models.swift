@@ -29,7 +29,7 @@ struct AppStateResponse: Codable {
     let ok: Bool
     let account: AccountState
     let servers: ServerCollection
-    let supportURL: String
+    let supportUrl: String
 }
 
 struct ActivateResponse: Codable {
@@ -37,7 +37,7 @@ struct ActivateResponse: Codable {
     let token: String
     let account: AccountState
     let servers: ServerCollection
-    let supportURL: String
+    let supportUrl: String
 }
 
 struct TunnelResponse: Codable {
