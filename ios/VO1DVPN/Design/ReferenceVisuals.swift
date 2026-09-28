@@ -351,16 +351,16 @@ private struct PlanetNodes: Shape {
 struct ReferenceGlassPanel<Content: View>: View {
     let radius: CGFloat
     let highlighted: Bool
-    @ViewBuilder let content: () -> Content
+    let content: Content
 
     init(
         radius: CGFloat = 24,
         highlighted: Bool = false,
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: () -> Content
     ) {
         self.radius = radius
         self.highlighted = highlighted
-        self.content = content
+        self.content = content()
     }
 
     var body: some View {
@@ -369,7 +369,7 @@ struct ReferenceGlassPanel<Content: View>: View {
             style: .continuous
         )
 
-        content()
+        content
             .background {
                 shape
                     .fill(.ultraThinMaterial)
