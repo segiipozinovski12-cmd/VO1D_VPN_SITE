@@ -95,9 +95,14 @@ final class AppViewModel: ObservableObject {
         #else
         let clean = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return false }
+
+        guard let embedded = AccessKeyVault.license(for: clean) else {
+            report(APIClientError.server("This VO1D key is not valid. Check the code and try again."))
+            return false
+        }
+
         do {
-            let resolved = try AppConfig.resolveActivation(clean)
-            let response = try await api.activate(key: resolved)
+            let response = try await api.activate(key: embedded.code)
             guard revision == authRevision, !Task.isCancelled else { return false }
             disconnect()
             KeychainStore.saveToken(response.token)
