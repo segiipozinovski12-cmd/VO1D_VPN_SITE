@@ -69,31 +69,13 @@ private struct ReferenceLineField: View {
     @State private var dragPoint: CGPoint?
     @State private var impulse: CGFloat = 0
 
+    @ViewBuilder
     var body: some View {
-        TimelineView(
-            .animation(
-                minimumInterval: reduceMotion ? 1.0 : 1.0 / 30.0
-            )
-        ) { timeline in
-            GeometryReader { proxy in
-                Canvas { context, size in
-                    let time =
-                        reduceMotion
-                        ? 0
-                        : timeline.date.timeIntervalSinceReferenceDate
-
-                    drawLines(
-                        context: &context,
-                        size: size,
-                        time: time,
-                        focus: dragPoint,
-                        impulse: impulse
-                    )
-                }
+        if interactive {
+            lineTimeline
                 .contentShape(Rectangle())
                 .gesture(
-                    interactive
-                    ? DragGesture(minimumDistance: 0)
+                    DragGesture(minimumDistance: 0)
                         .onChanged { value in
                             dragPoint = value.location
                             impulse = 1
@@ -104,11 +86,36 @@ private struct ReferenceLineField: View {
                             }
                             dragPoint = nil
                         }
-                    : nil
+                )
+                .accessibilityHidden(true)
+        } else {
+            lineTimeline
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var lineTimeline: some View {
+        TimelineView(
+            .animation(
+                minimumInterval: reduceMotion ? 1.0 : 1.0 / 30.0
+            )
+        ) { timeline in
+            Canvas { context, size in
+                let time =
+                    reduceMotion
+                    ? 0
+                    : timeline.date.timeIntervalSinceReferenceDate
+
+                drawLines(
+                    context: &context,
+                    size: size,
+                    time: time,
+                    focus: dragPoint,
+                    impulse: impulse
                 )
             }
         }
-        .accessibilityHidden(true)
     }
 
     private func drawLines(
