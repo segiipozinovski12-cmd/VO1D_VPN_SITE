@@ -1,3 +1,4 @@
+import Foundation
 import NetworkExtension
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
@@ -60,9 +61,30 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     )
                     completionHandler(nil)
                 } catch {
+                    await self.core.stop()
                     completionHandler(error)
                 }
             }
+        }
+    }
+
+    override func handleAppMessage(
+        _ messageData: Data,
+        completionHandler: ((Data?) -> Void)? = nil
+    ) {
+        guard let command = String(data: messageData, encoding: .utf8) else {
+            completionHandler?(nil)
+            return
+        }
+
+        switch command {
+        case "stats":
+            let snapshot = core.getAndClearStats()
+            completionHandler?(try? JSONEncoder().encode(snapshot))
+        case "health":
+            completionHandler?(Data("ok".utf8))
+        default:
+            completionHandler?(nil)
         }
     }
 
