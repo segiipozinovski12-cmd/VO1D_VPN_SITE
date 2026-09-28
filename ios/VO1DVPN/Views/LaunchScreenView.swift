@@ -31,7 +31,7 @@ struct LaunchScreenView: View {
                     Spacer(minLength: 0)
 
                     planetStage(size: proxy.size)
-                        .frame(height: proxy.size.height * 0.62)
+                        .frame(height: proxy.size.height * 0.66)
 
                     Spacer(minLength: 0)
 
@@ -89,21 +89,24 @@ struct LaunchScreenView: View {
     private func planetStage(size: CGSize) -> some View {
         ZStack {
             ReferencePlanet(
-                diameter: min(size.width * 1.18, 510),
-                rotation: -12,
-                glow: appeared ? 0.18 : 0.04
+                diameter: min(size.width * 1.72, 690),
+                rotation: -17,
+                glow: appeared ? 0.30 : 0.07
             )
-            .offset(x: -size.width * 0.13, y: -8)
-            .scaleEffect(appeared || reduceMotion ? 1 : 0.94)
+            .offset(
+                x: -size.width * 0.30,
+                y: size.height * 0.055
+            )
+            .scaleEffect(appeared || reduceMotion ? 1 : 0.90)
             .opacity(appeared ? 1 : 0)
 
             VStack(spacing: 10) {
                 Spacer()
 
                 VO1DBrandLockup()
-                    .shadow(color: .black.opacity(0.92), radius: 14)
-                    .shadow(color: .white.opacity(0.12), radius: 8)
-                    .padding(.bottom, size.height * 0.015)
+                    .shadow(color: .black.opacity(0.98), radius: 18)
+                    .shadow(color: .white.opacity(0.22), radius: 12)
+                    .padding(.bottom, size.height * 0.020)
             }
             .padding(.bottom, 18)
             .opacity(appeared ? 1 : 0)
