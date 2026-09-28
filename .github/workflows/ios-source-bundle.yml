@@ -1,0 +1,65 @@
+name: VO1D Xcode source bundle
+
+on:
+  push:
+    branches:
+      - feature/ios-final-liquid-glass
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate native project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Generate Simulator preview project
+        working-directory: ios-preview
+        run: xcodegen generate
+
+      - name: Add quick start
+        run: |
+          cat > START_HERE.txt <<'EOF'
+          VO1D_VPN — XCODE QUICK START
+
+          FASTEST WAY TO SEE THE APP:
+          1. Open ios-preview/VO1D_VPN_PREVIEW.xcodeproj
+          2. Select VO1D_VPN_PREVIEW
+          3. Select an iPhone Simulator
+          4. Press Run
+
+          The Simulator preview needs no key and uses local demo data.
+
+          REAL NATIVE TARGET:
+          Open ios/VO1D_VPN.xcodeproj
+
+          Physical-iPhone VPN functionality requires valid Apple signing
+          and the Network Extension entitlement.
+          EOF
+
+      - name: Build source archive
+        run: |
+          mkdir -p bundle/VO1D_VPN_Xcode
+          cp -R ios bundle/VO1D_VPN_Xcode/
+          cp -R ios-preview bundle/VO1D_VPN_Xcode/
+          cp START_HERE.txt bundle/VO1D_VPN_Xcode/
+          ditto -c -k --sequesterRsrc --keepParent             bundle/VO1D_VPN_Xcode             VO1D_VPN_Xcode_Source.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VO1D_VPN_Xcode_Source
+          path: VO1D_VPN_Xcode_Source.zip
+          if-no-files-found: error
+          retention-days: 14
