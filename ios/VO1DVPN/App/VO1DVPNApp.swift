@@ -87,8 +87,7 @@ private struct RootView: View {
         .onChange(of: model.sessionToken) { oldValue, newValue in
             guard oldValue == nil,
                   newValue != nil,
-                  splashFinished,
-                  !model.isDemoMode else { return }
+                  splashFinished else { return }
 
             let sequence = UUID()
             activationSequence = sequence
