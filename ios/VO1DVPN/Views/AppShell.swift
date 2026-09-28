@@ -1,7 +1,10 @@
 import SwiftUI
 
 enum AppTab: String, CaseIterable {
-    case home = "Home", locations = "Locations", profile = "Profile"
+    case home = "Home"
+    case locations = "Locations"
+    case profile = "Profile"
+
     var icon: String {
         switch self {
         case .home: return "circle.hexagongrid"
@@ -13,49 +16,106 @@ enum AppTab: String, CaseIterable {
 
 struct AppShell: View {
     @Environment(\.vo1dReduceMotion) private var reduceMotion
+
     @State private var tab: AppTab = .home
     @Namespace private var tabSelection
+
     var body: some View {
         NavigationStack {
-            Group {
-                switch tab {
-                case .home: HomeView(openLocations: { tab = .locations }, openProfile: { tab = .profile })
-                case .locations: ServersView()
-                case .profile: ProfileView()
+            ZStack {
+                DeepSpaceBackdrop().ignoresSafeArea()
+
+                Group {
+                    switch tab {
+                    case .home:
+                        HomeView(
+                            openLocations: { select(.locations) },
+                            openProfile: { select(.profile) }
+                        )
+                    case .locations:
+                        ServersView()
+                    case .profile:
+                        ProfileView()
+                    }
+                }
+                .id(tab)
+                .transition(
+                    reduceMotion
+                    ? .opacity
+                    : .opacity.combined(with: .scale(scale: 0.985))
+                )
+                .toolbar(.hidden, for: .navigationBar)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    tabBar
                 }
             }
-            .id(tab)
-            .transition(.opacity)
-            .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .bottom, spacing: 0) { tabBar }
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: tab)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.30), value: tab)
     }
+
     private var tabBar: some View {
         HStack(spacing: 4) {
             ForEach(AppTab.allCases, id: \.self) { item in
                 Button {
-                    tab = item
+                    select(item)
                 } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: item.icon).font(.system(size: 15))
-                        Text(item.rawValue).font(.system(size: 12, weight: .medium))
+                        Image(systemName: item.icon)
+                            .font(.system(size: 15, weight: tab == item ? .semibold : .regular))
+                            .symbolRenderingMode(.hierarchical)
+
+                        Text(item.rawValue)
+                            .font(.system(size: 12, weight: .medium))
                     }
                     .foregroundStyle(tab == item ? .white : VO1DStyle.secondary)
-                    .frame(maxWidth: .infinity).frame(height: 46)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
                     .background {
                         if tab == item {
-                            Capsule().fill(.white.opacity(0.09)).matchedGeometryEffect(id: "tab", in: tabSelection)
+                            Capsule()
+                                .fill(.ultraThinMaterial)
+                                .overlay {
+                                    Capsule()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [
+                                                    .white.opacity(0.12),
+                                                    VO1DStyle.ice.opacity(0.06),
+                                                    .white.opacity(0.035)
+                                                ],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                }
+                                .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+                                .matchedGeometryEffect(id: "tab", in: tabSelection)
                         }
                     }
                 }
-                .buttonStyle(ScaleButtonStyle())
+                .buttonStyle(ScaleButtonStyle(scale: 0.95))
                 .accessibilityIdentifier("tab.\(item.rawValue.lowercased())")
                 .accessibilityAddTraits(tab == item ? .isSelected : [])
             }
         }
-        .padding(6).vo1dSurface(radius: 32)
-        .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 5)
-        .background(VO1DStyle.background)
+        .padding(6)
+        .vo1dSurface(radius: 32)
+        .padding(.horizontal, 20)
+        .padding(.top, 9)
+        .padding(.bottom, 5)
+        .background(
+            LinearGradient(
+                colors: [.clear, VO1DStyle.background.opacity(0.78), VO1DStyle.background],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private func select(_ next: AppTab) {
+        guard next != tab else { return }
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.30)) {
+            tab = next
+        }
     }
 }
