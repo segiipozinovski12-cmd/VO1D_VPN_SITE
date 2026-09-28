@@ -45,9 +45,17 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.textFields["profile.nickname"].waitForExistence(timeout: 3))
         capture("07-profile", app: app)
         app.buttons["profile.avatar"].tap()
-        app.buttons["avatar.moon.stars.fill"].tap()
+        let avatarChoice = app.buttons["avatar.moon.stars.fill"]
+        XCTAssertTrue(avatarChoice.waitForExistence(timeout: 3))
+        avatarChoice.tap()
+        let avatarDismissed = NSPredicate(format: "exists == false")
+        expectation(for: avatarDismissed, evaluatedWith: avatarChoice)
+        waitForExpectations(timeout: 3)
+
         let settings = app.buttons["profile.settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 3))
         if !settings.isHittable { app.swipeUp() }
+        XCTAssertTrue(settings.isHittable)
         settings.tap()
         let settingsTitle = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "Fine-tune")).firstMatch
         XCTAssertTrue(settingsTitle.waitForExistence(timeout: 5))
