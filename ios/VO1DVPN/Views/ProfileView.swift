@@ -3,196 +3,454 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject private var model: AppViewModel
     @EnvironmentObject private var preferences: Preferences
-    @Environment(\.vo1dReduceMotion) private var reduceMotion
+    @Environment(.vo1dReduceMotion) private var reduceMotion
+
     @State private var showAvatars = false
     @State private var showKey = false
     @State private var showLogout = false
     @State private var showSettings = false
     @State private var appeared = false
+
     @FocusState private var editingName: Bool
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 22) {
-                PageHeading(number: "03", title: "Your space", subtitle: "A connection that feels like yours.")
-                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.00)
-                identity
-                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.05)
-                subscription
-                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.10)
-                sessionCard
-                    .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.14)
-                Button {
-                    showSettings = true
-                } label: {
-                    actionRow("Settings", subtitle: "Connection & interface", icon: "slider.horizontal.3")
-                }
-                .buttonStyle(ScaleButtonStyle())
-                .accessibilityIdentifier("profile.settings")
-                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.18)
-                VStack(spacing: 0) {
-                    Button { showKey = true } label: { actionRow("Change Key", subtitle: "Update your access", icon: "key", surface: false) }
-                        .buttonStyle(ScaleButtonStyle()).accessibilityIdentifier("profile.changeKey")
-                    DividerLine().padding(.horizontal, 18)
-                    Button { showLogout = true } label: { actionRow("Log Out", subtitle: model.isDemoMode ? "Leave this demo session" : "Remove this device session", icon: "rectangle.portrait.and.arrow.right", surface: false) }
-                        .buttonStyle(ScaleButtonStyle()).accessibilityIdentifier("profile.logout")
-                }
-                .vo1dSurface()
-                .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.22)
+            VStack(spacing: 18) {
+                brandHeader
+                    .profileReveal(appeared, delay: 0.00, reduceMotion: reduceMotion)
 
-                if model.isDemoMode {
-                    Eyebrow(text: "DEMO / IPHONE SIMULATOR")
-                        .vo1dReveal(appeared, reduceMotion: reduceMotion, delay: 0.25)
-                }
-            }.padding(.horizontal, 22).padding(.bottom, 28)
+                titleBlock
+                    .profileReveal(appeared, delay: 0.03, reduceMotion: reduceMotion)
+
+                identityCard
+                    .profileReveal(appeared, delay: 0.06, reduceMotion: reduceMotion)
+
+                membershipCard
+                    .profileReveal(appeared, delay: 0.09, reduceMotion: reduceMotion)
+
+                sessionCard
+                    .profileReveal(appeared, delay: 0.12, reduceMotion: reduceMotion)
+
+                actionStack
+                    .profileReveal(appeared, delay: 0.15, reduceMotion: reduceMotion)
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 22)
         }
-        .background { DeepSpaceBackdrop().ignoresSafeArea() }.scrollIndicators(.hidden).scrollDismissesKeyboard(.interactively)
-        .navigationDestination(isPresented: $showSettings) { SettingsView() }
-        .sheet(isPresented: $showAvatars) { avatarPicker }
-        .sheet(isPresented: $showKey) { ChangeKeyView() }
-        .confirmationDialog("Log out of VO1D?", isPresented: $showLogout, titleVisibility: .visible) {
-            Button("Log Out", role: .destructive) { Task { await model.logout() } }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .background { ReferenceBackdrop() }
+        .navigationDestination(isPresented: $showSettings) {
+            SettingsView()
+        }
+        .sheet(isPresented: $showAvatars) {
+            avatarPicker
+        }
+        .sheet(isPresented: $showKey) {
+            ChangeKeyView()
+        }
+        .confirmationDialog(
+            "Log out of VO1D?",
+            isPresented: $showLogout,
+            titleVisibility: .visible
+        ) {
+            Button("Log Out", role: .destructive) {
+                Task { await model.logout() }
+            }
         }
         .onAppear {
             guard !appeared else { return }
+
             if reduceMotion {
                 appeared = true
             } else {
-                withAnimation(.easeOut(duration: 0.44)) {
+                withAnimation(.easeOut(duration: 0.42)) {
                     appeared = true
                 }
             }
         }
         .accessibilityIdentifier("profile.screen")
     }
-    private var identity: some View {
-        HStack(spacing: 18) {
-            Button { showAvatars = true } label: {
-                ZStack(alignment: .bottomTrailing) {
-                    Image(systemName: preferences.avatar).font(.system(size: 30, weight: .light))
-                        .frame(width: 74, height: 74)
-                        .vo1dSystemGlass(in: RoundedRectangle(cornerRadius: 25, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 25, style: .continuous)
-                                .strokeBorder(.white.opacity(0.11), lineWidth: 1)
-                        }
-                        .shadow(color: .black.opacity(0.34), radius: 16, y: 8)
-                    Image(systemName: "pencil").font(.system(size: 9, weight: .semibold)).padding(6)
-                        .background(VO1DStyle.raised, in: Circle())
-                }
-            }.buttonStyle(ScaleButtonStyle()).accessibilityLabel("Change avatar").accessibilityIdentifier("profile.avatar")
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("Your nickname", text: $preferences.nickname)
-                    .font(.system(size: 20, weight: .medium)).focused($editingName).submitLabel(.done)
-                    .onSubmit { editingName = false }.accessibilityIdentifier("profile.nickname")
-                    .onChange(of: preferences.nickname) { _, value in
-                        if value.count > 32 { preferences.nickname = String(value.prefix(32)) }
-                    }
-                Text("USER ID / \(model.account?.id ?? 0)").font(VO1DStyle.mono(10)).foregroundStyle(VO1DStyle.secondary)
-                Text("Tap your name to edit").font(.caption2).foregroundStyle(VO1DStyle.secondary)
-            }
-            Spacer(minLength: 0)
-        }.padding(.vertical, 8)
-    }
-    private var subscription: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            HStack {
-                Eyebrow(text: "MEMBERSHIP")
-                Spacer()
-                StatusPill(text: model.account?.active == true ? "ACTIVE" : "INACTIVE", connected: model.account?.active == true)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("\(remainingDays)").font(.system(size: 54, weight: .light, design: .rounded)).tracking(-2)
-                Text("days remaining").font(.subheadline).foregroundStyle(VO1DStyle.secondary)
-            }
-            DividerLine()
-            HStack {
-                Text("Expires").font(.subheadline).foregroundStyle(VO1DStyle.secondary)
-                Spacer()
-                Text(expiration).font(.subheadline.weight(.medium))
-            }
-        }.padding(22).vo1dSurface(highlighted: true)
-    }
-    private var sessionCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Eyebrow(text: "CURRENT SESSION")
-                Spacer()
-                Circle()
-                    .fill(model.isConnected ? VO1DStyle.pearl : VO1DStyle.secondary)
-                    .frame(width: 5, height: 5)
-                    .shadow(
-                        color: model.isConnected ? .white.opacity(0.24) : .clear,
-                        radius: 4
-                    )
-            }
-            DetailRow(title: "State", value: model.phase.rawValue)
-            DividerLine()
-            DetailRow(title: "Location", value: model.activeServer?.name ?? "Not connected")
-            DividerLine()
-            ProfileTrafficRow()
-            DividerLine()
-            DetailRow(title: "Favorites", value: String(model.favoriteCodes.count))
-        }.padding(18).vo1dSurface()
-    }
-    @ViewBuilder
-    private func actionRow(_ title: String, subtitle: String, icon: String, surface: Bool = true) -> some View {
-        let row = HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .light))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(VO1DStyle.ice)
-                .frame(width: 32, height: 32)
-                .vo1dSystemGlass(in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(.white.opacity(0.07), lineWidth: 1)
-                }
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.subheadline.weight(.medium))
-                Text(subtitle).font(.caption).foregroundStyle(VO1DStyle.secondary)
-            }
+    private var brandHeader: some View {
+        HStack {
+            VO1DBrandLockup(compact: true)
 
             Spacer()
 
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11))
-                .foregroundStyle(VO1DStyle.secondary)
+            StatusPill(
+                text: model.account?.active == true ? "ACTIVE" : "INACTIVE",
+                connected: model.account?.active == true
+            )
         }
-        .padding(18)
+        .frame(height: 50)
+    }
 
-        if surface {
-            row.vo1dSurface()
-        } else {
-            row
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("PROFILE")
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .tracking(2.1)
+                .foregroundStyle(.white.opacity(0.38))
+
+            Text("Your space")
+                .font(.system(size: 28, weight: .semibold))
+                .tracking(-0.7)
+
+            Text("Access, identity and connection settings.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.40))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var identityCard: some View {
+        ReferenceGlassCard(radius: 24) {
+            HStack(spacing: 16) {
+                Button {
+                    showAvatars = true
+                } label: {
+                    ZStack(alignment: .bottomTrailing) {
+                        RoundedRectangle(
+                            cornerRadius: 20,
+                            style: .continuous
+                        )
+                        .fill(Color.white.opacity(0.045))
+                        .background(
+                            .ultraThinMaterial,
+                            in: RoundedRectangle(
+                                cornerRadius: 20,
+                                style: .continuous
+                            )
+                        )
+                        .frame(width: 68, height: 68)
+                        .overlay {
+                            RoundedRectangle(
+                                cornerRadius: 20,
+                                style: .continuous
+                            )
+                            .strokeBorder(
+                                .white.opacity(0.12),
+                                lineWidth: 0.8
+                            )
+                        }
+
+                        Image(systemName: preferences.avatar)
+                            .font(.system(size: 27, weight: .light))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .frame(width: 68, height: 68)
+
+                        Image(systemName: "pencil")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(width: 21, height: 21)
+                            .background(.white, in: Circle())
+                            .offset(x: 3, y: 3)
+                    }
+                }
+                .buttonStyle(ScaleButtonStyle(scale: 0.95))
+                .accessibilityIdentifier("profile.avatar")
+
+                VStack(alignment: .leading, spacing: 7) {
+                    TextField(
+                        "Your nickname",
+                        text: $preferences.nickname
+                    )
+                    .font(.system(size: 20, weight: .semibold))
+                    .focused($editingName)
+                    .submitLabel(.done)
+                    .onSubmit { editingName = false }
+                    .onChange(of: preferences.nickname) { _, value in
+                        if value.count > 32 {
+                            preferences.nickname = String(value.prefix(32))
+                        }
+                    }
+                    .accessibilityIdentifier("profile.nickname")
+
+                    Text("USER ID / \(model.account?.id ?? 0)")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.35))
+
+                    Text("Tap the name to edit")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.28))
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(18)
         }
     }
-    private var avatarPicker: some View {
-        VStack(spacing: 26) {
-            Text("Make it yours").font(.title2.weight(.semibold))
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 16) {
-                ForEach(Preferences.avatars, id: \.self) { symbol in
-                    Button {
-                        preferences.avatar = symbol
-                        Haptics.play(.selection, enabled: preferences.haptics)
-                        showAvatars = false
-                    } label: {
-                        Image(systemName: symbol).font(.system(size: 27, weight: .light)).frame(maxWidth: .infinity).frame(height: 74)
-                            .vo1dSurface(highlighted: preferences.avatar == symbol, radius: 18)
-                    }.buttonStyle(ScaleButtonStyle()).accessibilityLabel(symbol).accessibilityIdentifier("avatar.\(symbol)")
+
+    private var membershipCard: some View {
+        ReferenceGlassCard(
+            radius: 24,
+            highlighted: model.account?.active == true
+        ) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("MEMBERSHIP")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(1.7)
+                        .foregroundStyle(.white.opacity(0.38))
+
+                    Spacer()
+
+                    Text(model.account?.active == true ? "ACTIVE" : "INACTIVE")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .tracking(1.1)
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(remainingDays)")
+                        .font(.system(size: 54, weight: .light, design: .rounded))
+                        .tracking(-2)
+                        .monospacedDigit()
+
+                    Text("days remaining")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.40))
+                }
+
+                Rectangle()
+                    .fill(.white.opacity(0.08))
+                    .frame(height: 1)
+
+                HStack {
+                    Text("Expires")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.42))
+
+                    Spacer()
+
+                    Text(expiration)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.82))
                 }
             }
-        }.padding(24).presentationDetents([.height(310)]).presentationDragIndicator(.visible)
-            .presentationBackground(.ultraThinMaterial)
+            .padding(20)
+        }
     }
+
+    private var sessionCard: some View {
+        ReferenceGlassCard(radius: 22) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text("CURRENT SESSION")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(1.7)
+                        .foregroundStyle(.white.opacity(0.38))
+
+                    Spacer()
+
+                    Circle()
+                        .fill(
+                            model.isConnected
+                            ? .white
+                            : .white.opacity(0.18)
+                        )
+                        .frame(width: 5, height: 5)
+                        .shadow(
+                            color:
+                                model.isConnected
+                                ? .white.opacity(0.44)
+                                : .clear,
+                            radius: 5
+                        )
+                }
+                .padding(.bottom, 13)
+
+                sessionRow("State", model.phase.rawValue)
+                divider
+                sessionRow(
+                    "Location",
+                    model.activeServer?.name ?? "Not connected"
+                )
+                divider
+                ProfileTrafficRow()
+                divider
+                sessionRow(
+                    "Favorites",
+                    String(model.favoriteCodes.count)
+                )
+            }
+            .padding(18)
+        }
+    }
+
+    private var actionStack: some View {
+        VStack(spacing: 10) {
+            profileAction(
+                title: "Settings",
+                detail: "Connection & interface",
+                icon: "gearshape"
+            ) {
+                showSettings = true
+            }
+            .accessibilityIdentifier("profile.settings")
+
+            profileAction(
+                title: "Change Key",
+                detail: "Activate another VOID license",
+                icon: "key.horizontal"
+            ) {
+                showKey = true
+            }
+            .accessibilityIdentifier("profile.changeKey")
+
+            profileAction(
+                title: "Log Out",
+                detail:
+                    model.isDemoMode
+                    ? "Leave this demo session"
+                    : "Remove this device session",
+                icon: "rectangle.portrait.and.arrow.right"
+            ) {
+                showLogout = true
+            }
+            .accessibilityIdentifier("profile.logout")
+        }
+    }
+
+    private func profileAction(
+        title: String,
+        detail: String,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ReferenceGlassCard(radius: 18) {
+                HStack(spacing: 13) {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .light))
+                        .foregroundStyle(.white.opacity(0.82))
+                        .frame(width: 30)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+
+                        Text(detail)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.36))
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.40))
+                }
+                .padding(16)
+            }
+        }
+        .buttonStyle(ScaleButtonStyle(scale: 0.985))
+    }
+
+    private func sessionRow(
+        _ title: String,
+        _ value: String
+    ) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.42))
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.vertical, 11)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(.white.opacity(0.07))
+            .frame(height: 1)
+    }
+
+    private var avatarPicker: some View {
+        ZStack {
+            ReferenceBackdrop()
+
+            VStack(spacing: 22) {
+                Text("Choose Avatar")
+                    .font(.system(size: 22, weight: .semibold))
+
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.flexible()),
+                        count: 3
+                    ),
+                    spacing: 12
+                ) {
+                    ForEach(Preferences.avatars, id: \.self) { symbol in
+                        Button {
+                            preferences.avatar = symbol
+                            Haptics.play(
+                                .selection,
+                                enabled: preferences.haptics
+                            )
+                            showAvatars = false
+                        } label: {
+                            ReferenceGlassCard(
+                                radius: 18,
+                                highlighted:
+                                    preferences.avatar == symbol
+                            ) {
+                                Image(systemName: symbol)
+                                    .font(.system(size: 26, weight: .light))
+                                    .foregroundStyle(.white.opacity(0.88))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 68)
+                            }
+                        }
+                        .buttonStyle(ScaleButtonStyle(scale: 0.96))
+                        .accessibilityIdentifier("avatar.\(symbol)")
+                    }
+                }
+            }
+            .padding(22)
+        }
+        .presentationDetents([.height(330)])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.black)
+    }
+
     private var remainingDays: Int {
         guard let until = model.account?.until else { return 0 }
-        return max(0, Int(ceil((Double(until) - Date().timeIntervalSince1970) / 86_400)))
+
+        return max(
+            0,
+            Int(
+                ceil(
+                    (Double(until) - Date().timeIntervalSince1970)
+                    / 86_400
+                )
+            )
+        )
     }
+
     private var expiration: String {
         guard let until = model.account?.until else { return "—" }
-        return Date(timeIntervalSince1970: Double(until)).formatted(.dateTime.day().month(.abbreviated).year())
+
+        return Date(
+            timeIntervalSince1970: Double(until)
+        )
+        .formatted(
+            .dateTime
+                .day()
+                .month(.abbreviated)
+                .year()
+        )
     }
 }
 
@@ -201,38 +459,216 @@ private struct ProfileTrafficRow: View {
     @EnvironmentObject private var session: SessionMonitor
 
     var body: some View {
+        HStack {
+            Text("Traffic")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.42))
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+        }
+        .padding(.vertical, 11)
+    }
+
+    private var value: String {
+        guard session.hasTrafficMeasurements else {
+            return "Measuring…"
+        }
+
         let suffix = model.isDemoMode ? " · Demo" : ""
-        DetailRow(
-            title: "Traffic",
-            value: session.hasTrafficMeasurements
-                ? "\(session.stats.trafficValue) \(session.stats.trafficUnit)\(suffix)"
-                : "Measuring…"
-        )
+
+        return "\(session.stats.trafficValue) \(session.stats.trafficUnit)\(suffix)"
     }
 }
 
 private struct ChangeKeyView: View {
     @EnvironmentObject private var model: AppViewModel
     @Environment(\.dismiss) private var dismiss
+
     @State private var key = ""
+    @FocusState private var focused: Bool
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            HStack {
-                Text("Change access key").font(.title2.weight(.semibold))
+        ZStack {
+            ReferenceBackdrop()
+
+            VStack(alignment: .leading, spacing: 20) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CHANGE KEY")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .tracking(1.8)
+                            .foregroundStyle(.white.opacity(0.38))
+
+                        Text("Activate license")
+                            .font(.system(size: 24, weight: .semibold))
+                    }
+
+                    Spacer()
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .medium))
+                            .frame(width: 36, height: 36)
+                            .foregroundStyle(.white.opacity(0.82))
+                            .background(
+                                Color.white.opacity(0.045),
+                                in: Circle()
+                            )
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(
+                                        .white.opacity(0.10),
+                                        lineWidth: 0.8
+                                    )
+                            )
+                    }
+                    .buttonStyle(ScaleButtonStyle(scale: 0.92))
+                }
+
+                Text(
+                    model.isDemoMode
+                    ? "This starts a fresh Simulator session."
+                    : "Enter one of the fixed VO1D licenses in VOID-XXXX-XXXX-XXXX format."
+                )
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.42))
+                .fixedSize(horizontal: false, vertical: true)
+
+                if !model.isDemoMode {
+                    HStack {
+                        TextField(
+                            "VOID-XXXX-XXXX-XXXX",
+                            text: $key
+                        )
+                        .font(.system(size: 14, weight: .medium))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .focused($focused)
+                        .onChange(of: key) { _, value in
+                            let formatted = formatKey(value)
+
+                            if formatted != key {
+                                key = formatted
+                            }
+                        }
+
+                        Image(
+                            systemName:
+                                AccessKeyVault.license(for: key) != nil
+                                ? "checkmark.circle.fill"
+                                : "key.horizontal"
+                        )
+                        .foregroundStyle(
+                            AccessKeyVault.license(for: key) != nil
+                            ? .white
+                            : .white.opacity(0.28)
+                        )
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 56)
+                    .background(
+                        Color.white.opacity(0.03),
+                        in: Capsule()
+                    )
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(
+                                .white.opacity(focused ? 0.24 : 0.09),
+                                lineWidth: 0.8
+                            )
+                    )
+                }
+
+                ReferencePrimaryButton(
+                    title:
+                        model.isActivating
+                        ? "Activating..."
+                        : model.isDemoMode
+                            ? "Restart Demo"
+                            : "Activate Key",
+                    icon: "chevron.right"
+                ) {
+                    Task {
+                        if await model.activate(key: key) {
+                            dismiss()
+                        }
+                    }
+                }
+                .disabled(
+                    model.isActivating ||
+                    (
+                        !model.isDemoMode &&
+                        AccessKeyVault.license(for: key) == nil
+                    )
+                )
+
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(VO1DStyle.red)
+                }
+
                 Spacer()
-                IconButton(icon: "xmark", label: "Close") { dismiss() }
             }
-            Text(model.isDemoMode ? "This starts a fresh demo session. No key or backend is required." : "Your current key remains active until the new key is accepted.")
-                .font(.subheadline).foregroundStyle(VO1DStyle.secondary)
-            if !model.isDemoMode {
-                TextField("VOID-… or VO1D1.…", text: $key).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .font(VO1DStyle.mono(13)).padding(18).vo1dSurface(radius: 14)
-            }
-            PrimaryButton(title: model.isActivating ? "Activating…" : model.isDemoMode ? "Restart demo session" : "Activate new key", icon: "key") {
-                Task { if await model.activate(key: key) { dismiss() } }
-            }.disabled(model.isActivating || (!model.isDemoMode && key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
-            if let error = model.errorMessage { Text(error).font(.caption).foregroundStyle(VO1DStyle.red) }
-            Spacer(minLength: 0)
-        }.padding(24).presentationDetents([.medium]).presentationDragIndicator(.visible).presentationBackground(.ultraThinMaterial)
+            .padding(22)
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.black)
+        .onAppear { focused = !model.isDemoMode }
+    }
+
+    private func formatKey(_ input: String) -> String {
+        var raw = input
+            .uppercased()
+            .filter { $0.isLetter || $0.isNumber }
+
+        if raw.hasPrefix("VOID") {
+            raw.removeFirst(4)
+        }
+
+        raw = String(raw.prefix(12))
+        guard !raw.isEmpty else { return "" }
+
+        var groups: [String] = []
+        var index = raw.startIndex
+
+        while index < raw.endIndex {
+            let end = raw.index(
+                index,
+                offsetBy: min(
+                    4,
+                    raw.distance(from: index, to: raw.endIndex)
+                )
+            )
+
+            groups.append(String(raw[index..<end]))
+            index = end
+        }
+
+        return "VOID-" + groups.joined(separator: "-")
+    }
+}
+
+private extension View {
+    func profileReveal(
+        _ visible: Bool,
+        delay: Double,
+        reduceMotion: Bool
+    ) -> some View {
+        opacity(visible ? 1 : 0)
+            .offset(y: visible || reduceMotion ? 0 : 12)
+            .animation(
+                reduceMotion
+                ? nil
+                : .easeOut(duration: 0.42).delay(delay),
+                value: visible
+            )
     }
 }
