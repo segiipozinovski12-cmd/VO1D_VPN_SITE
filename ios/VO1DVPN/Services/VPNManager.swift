@@ -34,9 +34,15 @@ final class VPNManager: ObservableObject {
     }
     var currentOptions: ConnectionOptions? {
         guard let proto = manager?.protocolConfiguration as? NETunnelProviderProtocol else { return nil }
-        return ConnectionOptions(killSwitch: proto.includeAllNetworks,
-                                 secureDNS: proto.providerConfiguration?["secureDNS"] as? Bool ?? true,
-                                 ipv6Protection: proto.providerConfiguration?["ipv6Protection"] as? Bool ?? true)
+        return ConnectionOptions(
+            privacyShield:
+                proto.providerConfiguration?["privacyShield"] as? Bool ?? false,
+            killSwitch: proto.includeAllNetworks,
+            secureDNS:
+                proto.providerConfiguration?["secureDNS"] as? Bool ?? true,
+            ipv6Protection:
+                proto.providerConfiguration?["ipv6Protection"] as? Bool ?? true
+        )
     }
 
     /// Read preferences at launch; ask to install a VPN configuration only on Connect.
@@ -71,12 +77,25 @@ final class VPNManager: ObservableObject {
         let proto = (manager.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
         proto.providerBundleIdentifier = AppConfig.tunnelBundleIdentifier
         proto.serverAddress = tunnel.country
+        let effectiveKillSwitch =
+            options.privacyShield || options.killSwitch
+        let effectiveSecureDNS =
+            options.privacyShield || options.secureDNS
+        let effectiveIPv6Protection =
+            options.privacyShield || options.ipv6Protection
+
         proto.providerConfiguration = [
-            "tunnelURI": tunnel.uri, "country": tunnel.country, "label": tunnel.label,
-            "expiresAt": tunnel.expiresAt, "secureDNS": options.secureDNS,
-            "ipv6Protection": options.ipv6Protection
+            "tunnelURI": tunnel.uri,
+            "country": tunnel.country,
+            "label": tunnel.label,
+            "expiresAt": tunnel.expiresAt,
+            "privacyShield": options.privacyShield,
+            "secureDNS": effectiveSecureDNS,
+            "ipv6Protection": effectiveIPv6Protection
         ]
-        proto.includeAllNetworks = options.killSwitch
+        proto.includeAllNetworks = effectiveKillSwitch
+        // Privacy Shield intentionally keeps local-network traffic inside
+        // the tunnel instead of exempting it from the full-tunnel route.
         proto.excludeLocalNetworks = false
         manager.protocolConfiguration = proto
         manager.localizedDescription = "VO1D_VPN"
