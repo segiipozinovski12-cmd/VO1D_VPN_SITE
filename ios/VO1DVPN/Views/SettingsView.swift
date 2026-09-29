@@ -27,6 +27,16 @@ struct SettingsView: View {
                     detail: "Route options apply on the next connection."
                 ) {
                     referenceToggle(
+                        "Privacy Shield",
+                        detail: "Force full-tunnel + DoH + IPv6 protection with no direct fallback",
+                        icon: "lock.shield",
+                        value: $preferences.privacyShield,
+                        id: "privacyShield"
+                    )
+
+                    divider
+
+                    referenceToggle(
                         "Auto Connect",
                         detail: "Connect when the app starts",
                         icon: "power",
@@ -51,7 +61,8 @@ struct SettingsView: View {
                         detail: "Keep traffic inside the VPN route",
                         icon: "shield",
                         value: $preferences.killSwitch,
-                        id: "killSwitch"
+                        id: "killSwitch",
+                        disabled: preferences.privacyShield
                     )
 
                     divider
@@ -61,7 +72,8 @@ struct SettingsView: View {
                         detail: "Resolve DNS inside the tunnel",
                         icon: "lock",
                         value: $preferences.secureDNS,
-                        id: "secureDNS"
+                        id: "secureDNS",
+                        disabled: preferences.privacyShield
                     )
 
                     divider
@@ -71,7 +83,8 @@ struct SettingsView: View {
                         detail: "Include IPv6 in the tunnel route",
                         icon: "network",
                         value: $preferences.ipv6Protection,
-                        id: "ipv6Protection"
+                        id: "ipv6Protection",
+                        disabled: preferences.privacyShield
                     )
                 }
                 .settingsReveal(appeared, delay: 0.06, reduceMotion: reduceMotion)
@@ -254,7 +267,8 @@ struct SettingsView: View {
         detail: String,
         icon: String,
         value: Binding<Bool>,
-        id: String
+        id: String,
+        disabled: Bool = false
     ) -> some View {
         Toggle(
             isOn: Binding(
@@ -307,6 +321,8 @@ struct SettingsView: View {
         }
         .tint(.white)
         .padding(.vertical, 14)
+        .disabled(disabled)
+        .opacity(disabled ? 0.52 : 1)
         .accessibilityIdentifier("settings.\(id)")
     }
 
@@ -323,6 +339,13 @@ struct SettingsView: View {
 
             ReferenceGlassCard(radius: 22) {
                 VStack(spacing: 0) {
+                    networkRow(
+                        "Privacy Shield",
+                        preferences.privacyShield ? "ON" : "OFF"
+                    )
+
+                    divider
+
                     networkRow(
                         "Protocol",
                         model.activeServer?.protocolName ??
