@@ -106,10 +106,22 @@ final class APIClient {
         try await request(path: "/api/app/me", token: token, as: AppStateResponse.self)
     }
 
-    func tunnel(token: String, country: String) async throws -> TunnelResponse {
-        let escaped = country.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? country
+    func tunnel(
+        token: String,
+        country: String,
+        attempt: Int = 0,
+        stealth: Bool = false
+    ) async throws -> TunnelResponse {
+        let escaped =
+            country.addingPercentEncoding(
+                withAllowedCharacters: .urlQueryAllowed
+            ) ?? country
+
         return try await request(
-            path: "/api/app/tunnel?country=\(escaped)",
+            path:
+                "/api/app/tunnel?country=\(escaped)"
+                + "&attempt=\(max(0, attempt))"
+                + "&stealth=\(stealth ? 1 : 0)",
             token: token,
             as: TunnelResponse.self
         )
