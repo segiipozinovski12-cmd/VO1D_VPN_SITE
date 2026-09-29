@@ -8,7 +8,11 @@ struct TunnelTrafficSnapshot: Codable {
 }
 
 protocol TunnelCoreAdapter: AnyObject {
-    func start(uri: String, packetFlow: NEPacketTunnelFlow) async throws
+    func start(
+        uri: String,
+        packetFlow: NEPacketTunnelFlow,
+        privacyShield: Bool
+    ) async throws
     func stop() async
     func getAndClearStats() -> TunnelTrafficSnapshot
 }
@@ -32,7 +36,11 @@ enum TunnelCoreError: LocalizedError {
 final class XrayTunnelCore: TunnelCoreAdapter {
     private var bridge: XrayBridge?
 
-    func start(uri: String, packetFlow: NEPacketTunnelFlow) async throws {
+    func start(
+        uri: String,
+        packetFlow: NEPacketTunnelFlow,
+        privacyShield: Bool
+    ) async throws {
         await stop()
 
         let fm = FileManager.default
@@ -75,13 +83,27 @@ final class XrayTunnelCore: TunnelCoreAdapter {
             configTransform: { config in
                 var final = config
                 final["log"] = ["loglevel": "warning"]
-                final["dns"] = [
-                    "servers": [
-                        "1.1.1.1",
-                        "2606:4700:4700::1111"
-                    ],
-                    "queryStrategy": "UseIP"
-                ]
+
+                if privacyShield {
+                    // Remote DoH (without +local) goes through Xray routing,
+                    // keeping DNS resolution inside the protected route.
+                    final["dns"] = [
+                        "servers": [
+                            "https://1.1.1.1/dns-query",
+                            "https://8.8.8.8/dns-query"
+                        ],
+                        "queryStrategy": "UseIP"
+                    ]
+                } else {
+                    final["dns"] = [
+                        "servers": [
+                            "1.1.1.1",
+                            "2606:4700:4700::1111"
+                        ],
+                        "queryStrategy": "UseIP"
+                    ]
+                }
+
                 return final
             }
         )
