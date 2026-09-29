@@ -13,6 +13,7 @@ enum ConnectionPhase: String {
 }
 
 struct ConnectionOptions: Equatable {
+    var stealthMode: Bool
     var privacyShield: Bool
     var killSwitch: Bool
     var secureDNS: Bool
