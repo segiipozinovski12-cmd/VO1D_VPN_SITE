@@ -8,6 +8,17 @@ final class Preferences: ObservableObject {
     @Published var avatar: String { didSet { save(avatar, "avatar") } }
     @Published var autoConnect: Bool { didSet { save(autoConnect, "autoconnect") } }
     @Published var autoFastest: Bool { didSet { save(autoFastest, "autoFastest") } }
+    @Published var stealthMode: Bool {
+        didSet {
+            save(stealthMode, "stealthMode")
+            if stealthMode {
+                privacyShield = true
+                killSwitch = true
+                secureDNS = true
+                ipv6Protection = true
+            }
+        }
+    }
     @Published var privacyShield: Bool {
         didSet {
             save(privacyShield, "privacyShield")
@@ -37,6 +48,7 @@ final class Preferences: ObservableObject {
         avatar = Self.avatars.contains(storedAvatar) ? storedAvatar : "person.fill"
         autoConnect = bool("autoconnect", fallback: false)
         autoFastest = bool("autoFastest", fallback: true)
+        stealthMode = bool("stealthMode", fallback: true)
         privacyShield = bool("privacyShield", fallback: true)
         killSwitch = bool("killswitch", fallback: true)
         secureDNS = bool("secureDNS", fallback: true)
@@ -48,10 +60,11 @@ final class Preferences: ObservableObject {
     }
     var connectionOptions: ConnectionOptions {
         ConnectionOptions(
-            privacyShield: privacyShield,
-            killSwitch: privacyShield || killSwitch,
-            secureDNS: privacyShield || secureDNS,
-            ipv6Protection: privacyShield || ipv6Protection
+            stealthMode: stealthMode,
+            privacyShield: stealthMode || privacyShield,
+            killSwitch: stealthMode || privacyShield || killSwitch,
+            secureDNS: stealthMode || privacyShield || secureDNS,
+            ipv6Protection: stealthMode || privacyShield || ipv6Protection
         )
     }
     private func save(_ value: Any, _ key: String) { defaults.set(value, forKey: "vo1d.\(key)") }
