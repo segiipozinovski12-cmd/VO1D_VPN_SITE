@@ -360,14 +360,69 @@ final class AppViewModel: ObservableObject {
                     if !self.switching { self.phase = stage }
                 }
                 #else
-                guard let token = self.sessionToken else { throw APIClientError.server("Session expired. Please activate your key again.") }
-                if !self.switching { self.phase = .routing }
-                let tunnel = try await self.api.tunnel(token: token, country: server.code)
-                try Task.checkCancellation()
-                guard id == self.connectionID else { return }
-                if !self.switching { self.phase = .securing }
-                try await self.vpn.connect(tunnel: tunnel, options: options)
-                try await self.vpn.waitUntilConnected()
+                guard let token = self.sessionToken else {
+                    throw APIClientError.server(
+                        "Session expired. Please activate your key again."
+                    )
+                }
+
+                let routeAttempts =
+                    options.stealthMode
+                    ? min(max(server.nodes, 1), 3)
+                    : 1
+                var routeConnected = false
+                var lastRouteError: Error?
+
+                for routeAttempt in 0..<routeAttempts {
+                    try Task.checkCancellation()
+                    guard id == self.connectionID else { return }
+
+                    if routeAttempt > 0 {
+                        self.switching = true
+                        self.phase = .switching
+                        self.vpn.disconnect()
+                        try? await self.vpn.waitUntilDisconnected()
+                    } else if !self.switching {
+                        self.phase = .routing
+                    }
+
+                    do {
+                        let tunnel = try await self.api.tunnel(
+                            token: token,
+                            country: server.code,
+                            attempt: routeAttempt,
+                            stealth: options.stealthMode
+                        )
+                        try Task.checkCancellation()
+                        guard id == self.connectionID else { return }
+
+                        self.phase = .securing
+                        try await self.vpn.connect(
+                            tunnel: tunnel,
+                            options: options
+                        )
+                        try await self.vpn.waitUntilConnected()
+                        routeConnected = true
+                        break
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        lastRouteError = error
+                        self.vpn.disconnect()
+
+                        if routeAttempt + 1 < routeAttempts {
+                            try? await self.vpn.waitUntilDisconnected()
+                            continue
+                        }
+                    }
+                }
+
+                guard routeConnected else {
+                    throw lastRouteError
+                        ?? APIClientError.server(
+                            "No working route was available."
+                        )
+                }
                 #endif
                 guard id == self.connectionID else { return }
                 self.defaults.set(server.code, forKey: "vo1d.selectedServer")
