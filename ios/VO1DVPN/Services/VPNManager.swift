@@ -35,6 +35,8 @@ final class VPNManager: ObservableObject {
     var currentOptions: ConnectionOptions? {
         guard let proto = manager?.protocolConfiguration as? NETunnelProviderProtocol else { return nil }
         return ConnectionOptions(
+            stealthMode:
+                proto.providerConfiguration?["stealthMode"] as? Bool ?? false,
             privacyShield:
                 proto.providerConfiguration?["privacyShield"] as? Bool ?? false,
             killSwitch: proto.includeAllNetworks,
@@ -89,6 +91,7 @@ final class VPNManager: ObservableObject {
             "country": tunnel.country,
             "label": tunnel.label,
             "expiresAt": tunnel.expiresAt,
+            "stealthMode": options.stealthMode,
             "privacyShield": options.privacyShield,
             "secureDNS": effectiveSecureDNS,
             "ipv6Protection": effectiveIPv6Protection
