@@ -27,8 +27,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
+        let privacyShield =
+            config["privacyShield"] as? Bool ?? false
+
         let settings = makeNetworkSettings(
             remoteAddress: proto.serverAddress ?? "VO1D",
+            privacyShield: privacyShield,
             secureDNS: config["secureDNS"] as? Bool ?? true,
             ipv6Protection: config["ipv6Protection"] as? Bool ?? true
         )
@@ -57,7 +61,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 do {
                     try await self.core.start(
                         uri: uri,
-                        packetFlow: self.packetFlow
+                        packetFlow: self.packetFlow,
+                        privacyShield: privacyShield
                     )
                     completionHandler(nil)
                 } catch {
@@ -108,6 +113,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func makeNetworkSettings(
         remoteAddress: String,
+        privacyShield: Bool,
         secureDNS: Bool,
         ipv6Protection: Bool
     ) -> NEPacketTunnelNetworkSettings {
@@ -122,7 +128,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
-        if ipv6Protection {
+        if privacyShield || ipv6Protection {
             let ipv6 = NEIPv6Settings(
                 addresses: ["fd00:1::2"],
                 networkPrefixLengths: [64]
@@ -131,13 +137,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             settings.ipv6Settings = ipv6
         }
 
-        if secureDNS {
-            let dns = NEDNSOverHTTPSSettings(servers: ["1.1.1.1", "1.0.0.1"])
-            dns.serverURL = URL(string: "https://cloudflare-dns.com/dns-query")
+        if privacyShield || secureDNS {
+            let dns = NEDNSOverHTTPSSettings(
+                servers: ["1.1.1.1", "1.0.0.1"]
+            )
+            dns.serverURL = URL(
+                string: "https://cloudflare-dns.com/dns-query"
+            )
+            // The empty match domain makes this the resolver for all names.
             dns.matchDomains = [""]
             settings.dnsSettings = dns
         } else {
-            settings.dnsSettings = NEDNSSettings(servers: ["1.1.1.1", "1.0.0.1"])
+            settings.dnsSettings = NEDNSSettings(
+                servers: ["1.1.1.1", "1.0.0.1"]
+            )
         }
         settings.mtu = 1360
         return settings
