@@ -11,7 +11,9 @@ protocol TunnelCoreAdapter: AnyObject {
     func start(
         uri: String,
         packetFlow: NEPacketTunnelFlow,
-        privacyShield: Bool
+        privacyShield: Bool,
+        secureDNS: Bool,
+        stealthMode: Bool
     ) async throws
     func stop() async
     func getAndClearStats() -> TunnelTrafficSnapshot
@@ -39,7 +41,9 @@ final class XrayTunnelCore: TunnelCoreAdapter {
     func start(
         uri: String,
         packetFlow: NEPacketTunnelFlow,
-        privacyShield: Bool
+        privacyShield: Bool,
+        secureDNS: Bool,
+        stealthMode: Bool
     ) async throws {
         await stop()
 
@@ -82,9 +86,11 @@ final class XrayTunnelCore: TunnelCoreAdapter {
             preset: .mobile,
             configTransform: { config in
                 var final = config
-                final["log"] = ["loglevel": "warning"]
+                final["log"] = [
+                    "loglevel": stealthMode ? "error" : "warning"
+                ]
 
-                if privacyShield {
+                if privacyShield || secureDNS || stealthMode {
                     // Strict privacy mode: every resolver is remote DoH and is
                     // reached through Xray's protected route. No system/plain
                     // DNS resolver is injected into the Xray configuration.
@@ -94,7 +100,8 @@ final class XrayTunnelCore: TunnelCoreAdapter {
                             "https://9.9.9.9/dns-query",
                             "https://8.8.8.8/dns-query"
                         ],
-                        "queryStrategy": "UseIP"
+                        "queryStrategy": "UseIP",
+                        "disableCache": false
                     ]
                 } else {
                     final["dns"] = [
