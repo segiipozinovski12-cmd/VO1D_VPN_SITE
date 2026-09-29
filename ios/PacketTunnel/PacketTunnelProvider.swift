@@ -1,3 +1,4 @@
+import Foundation
 import NetworkExtension
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
@@ -26,8 +27,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
+        let stealthMode =
+            config["stealthMode"] as? Bool ?? false
+        let privacyShield =
+            stealthMode || (config["privacyShield"] as? Bool ?? false)
+        let secureDNS =
+            stealthMode || (config["secureDNS"] as? Bool ?? true)
+        let ipv6Protection =
+            stealthMode || (config["ipv6Protection"] as? Bool ?? true)
+
         let settings = makeNetworkSettings(
-            remoteAddress: proto.serverAddress ?? "VO1D"
+            remoteAddress: proto.serverAddress ?? "VO1D",
+            stealthMode: stealthMode,
+            privacyShield: privacyShield,
+            secureDNS: secureDNS,
+            ipv6Protection: ipv6Protection
         )
 
         setTunnelNetworkSettings(settings) { [weak self] error in
@@ -54,13 +68,37 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 do {
                     try await self.core.start(
                         uri: uri,
-                        packetFlow: self.packetFlow
+                        packetFlow: self.packetFlow,
+                        privacyShield: privacyShield,
+                        secureDNS: secureDNS,
+                        stealthMode: stealthMode
                     )
                     completionHandler(nil)
                 } catch {
+                    await self.core.stop()
                     completionHandler(error)
                 }
             }
+        }
+    }
+
+    override func handleAppMessage(
+        _ messageData: Data,
+        completionHandler: ((Data?) -> Void)? = nil
+    ) {
+        guard let command = String(data: messageData, encoding: .utf8) else {
+            completionHandler?(nil)
+            return
+        }
+
+        switch command {
+        case "stats":
+            let snapshot = core.getAndClearStats()
+            completionHandler?(try? JSONEncoder().encode(snapshot))
+        case "health":
+            completionHandler?(Data("ok".utf8))
+        default:
+            completionHandler?(nil)
         }
     }
 
@@ -83,7 +121,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func wake() {}
 
     private func makeNetworkSettings(
-        remoteAddress: String
+        remoteAddress: String,
+        stealthMode: Bool,
+        privacyShield: Bool,
+        secureDNS: Bool,
+        ipv6Protection: Bool
     ) -> NEPacketTunnelNetworkSettings {
         let settings = NEPacketTunnelNetworkSettings(
             tunnelRemoteAddress: remoteAddress
@@ -96,20 +138,32 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
-        let ipv6 = NEIPv6Settings(
-            addresses: ["fd00:1::2"],
-            networkPrefixLengths: [64]
-        )
-        ipv6.includedRoutes = [NEIPv6Route.default()]
-        settings.ipv6Settings = ipv6
+        if privacyShield || ipv6Protection {
+            let ipv6 = NEIPv6Settings(
+                addresses: ["fd00:1::2"],
+                networkPrefixLengths: [64]
+            )
+            ipv6.includedRoutes = [NEIPv6Route.default()]
+            settings.ipv6Settings = ipv6
+        }
 
-        settings.dnsSettings = NEDNSSettings(
-            servers: [
-                "1.1.1.1",
-                "2606:4700:4700::1111"
-            ]
-        )
-        settings.mtu = 1360
+        if privacyShield || secureDNS {
+            let dns = NEDNSOverHTTPSSettings(
+                servers: ["1.1.1.1", "1.0.0.1"]
+            )
+            dns.serverURL = URL(
+                string: "https://cloudflare-dns.com/dns-query"
+            )
+            // The empty match domain makes this the resolver for all names.
+            dns.matchDomains = [""]
+            dns.matchDomainsNoSearch = true
+            settings.dnsSettings = dns
+        } else {
+            settings.dnsSettings = NEDNSSettings(
+                servers: ["1.1.1.1", "1.0.0.1"]
+            )
+        }
+        settings.mtu = NSNumber(value: stealthMode ? 1280 : 1360)
         return settings
     }
 }

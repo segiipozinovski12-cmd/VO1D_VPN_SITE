@@ -2,383 +2,667 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject private var model: AppViewModel
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var preferences: Preferences
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
 
-    @State private var showKeyHelp = false
-    @State private var avatarPulse = false
+    @State private var showKey = false
+    @State private var showLogout = false
+    @State private var showSettings = false
+    @State private var showPrivacy = false
+    @State private var showTerms = false
+    @State private var appeared = false
+
+    @FocusState private var editingName: Bool
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        ScrollView {
+            VStack(spacing: 18) {
+                brandHeader
+                    .profileReveal(appeared, delay: 0.00, reduceMotion: reduceMotion)
 
-            ScrollView {
-                VStack(spacing: 16) {
-                    topBar
-                    identityCard
-                    subscriptionCard
-                    sessionCard
-                    preferencesCard
-                    actionsCard
-                }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 28)
+                titleBlock
+                    .profileReveal(appeared, delay: 0.03, reduceMotion: reduceMotion)
+
+                identityCard
+                    .profileReveal(appeared, delay: 0.06, reduceMotion: reduceMotion)
+
+                membershipCard
+                    .profileReveal(appeared, delay: 0.09, reduceMotion: reduceMotion)
+
+                sessionCard
+                    .profileReveal(appeared, delay: 0.12, reduceMotion: reduceMotion)
+
+                actionStack
+                    .profileReveal(appeared, delay: 0.15, reduceMotion: reduceMotion)
             }
-            .scrollIndicators(.hidden)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 22)
         }
-        .toolbar(.hidden, for: .navigationBar)
-        .alert("Change Key", isPresented: $showKeyHelp) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Create a new iPhone key in the VO1D Telegram bot, then log out and activate the app with the new key.")
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .navigationDestination(isPresented: $showSettings) {
+            SettingsView()
+        }
+        .navigationDestination(isPresented: $showPrivacy) {
+            LegalDocumentView(document: .privacy)
+        }
+        .navigationDestination(isPresented: $showTerms) {
+            LegalDocumentView(document: .terms)
+        }
+        .sheet(isPresented: $showKey) {
+            ChangeKeyView()
+        }
+        .confirmationDialog(
+            "Log out of VO1D?",
+            isPresented: $showLogout,
+            titleVisibility: .visible
+        ) {
+            Button("Log Out", role: .destructive) {
+                Task { await model.logout() }
+            }
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                avatarPulse = true
+            guard !appeared else { return }
+
+            if reduceMotion {
+                appeared = true
+            } else {
+                withAnimation(.easeOut(duration: 0.42)) {
+                    appeared = true
+                }
             }
         }
+        .accessibilityIdentifier("profile.screen")
     }
 
-    private var topBar: some View {
-        ZStack {
-            Text("Profile")
-                .font(.system(size: 17, weight: .semibold))
+    private var brandHeader: some View {
+        HStack {
+            VO1DBrandLockup(compact: true)
 
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                }
-                .buttonStyle(ScaleButtonStyle())
+            Spacer()
 
-                Spacer()
-            }
+            StatusPill(
+                text: model.account?.active == true ? "ACTIVE" : "INACTIVE",
+                connected: model.account?.active == true
+            )
         }
-        .frame(height: 42)
-        .padding(.top, 6)
+        .frame(height: 50)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("PROFILE")
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .tracking(2.1)
+                .foregroundStyle(.white.opacity(0.38))
+
+            Text("Your space")
+                .font(.system(size: 28, weight: .semibold))
+                .tracking(-0.7)
+
+            Text("Access, identity and connection settings.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.40))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var identityCard: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .stroke(.white.opacity(avatarPulse ? 0.05 : 0.18), lineWidth: 1)
-                    .frame(width: avatarPulse ? 64 : 56, height: avatarPulse ? 64 : 56)
+        ReferenceGlassCard(radius: 24) {
+            HStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(
+                        cornerRadius: 20,
+                        style: .continuous
+                    )
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.14),
+                                VO1DStyle.graphite.opacity(0.72),
+                                .black.opacity(0.92)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(
+                            cornerRadius: 20,
+                            style: .continuous
+                        )
+                    )
+                    .frame(width: 68, height: 68)
+                    .overlay {
+                        RoundedRectangle(
+                            cornerRadius: 20,
+                            style: .continuous
+                        )
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.42),
+                                    .white.opacity(0.08),
+                                    VO1DStyle.frost.opacity(0.20)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.9
+                        )
+                    }
 
-                Circle()
-                    .fill(.white.opacity(0.07))
-                    .frame(width: 52, height: 52)
-
-                Image(systemName: "person.fill")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 64, height: 64)
-
-            VStack(alignment: .leading, spacing: 5) {
-                TextField("Nickname", text: $model.nickname)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-
-                HStack(spacing: 7) {
-                    Text("ID \(model.account?.id ?? 0)")
-                    Text("•")
-                    Text(model.isDemoMode ? "SIMULATOR" : "IPHONE")
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .shadow(color: .white.opacity(0.18), radius: 7)
                 }
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.33))
+                .accessibilityIdentifier("profile.avatar")
 
-                Text("VOID-••••-••••-••••")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.24))
+                VStack(alignment: .leading, spacing: 7) {
+                    TextField(
+                        "Your nickname",
+                        text: $preferences.nickname
+                    )
+                    .font(.system(size: 20, weight: .semibold))
+                    .focused($editingName)
+                    .submitLabel(.done)
+                    .onSubmit { editingName = false }
+                    .onChange(of: preferences.nickname) { _, value in
+                        if value.count > 32 {
+                            preferences.nickname = String(value.prefix(32))
+                        }
+                    }
+                    .accessibilityIdentifier("profile.nickname")
+
+                    Text("USER ID / \(model.account?.id ?? 0)")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.35))
+
+                    Text("Tap the name to edit")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.28))
+                }
+
+                Spacer(minLength: 0)
             }
-
-            Spacer()
+            .padding(18)
         }
-        .padding(14)
-        .background(cardBackground)
     }
 
-    private var subscriptionCard: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("SUBSCRIPTION")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .tracking(0.8)
-                        .foregroundStyle(.white.opacity(0.36))
+    private var membershipCard: some View {
+        ReferenceGlassCard(
+            radius: 24,
+            highlighted: model.account?.active == true
+        ) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("MEMBERSHIP")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(1.7)
+                        .foregroundStyle(.white.opacity(0.38))
 
-                    Text(model.account?.active == true ? "Active" : "Inactive")
-                        .font(.system(size: 15, weight: .semibold))
+                    Spacer()
+
+                    Text(model.account?.active == true ? "ACTIVE" : "INACTIVE")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .tracking(1.1)
+                        .foregroundStyle(.white.opacity(0.72))
                 }
 
-                Spacer()
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(remainingDays)")
+                        .font(.system(size: 54, weight: .light, design: .rounded))
+                        .tracking(-2)
+                        .monospacedDigit()
 
-                Image(systemName: model.account?.active == true ? "checkmark.shield.fill" : "xmark.shield")
-                    .font(.system(size: 24))
-                    .foregroundStyle(model.account?.active == true ? activeGreen : .red.opacity(0.75))
+                    Text("days remaining")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.40))
+                }
+
+                Rectangle()
+                    .fill(.white.opacity(0.08))
+                    .frame(height: 1)
+
+                HStack {
+                    Text("Expires")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.42))
+
+                    Spacer()
+
+                    Text(expiration)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.82))
+                }
             }
-            .padding(.vertical, 13)
-
-            divider
-
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("EXPIRES")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .tracking(0.7)
-                        .foregroundStyle(.white.opacity(0.32))
-
-                    Text(expiryText)
-                        .font(.system(size: 12, weight: .medium))
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("REMAINING")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .tracking(0.7)
-                        .foregroundStyle(.white.opacity(0.32))
-
-                    Text(remainingText)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                }
-            }
-            .padding(.vertical, 13)
+            .padding(20)
         }
-        .padding(.horizontal, 14)
-        .background(cardBackground)
     }
 
     private var sessionCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("CURRENT SESSION")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .tracking(0.8)
-                    .foregroundStyle(.white.opacity(0.36))
+        ReferenceGlassCard(radius: 22) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text("CURRENT SESSION")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(1.7)
+                        .foregroundStyle(.white.opacity(0.38))
 
-                Spacer()
+                    Spacer()
 
-                HStack(spacing: 5) {
                     Circle()
-                        .fill(model.vpn.isConnected ? activeGreen : .white.opacity(0.20))
-                        .frame(width: 6, height: 6)
-
-                    Text(model.vpn.isConnected ? "CONNECTED" : "OFFLINE")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.48))
+                        .fill(
+                            model.isConnected
+                            ? .white
+                            : .white.opacity(0.18)
+                        )
+                        .frame(width: 5, height: 5)
+                        .shadow(
+                            color:
+                                model.isConnected
+                                ? .white.opacity(0.44)
+                                : .clear,
+                            radius: 5
+                        )
                 }
-            }
+                .padding(.bottom, 13)
 
-            HStack(spacing: 8) {
-                miniStat(
-                    title: "LOCATION",
-                    value: model.selectedServer?.code ?? "—",
-                    icon: "mappin.and.ellipse"
+                sessionRow("State", model.phase.rawValue)
+                divider
+                sessionRow(
+                    "Location",
+                    model.activeServer?.name ?? "Not connected"
                 )
-
-                miniStat(
-                    title: "TRAFFIC",
-                    value: trafficText,
-                    icon: "arrow.up.arrow.down"
-                )
-
-                miniStat(
-                    title: "FAVORITES",
-                    value: "\(model.favoriteCodes.count)",
-                    icon: "star.fill"
+                divider
+                ProfileTrafficRow()
+                divider
+                sessionRow(
+                    "Favorites",
+                    String(model.favoriteCodes.count)
                 )
             }
+            .padding(18)
         }
-        .padding(14)
-        .background(cardBackground)
     }
 
-    private func miniStat(
+    private var actionStack: some View {
+        VStack(spacing: 10) {
+            profileAction(
+                title:
+                    model.hasActiveSubscription
+                    ? "Subscription"
+                    : "Get Subscription",
+                detail:
+                    model.hasActiveSubscription
+                    ? "View plans or activate another key"
+                    : "Choose a plan or activate your VOID key",
+                icon: "creditcard"
+            ) {
+                model.presentPaywall()
+            }
+            .accessibilityIdentifier("profile.subscription")
+
+            profileAction(
+                title: "Settings",
+                detail: "Connection & interface",
+                icon: "gearshape"
+            ) {
+                showSettings = true
+            }
+            .accessibilityIdentifier("profile.settings")
+
+            profileAction(
+                title: "Change Key",
+                detail: "Activate another VOID license",
+                icon: "key.horizontal"
+            ) {
+                showKey = true
+            }
+            .accessibilityIdentifier("profile.changeKey")
+
+            profileAction(
+                title: "Privacy Policy",
+                detail: "RollyPay.io privacy and data processing",
+                icon: "hand.raised"
+            ) {
+                showPrivacy = true
+            }
+            .accessibilityIdentifier("profile.privacy")
+
+            profileAction(
+                title: "User Agreement",
+                detail: "Public offer and service terms",
+                icon: "doc.text"
+            ) {
+                showTerms = true
+            }
+            .accessibilityIdentifier("profile.terms")
+
+            profileAction(
+                title: "Log Out",
+                detail:
+                    model.isDemoMode
+                    ? "Leave this demo session"
+                    : "Remove this device session",
+                icon: "rectangle.portrait.and.arrow.right"
+            ) {
+                showLogout = true
+            }
+            .accessibilityIdentifier("profile.logout")
+        }
+    }
+
+    private func profileAction(
         title: String,
-        value: String,
-        icon: String
+        detail: String,
+        icon: String,
+        action: @escaping () -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.42))
+        Button(action: action) {
+            ReferenceGlassCard(radius: 18) {
+                HStack(spacing: 13) {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .light))
+                        .foregroundStyle(.white.opacity(0.82))
+                        .frame(width: 30)
 
-            Text(value)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
 
-            Text(title)
-                .font(.system(size: 7, weight: .bold, design: .monospaced))
-                .tracking(0.5)
-                .foregroundStyle(.white.opacity(0.30))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 11)
-                .fill(.white.opacity(0.035))
-        )
-    }
-
-    private var preferencesCard: some View {
-        VStack(spacing: 0) {
-            toggleRow("Auto-connect", icon: "bolt.horizontal.fill", isOn: $model.autoConnect)
-            divider
-            toggleRow("Kill Switch", icon: "shield.fill", isOn: $model.killSwitch)
-            divider
-
-            NavigationLink {
-                SettingsView()
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.50))
-                        .frame(width: 19)
-
-                    Text("Settings")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white)
+                        Text(detail)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.36))
+                    }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.28))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.40))
                 }
-                .frame(height: 50)
+                .padding(16)
             }
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 14)
-        .background(cardBackground)
+        .buttonStyle(ScaleButtonStyle(scale: 0.985))
     }
 
-    private var actionsCard: some View {
-        VStack(spacing: 0) {
-            Button {
-                showKeyHelp = true
-            } label: {
-                actionRow("Change Key", icon: "key.fill", destructive: false)
-            }
-            .buttonStyle(.plain)
-
-            divider
-
-            Button(role: .destructive) {
-                Task {
-                    await model.logout()
-                    dismiss()
-                }
-            } label: {
-                actionRow("Log out", icon: "rectangle.portrait.and.arrow.right", destructive: true)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 14)
-        .background(cardBackground)
-    }
-
-    private func toggleRow(
-        _ label: String,
-        icon: String,
-        isOn: Binding<Bool>
-    ) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.50))
-                .frame(width: 19)
-
-            Text(label)
-                .font(.system(size: 13))
-
-            Spacer()
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(.white)
-                .scaleEffect(0.78)
-        }
-        .frame(height: 50)
-    }
-
-    private func actionRow(
+    private func sessionRow(
         _ title: String,
-        icon: String,
-        destructive: Bool
+        _ value: String
     ) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 13))
-                .foregroundStyle(destructive ? .red.opacity(0.82) : .white.opacity(0.50))
-                .frame(width: 19)
-
+        HStack {
             Text(title)
                 .font(.system(size: 13))
-                .foregroundStyle(destructive ? .red.opacity(0.88) : .white)
+                .foregroundStyle(.white.opacity(0.42))
 
             Spacer()
 
-            if !destructive {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.28))
-            }
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .frame(height: 50)
-        .contentShape(Rectangle())
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 14)
-            .fill(.white.opacity(0.038))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(.white.opacity(0.065), lineWidth: 1)
-            )
+        .padding(.vertical, 11)
     }
 
     private var divider: some View {
-        Divider()
-            .overlay(.white.opacity(0.055))
-            .padding(.leading, 31)
+        Rectangle()
+            .fill(.white.opacity(0.07))
+            .frame(height: 1)
     }
 
-    private var activeGreen: Color {
-        Color(red: 0.39, green: 0.84, blue: 0.48)
+    private var remainingDays: Int {
+        guard let until = model.account?.until else { return 0 }
+
+        return max(
+            0,
+            Int(
+                ceil(
+                    (Double(until) - Date().timeIntervalSince1970)
+                    / 86_400
+                )
+            )
+        )
     }
 
-    private var expiryText: String {
-        guard let until = model.account?.until, until > 0 else {
-            return "—"
+    private var expiration: String {
+        guard let until = model.account?.until else { return "—" }
+
+        return Date(
+            timeIntervalSince1970: Double(until)
+        )
+        .formatted(
+            .dateTime
+                .day()
+                .month(.abbreviated)
+                .year()
+        )
+    }
+}
+
+private struct ProfileTrafficRow: View {
+    @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var session: SessionMonitor
+
+    var body: some View {
+        HStack {
+            Text("Traffic")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.42))
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+        }
+        .padding(.vertical, 11)
+    }
+
+    private var value: String {
+        guard session.hasTrafficMeasurements else {
+            return "Measuring…"
         }
 
-        return Date(timeIntervalSince1970: TimeInterval(until))
-            .formatted(.dateTime.day().month(.abbreviated).year())
+        let suffix = model.isDemoMode ? " · Demo" : ""
+
+        return "\(session.stats.trafficValue) \(session.stats.trafficUnit)\(suffix)"
+    }
+}
+
+private struct ChangeKeyView: View {
+    @EnvironmentObject private var model: AppViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var key = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ZStack {
+            ReferenceBackdrop()
+
+            VStack(alignment: .leading, spacing: 20) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CHANGE KEY")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .tracking(1.8)
+                            .foregroundStyle(.white.opacity(0.38))
+
+                        Text("Activate license")
+                            .font(.system(size: 24, weight: .semibold))
+                    }
+
+                    Spacer()
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .medium))
+                            .frame(width: 36, height: 36)
+                            .foregroundStyle(.white.opacity(0.82))
+                            .background(
+                                Color.white.opacity(0.045),
+                                in: Circle()
+                            )
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(
+                                        .white.opacity(0.10),
+                                        lineWidth: 0.8
+                                    )
+                            )
+                    }
+                    .buttonStyle(ScaleButtonStyle(scale: 0.92))
+                }
+
+                Text(
+                    model.isDemoMode
+                    ? "This starts a fresh Simulator session."
+                    : "Enter one of the fixed VO1D licenses in VOID-XXXX-XXXX-XXXX format."
+                )
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.42))
+                .fixedSize(horizontal: false, vertical: true)
+
+                if !model.isDemoMode {
+                    HStack {
+                        TextField(
+                            "VOID-XXXX-XXXX-XXXX",
+                            text: $key
+                        )
+                        .font(.system(size: 14, weight: .medium))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .focused($focused)
+                        .onChange(of: key) { _, value in
+                            let formatted = formatKey(value)
+
+                            if formatted != key {
+                                key = formatted
+                            }
+                        }
+
+                        Image(
+                            systemName:
+                                AccessKeyVault.license(for: key) != nil
+                                ? "checkmark.circle.fill"
+                                : "key.horizontal"
+                        )
+                        .foregroundStyle(
+                            AccessKeyVault.license(for: key) != nil
+                            ? .white
+                            : .white.opacity(0.28)
+                        )
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 56)
+                    .background(
+                        Color.white.opacity(0.03),
+                        in: Capsule()
+                    )
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(
+                                .white.opacity(focused ? 0.24 : 0.09),
+                                lineWidth: 0.8
+                            )
+                    )
+                }
+
+                ReferencePrimaryButton(
+                    title:
+                        model.isActivating
+                        ? "Activating..."
+                        : model.isDemoMode
+                            ? "Restart Demo"
+                            : "Activate Key",
+                    icon: "chevron.right"
+                ) {
+                    Task {
+                        if await model.activate(key: key) {
+                            dismiss()
+                        }
+                    }
+                }
+                .disabled(
+                    model.isActivating ||
+                    (
+                        !model.isDemoMode &&
+                        AccessKeyVault.license(for: key) == nil
+                    )
+                )
+
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(VO1DStyle.red)
+                }
+
+                Spacer()
+            }
+            .padding(22)
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.black)
+        .onAppear { focused = !model.isDemoMode }
     }
 
-    private var remainingText: String {
-        guard let seconds = model.account?.remainingSeconds else {
-            return "—"
+    private func formatKey(_ input: String) -> String {
+        var raw = input
+            .uppercased()
+            .filter { $0.isLetter || $0.isNumber }
+
+        if raw.hasPrefix("VOID") {
+            raw.removeFirst(4)
         }
 
-        let days = max(0, seconds) / 86_400
-        return "\(days)d"
+        raw = String(raw.prefix(12))
+        guard !raw.isEmpty else { return "" }
+
+        var groups: [String] = []
+        var index = raw.startIndex
+
+        while index < raw.endIndex {
+            let end = raw.index(
+                index,
+                offsetBy: min(
+                    4,
+                    raw.distance(from: index, to: raw.endIndex)
+                )
+            )
+
+            groups.append(String(raw[index..<end]))
+            index = end
+        }
+
+        return "VOID-" + groups.joined(separator: "-")
     }
+}
 
-    private var trafficText: String {
-        let total = model.liveStats.downloadedMB + model.liveStats.uploadedMB
-        if total < 1024 {
-            return String(format: "%.0f MB", total)
-        }
-        return String(format: "%.1f GB", total / 1024)
+private extension View {
+    func profileReveal(
+        _ visible: Bool,
+        delay: Double,
+        reduceMotion: Bool
+    ) -> some View {
+        opacity(visible ? 1 : 0)
+            .offset(y: visible || reduceMotion ? 0 : 12)
+            .animation(
+                reduceMotion
+                ? nil
+                : .easeOut(duration: 0.42).delay(delay),
+                value: visible
+            )
     }
 }

@@ -65,6 +65,8 @@ PLANS={
   365:{"title":"12 месяцев","usd":1499,"stars":975},
 }
 
+# Native iPhone paid keys are a fixed code manifest shared with the app.
+# Telegram is not involved in key generation or validation.
 # Внутренний баланс VO1D. Эти суммы — только быстрые кнопки:
 # пользователь также может ввести произвольную сумму вручную.
 TOPUP_STARS_PER_USD=Decimal("65")
@@ -349,6 +351,7 @@ def init_db():
                         continue
             c.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('private_promos_v2',?)",
                       (json.dumps(generated),))
+
         # Mirror the fixed 400-key app manifest into persistent state only
         # to remember which license has already been activated.
         for code,plan_days in APP_EMBEDDED_KEYS.items():
@@ -568,6 +571,7 @@ def send(chat_id,text,kb=None,disable_preview=True):
 
 
 def admin_alert(key,text,cooldown=None):
+    if not TOKEN:return False
     cooldown=max(0,int(ALERT_COOLDOWN_SECONDS if cooldown is None else cooldown))
     ts=now()
     with _ALERT_LOCK:
@@ -1236,7 +1240,7 @@ def activate_app_key(raw_key,device_id="",device_name=""):
     with db() as c:
         c.execute("BEGIN IMMEDIATE")
 
-        # Fixed native iPhone license: VOID-XXXX-XXXX-XXXX.
+        # New paid iPhone license: VOID-XXXX-XXXX-XXXX.
         if len(normalized)==12:
             key_row=c.execute(
               "SELECT * FROM app_embedded_licenses WHERE code_hash=? AND active=1",(key_hash,)
@@ -1738,6 +1742,79 @@ def guide(uid):
       "Если ссылка не выдаётся — проверь срок подписки.",
       [[button("⚡ Получить ссылку","connect")],[button("◀️ Меню","menu")]])
 
+def app_embedded_inventory():
+    inventory={}
+    with db() as c:
+        for days in (30,90,180,365):
+            row=c.execute("""SELECT
+              COUNT(*) total,
+              SUM(CASE WHEN active=1 AND redeemed_user_id=0 AND issued_at=0 THEN 1 ELSE 0 END) free,
+              SUM(CASE WHEN active=1 AND redeemed_user_id=0 AND issued_at>0 THEN 1 ELSE 0 END) issued,
+              SUM(CASE WHEN redeemed_user_id!=0 THEN 1 ELSE 0 END) redeemed
+              FROM app_embedded_licenses WHERE plan_days=?""",(days,)).fetchone()
+            inventory[days]={
+              "total":int(row["total"] or 0),
+              "free":int(row["free"] or 0),
+              "issued":int(row["issued"] or 0),
+              "redeemed":int(row["redeemed"] or 0),
+            }
+    return inventory
+
+def issue_embedded_app_license(days):
+    days=int(days)
+    if days not in (30,90,180,365):return None
+    candidates=[
+      code for code,plan_days in APP_EMBEDDED_KEYS.items()
+      if int(plan_days)==days
+    ]
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        for code in candidates:
+            digest=_secret_hash(normalize_app_key(code))
+            row=c.execute("""SELECT id,active,redeemed_user_id,issued_at
+              FROM app_embedded_licenses WHERE code_hash=?""",(digest,)).fetchone()
+            if not row:continue
+            if not int(row["active"]):continue
+            if int(row["redeemed_user_id"] or 0)!=0:continue
+            if int(row["issued_at"] or 0)!=0:continue
+            c.execute("UPDATE app_embedded_licenses SET issued_at=? WHERE id=?",(now(),int(row["id"])))
+            return code
+    return None
+
+def admin_app_keys():
+    inv=app_embedded_inventory()
+    text="<b>🔑 VO1D iPhone · 400 ключей</b>\n\n"
+    for days in (30,90,180,365):
+        state=inv[days]
+        plan=PLANS[days]
+        text+=(
+          f"<b>{esc(plan['title'])}</b> · {money(plan['usd'])}\n"
+          f"Свободно: <b>{state['free']}</b> · выдано: {state['issued']} · "
+          f"активировано: {state['redeemed']} / {state['total']}\n\n"
+        )
+    text+=("После оплаты нажми нужный тариф. Бот резервирует следующий свободный "
+           "ключ, поэтому один и тот же код двум покупателям не выдаст.")
+    send(ADMIN_ID,text,[
+      [button("1 мес · $1.99","admin_appkey:30"),button("3 мес · $4.99","admin_appkey:90")],
+      [button("6 мес · $8.99","admin_appkey:180"),button("1 год · $14.99","admin_appkey:365")],
+      [button("↻ Обновить","admin_appkeys"),button("◀️ Админ","admin")]
+    ])
+
+def admin_issue_app_key(days):
+    code=issue_embedded_app_license(days)
+    if not code:
+        return send(ADMIN_ID,
+          "⚠️ Для этого тарифа не осталось свободных невыданных ключей.",
+          [[button("🔑 Склад ключей","admin_appkeys")],[button("◀️ Админ","admin")]])
+    plan=PLANS[int(days)]
+    return send(ADMIN_ID,
+      f"<b>✅ Ключ зарезервирован</b>\n\n"
+      f"Тариф: <b>{esc(plan['title'])}</b> · {money(plan['usd'])}\n"
+      f"<code>{esc(code)}</code>\n\n"
+      "Отправь этот код покупателю. Срок подписки начнётся только при первой "
+      "успешной активации в iPhone-приложении.",
+      [[button("🔑 Склад ключей","admin_appkeys")],[button("◀️ Админ","admin")]])
+
 def admin_panel():
     with db() as c:
         users=c.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
@@ -1752,8 +1829,8 @@ def admin_panel():
       f"Ожидают оплаты: <b>{pend}</b>\nДоход Stars: <b>{stars} ⭐</b>\n"
       f"Подтверждённый manual: <b>{money(usd)}</b>",
       [[button("👥 Последние пользователи","admin_users")],[button("💳 Заявки","admin_payments")],
-       [button("🎟 Промокоды","admin_promos")],[button("🇷🇺 RU pinned","admin_ru")],
-       [button("◀️ Меню","menu")]])
+       [button("🔑 iPhone ключи","admin_appkeys")],[button("🎟 Промокоды","admin_promos")],
+       [button("🇷🇺 RU pinned","admin_ru")],[button("◀️ Меню","menu")]])
 
 def admin_ru_panel():
     st=pinned_ru_health()
@@ -1828,6 +1905,7 @@ def handle_command(uid,text):
     if cmd=="/stats" and uid==ADMIN_ID:return admin_panel()
     if cmd=="/users" and uid==ADMIN_ID:return admin_users()
     if cmd=="/payments" and uid==ADMIN_ID:return admin_payments()
+    if cmd=="/appkeys" and uid==ADMIN_ID:return admin_app_keys()
     if cmd=="/promos" and uid==ADMIN_ID:return admin_promos()
     if cmd in ("/ru","/rustatus") and uid==ADMIN_ID:return admin_ru_panel()
     if uid!=ADMIN_ID:return
@@ -1980,6 +2058,12 @@ def handle_callback(q):
             if method=="stars":return giftcode_star_invoice(uid,days)
         except Exception as e:return send(uid,f"Ошибка подарочного кода: <code>{esc(e)}</code>")
     if data=="admin_promos" and uid==ADMIN_ID:return admin_promos()
+    if data=="admin_appkeys" and uid==ADMIN_ID:return admin_app_keys()
+    if data.startswith("admin_appkey:") and uid==ADMIN_ID:
+        try:
+            days=int(data.split(":",1)[1])
+            if days in (30,90,180,365):return admin_issue_app_key(days)
+        except Exception:return
     if data=="admin_ru" and uid==ADMIN_ID:return admin_ru_panel()
     if data=="admin_ru_set" and uid==ADMIN_ID:
         set_pending(uid,"set_ru_json")
@@ -2447,16 +2531,19 @@ def service_health():
     startup_age=max(0,ts-PROCESS_STARTED_AT)
     poll_age=(ts-POLL_HEARTBEAT_AT) if POLL_HEARTBEAT_AT else None
     maintenance_age=(ts-MAINT_HEARTBEAT_AT) if MAINT_HEARTBEAT_AT else None
-    polling_ok=(poll_age is not None and poll_age<=150) or (poll_age is None and startup_age<=150)
+    telegram_enabled=bool(TOKEN)
+    polling_ok=(not telegram_enabled) or (poll_age is not None and poll_age<=150) or (poll_age is None and startup_age<=150)
     maintenance_ok=(maintenance_age is not None and maintenance_age<=720) or (maintenance_age is None and startup_age<=120)
     components={
       "database":"ok" if db_ok else "error",
-      "telegram_polling":"ok" if polling_ok else "stale",
+      "native_api":"ok" if db_ok else "error",
+      "telegram_polling":("disabled" if not telegram_enabled else ("ok" if polling_ok else "stale")),
       "maintenance":"ok" if maintenance_ok else "stale",
     }
     return {
       "ok":bool(db_ok and polling_ok and maintenance_ok),
-      "service":"VO1D_VPNbot",
+      "service":"VO1D_VPN",
+      "mode":"api+telegram" if telegram_enabled else "api-only",
       "uptime_seconds":startup_age,
       "components":components,
       "poll_age_seconds":poll_age,
@@ -2921,6 +3008,7 @@ def mark_reminder(uid,key):
     with db() as c:c.execute("INSERT OR IGNORE INTO reminders(user_id,event_key,sent_at) VALUES(?,?,?)",(uid,key,now()))
 
 def send_once(uid,key,text,kb=None):
+    if not TOKEN:return False
     if reminder_sent(uid,key):return False
     try:
         send(uid,text,kb)
@@ -2929,6 +3017,7 @@ def send_once(uid,key,text,kb=None):
     except Exception:return False
 
 def refresh_node_statuses(notify_changes=True):
+    notify_changes=bool(notify_changes and TOKEN)
     transitions=[]
     for i,node in enumerate(VPN_NODES):
         online,lat=probe_node(i)
@@ -3018,11 +3107,18 @@ def web_thread():
 
 def run():
     global POLL_HEARTBEAT_AT
-    if not TOKEN: raise SystemExit("Set BOT_TOKEN in Railway Variables")
+
+    # Native iPhone API is the primary service and does not require Telegram.
     threading.Thread(target=web_thread,daemon=True).start()
     threading.Thread(target=maintenance_worker,daemon=True).start()
     if COMMUNITY_POOL.enabled:
         threading.Thread(target=community_worker,daemon=True).start()
+
+    if not TOKEN:
+        print("VO1D native API started in API-only mode; db:",DB_PATH,"web port:",PORT,flush=True)
+        while True:
+            time.sleep(3600)
+
     if MINI_APP_URL:
         try:
             api("setChatMenuButton",{
@@ -3035,11 +3131,13 @@ def run():
             print("VO1D Mini App menu:",MINI_APP_URL,flush=True)
         except Exception as e:
             print("mini app menu error",repr(e),flush=True)
-    print("VO1D_VPNbot started; db:",DB_PATH,"web port:",PORT,flush=True)
+
+    print("VO1D API + Telegram started; db:",DB_PATH,"web port:",PORT,flush=True)
     try:
-        send(ADMIN_ID,"🟢 <b>VO1D PROJECT ONLINE</b>\nБот запущен, web health endpoint поднят.")
+        send(ADMIN_ID,"🟢 <b>VO1D PROJECT ONLINE</b>\nNative API и Telegram подняты.")
     except Exception as e:
         print("startup alert error",repr(e),flush=True)
+
     offset=0
     while True:
         try:

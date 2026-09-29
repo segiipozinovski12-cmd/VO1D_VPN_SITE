@@ -20,20 +20,28 @@ enum APIClientError: LocalizedError {
 final class APIClient {
     static let shared = APIClient()
 
+    private let session: URLSession
     private let decoder: JSONDecoder = {
         let value = JSONDecoder()
         value.keyDecodingStrategy = .convertFromSnakeCase
         return value
     }()
 
-    private init() {}
+    private init() {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.waitsForConnectivity = true
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 30
+        session = URLSession(configuration: configuration)
+    }
 
     func activate(key: String) async throws -> ActivateResponse {
-        let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        let (deviceID, deviceName) = await deviceContext()
         let body: [String: String] = [
             "key": key,
             "device_id": deviceID,
-            "device_name": UIDevice.current.name
+            "device_name": deviceName
         ]
         return try await request(
             path: "/api/app/activate",
@@ -44,14 +52,76 @@ final class APIClient {
         )
     }
 
+    func createPayment(
+        planDays: Int,
+        paymentMethod: String
+    ) async throws -> PaymentCreateResponse {
+        let (deviceID, deviceName) = await deviceContext()
+
+        return try await request(
+            path: "/api/app/payments/create",
+            method: "POST",
+            body: [
+                "plan_days": String(planDays),
+                "method": paymentMethod,
+                "device_id": deviceID,
+                "device_name": deviceName
+            ],
+            token: nil,
+            as: PaymentCreateResponse.self
+        )
+    }
+
+    func paymentStatus(
+        orderID: String,
+        pollToken: String
+    ) async throws -> PaymentStatusResponse {
+        let (deviceID, deviceName) = await deviceContext()
+
+        return try await request(
+            path: "/api/app/payments/status",
+            method: "POST",
+            body: [
+                "order_id": orderID,
+                "poll_token": pollToken,
+                "device_id": deviceID,
+                "device_name": deviceName
+            ],
+            token: nil,
+            as: PaymentStatusResponse.self
+        )
+    }
+
+    private func deviceContext() async -> (String, String) {
+        await MainActor.run {
+            (
+                UIDevice.current.identifierForVendor?.uuidString
+                    ?? UUID().uuidString,
+                UIDevice.current.name
+            )
+        }
+    }
+
     func me(token: String) async throws -> AppStateResponse {
         try await request(path: "/api/app/me", token: token, as: AppStateResponse.self)
     }
 
-    func tunnel(token: String, country: String) async throws -> TunnelResponse {
-        let escaped = country.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? country
+    func tunnel(
+        token: String,
+        country: String,
+        attempt: Int = 0,
+        stealth: Bool = false
+    ) async throws -> TunnelResponse {
+        let escaped =
+            country.addingPercentEncoding(
+                withAllowedCharacters: .urlQueryAllowed
+            ) ?? country
+
         return try await request(
-            path: "/api/app/tunnel?country=\(escaped)",
+            path:
+                "/api/app/tunnel?country=\(escaped)"
+                + "&attempt=\(max(0, attempt))"
+                + "&stealth=\(stealth ? 1 : 0)",
             token: token,
             as: TunnelResponse.self
         )
@@ -99,7 +169,19 @@ final class APIClient {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            switch error.code {
+            case .notConnectedToInternet:
+                throw APIClientError.server("No internet connection.")
+            case .timedOut:
+                throw APIClientError.server("VO1D server timed out. Try again.")
+            default:
+                throw APIClientError.server("Could not reach the VO1D server.")
+            }
+        }
         guard let http = response as? HTTPURLResponse else {
             throw APIClientError.invalidResponse
         }

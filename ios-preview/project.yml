@@ -22,13 +22,58 @@ targets:
       properties:
         CFBundleDisplayName: VO1D_VPN
         CFBundleName: VO1D_VPN
-        CFBundleShortVersionString: "0.2.0-preview"
+        CFBundleShortVersionString: "0.4.0"
         CFBundleVersion: "1"
         VO1D_API_BASE_URL: "https://REPLACE_ME.invalid"
         UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview
-        PRODUCT_NAME: VO1D_VPN
+        PRODUCT_NAME: VO1D_VPN_PREVIEW
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        PRODUCT_MODULE_NAME: VO1D_VPN_PREVIEW
+
+  VO1DVPNTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - ../ios/VO1DVPNTests
+    dependencies:
+      - target: VO1D_VPN_PREVIEW
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview.tests
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+
+  PreviewUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: VO1D_VPN_PREVIEW
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.vo1d.vpn.preview.uitests
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+
+schemes:
+  VO1D_VPN_PREVIEW:
+    build:
+      targets:
+        VO1D_VPN_PREVIEW: all
+    test:
+      targets:
+        - VO1DVPNTests
+        - PreviewUITests
+      gatherCoverageData: false

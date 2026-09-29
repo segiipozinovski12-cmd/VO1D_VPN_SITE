@@ -2,344 +2,361 @@ import SwiftUI
 
 struct ServersView: View {
     @EnvironmentObject private var model: AppViewModel
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var pings: PingStore
+    @EnvironmentObject private var preferences: Preferences
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
 
     @State private var search = ""
-    @State private var favoritesOnly = false
-    @State private var sortByPing = true
+    @State private var filter: Filter = .all
+    @State private var appeared = false
 
-    private var filteredServers: [VO1DServer] {
-        var result = model.servers
+    enum Filter: String, CaseIterable {
+        case all = "ALL"
+        case favorites = "FAVORITES"
+        case lowest = "LOWEST PING"
+    }
 
-        if favoritesOnly {
-            result = result.filter { model.isFavorite($0) }
+    private var filtered: [VO1DServer] {
+        let query = search
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let matching = model.servers.filter { server in
+            (filter != .favorites ||
+             model.favoriteCodes.contains(server.code)) &&
+            (
+                query.isEmpty ||
+                [server.name, server.code, server.protocolName, server.label]
+                    .contains {
+                        $0.localizedCaseInsensitiveContains(query)
+                    }
+            )
         }
 
-        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !query.isEmpty {
-            result = result.filter {
-                $0.name.localizedCaseInsensitiveContains(query) ||
-                $0.code.localizedCaseInsensitiveContains(query)
-            }
-        }
-
-        if sortByPing {
-            result.sort {
-                pingValue($0) < pingValue($1)
-            }
-        }
-
-        return result
+        return filter == .lowest
+            ? ServerRanking.sorted(matching, pings: pings.values)
+            : matching.sorted { $0.name < $1.name }
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        ScrollView {
+            VStack(spacing: 18) {
+                brandHeader
+                    .locationReveal(appeared, delay: 0.00, reduceMotion: reduceMotion)
 
-            VStack(spacing: 0) {
-                topBar
-                    .padding(.horizontal, 18)
-                    .padding(.top, 6)
+                titleBlock
+                    .locationReveal(appeared, delay: 0.03, reduceMotion: reduceMotion)
 
-                controls
-                    .padding(.horizontal, 18)
-                    .padding(.top, 14)
+                searchField
+                    .locationReveal(appeared, delay: 0.06, reduceMotion: reduceMotion)
 
                 fastestCard
-                    .padding(.horizontal, 18)
-                    .padding(.top, 12)
+                    .locationReveal(appeared, delay: 0.09, reduceMotion: reduceMotion)
 
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(filteredServers) { server in
-                            serverCard(server)
-                        }
+                filterBar
+                    .locationReveal(appeared, delay: 0.12, reduceMotion: reduceMotion)
 
-                        if filteredServers.isEmpty {
-                            VStack(spacing: 10) {
-                                Image(systemName: "magnifyingglass")
-                                    .font(.system(size: 24))
-                                    .foregroundStyle(.white.opacity(0.25))
+                HStack {
+                    Text("\(filtered.count) LOCATIONS")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(1.7)
+                        .foregroundStyle(.white.opacity(0.40))
 
-                                Text("No servers found")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.4))
+                    Spacer()
+
+                    Text(pings.isRefreshing ? "MEASURING" : "LIVE LATENCY")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(1.0)
+                        .foregroundStyle(.white.opacity(0.34))
+                }
+                .padding(.horizontal, 2)
+                .locationReveal(appeared, delay: 0.15, reduceMotion: reduceMotion)
+
+                LazyVStack(spacing: 10) {
+                    ForEach(filtered) { server in
+                        ServerCard(
+                            server: server,
+                            ping: pings.values[server.code],
+                            selected: model.selectedServer?.code == server.code,
+                            favorite: model.favoriteCodes.contains(server.code),
+                            compact: preferences.compactServers,
+                            showPing: preferences.livePing,
+                            busy: model.phase.isBusy,
+                            select: { model.select(server) },
+                            toggleFavorite: { model.toggleFavorite(server) }
+                        )
+                    }
+
+                    if filtered.isEmpty {
+                        ReferenceGlassCard(radius: 20) {
+                            VStack(spacing: 11) {
+                                Image(systemName: "location.slash")
+                                    .font(.system(size: 26, weight: .ultraLight))
+                                    .foregroundStyle(.white.opacity(0.55))
+
+                                Text(
+                                    filter == .favorites && search.isEmpty
+                                    ? "No favorites yet"
+                                    : "No matching locations"
+                                )
+                                .font(.system(size: 16, weight: .semibold))
+
+                                Text(
+                                    filter == .favorites && search.isEmpty
+                                    ? "Save a location with the star button."
+                                    : "Try another country or location code."
+                                )
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.40))
+                                .multilineTextAlignment(.center)
                             }
-                            .padding(.top, 48)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 30)
                         }
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 12)
-                    .padding(.bottom, 24)
                 }
-                .scrollIndicators(.hidden)
+                .locationReveal(appeared, delay: 0.18, reduceMotion: reduceMotion)
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 20)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .onAppear {
+            guard !appeared else { return }
+
+            if reduceMotion {
+                appeared = true
+            } else {
+                withAnimation(.easeOut(duration: 0.42)) {
+                    appeared = true
+                }
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
-        .animation(.snappy(duration: 0.25), value: favoritesOnly)
-        .animation(.snappy(duration: 0.25), value: sortByPing)
+        .accessibilityIdentifier("servers.screen")
     }
 
-    private var topBar: some View {
-        ZStack {
-            VStack(spacing: 2) {
-                Text("Servers")
-                    .font(.system(size: 17, weight: .semibold))
+    private var brandHeader: some View {
+        HStack {
+            VO1DBrandLockup(compact: true)
 
-                Text("\(model.servers.count) locations")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.33))
+            Spacer()
+
+            Button {
+                Haptics.play(.selection, enabled: preferences.haptics)
+                Task { await pings.refresh() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .rotationEffect(
+                        .degrees(pings.isRefreshing ? 360 : 0)
+                    )
+                    .animation(
+                        pings.isRefreshing && !reduceMotion
+                        ? .linear(duration: 0.8)
+                          .repeatForever(autoreverses: false)
+                        : .easeOut(duration: 0.16),
+                        value: pings.isRefreshing
+                    )
+                    .frame(width: 38, height: 38)
+                    .background(
+                        Color.white.opacity(0.045),
+                        in: Circle()
+                    )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(
+                                .white.opacity(0.10),
+                                lineWidth: 0.8
+                            )
+                    )
             }
+            .buttonStyle(ScaleButtonStyle(scale: 0.92))
+            .disabled(pings.isRefreshing)
+            .accessibilityIdentifier("servers.refresh")
+        }
+        .frame(height: 48)
+    }
 
-            HStack {
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("LOCATIONS")
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .tracking(2.1)
+                .foregroundStyle(.white.opacity(0.38))
+
+            Text("Choose your route")
+                .font(.system(size: 28, weight: .semibold))
+                .tracking(-0.7)
+
+            Text("Low latency. Real VO1D nodes.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.40))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 11) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(.white.opacity(0.40))
+
+            TextField("Search locations", text: $search)
+                .font(.system(size: 14))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("servers.search")
+
+            if !search.isEmpty {
                 Button {
-                    dismiss()
+                    search = ""
                 } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.white.opacity(0.34))
                 }
-                .buttonStyle(ScaleButtonStyle())
-
-                Spacer()
-
-                Button {
-                    Task { await model.refreshPingsNow() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.75))
-                        .frame(width: 34, height: 34)
-                        .rotationEffect(.degrees(model.isRefreshingPings ? 360 : 0))
-                        .animation(
-                            model.isRefreshingPings
-                            ? .linear(duration: 0.75).repeatForever(autoreverses: false)
-                            : .default,
-                            value: model.isRefreshingPings
-                        )
-                }
-                .buttonStyle(ScaleButtonStyle())
+                .buttonStyle(ScaleButtonStyle(scale: 0.92))
             }
         }
-        .frame(height: 44)
-    }
-
-    private var controls: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.34))
-
-                TextField("Search country...", text: $search)
-                    .font(.system(size: 13))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 40)
-            .background(
-                RoundedRectangle(cornerRadius: 11)
-                    .fill(.white.opacity(0.055))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 11)
-                    .stroke(.white.opacity(0.07), lineWidth: 1)
-            )
-
-            HStack(spacing: 8) {
-                filterButton(
-                    title: favoritesOnly ? "FAVORITES" : "ALL",
-                    icon: favoritesOnly ? "star.fill" : "globe",
-                    active: favoritesOnly
-                ) {
-                    favoritesOnly.toggle()
-                }
-
-                filterButton(
-                    title: "PING",
-                    icon: sortByPing ? "arrow.up.arrow.down" : "line.3.horizontal",
-                    active: sortByPing
-                ) {
-                    sortByPing.toggle()
-                }
-
-                Spacer()
-            }
+        .padding(.horizontal, 16)
+        .frame(height: 52)
+        .background {
+            Capsule()
+                .fill(Color.white.opacity(0.028))
+                .background(.ultraThinMaterial, in: Capsule())
         }
-    }
-
-    private func filterButton(
-        title: String,
-        icon: String,
-        active: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                Text(title)
-            }
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(.white.opacity(active ? 0.92 : 0.48))
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(
-                Capsule()
-                    .fill(.white.opacity(active ? 0.10 : 0.045))
-            )
-            .overlay(
-                Capsule()
-                    .stroke(.white.opacity(active ? 0.14 : 0.06), lineWidth: 1)
-            )
+        .overlay {
+            Capsule()
+                .strokeBorder(.white.opacity(0.10), lineWidth: 0.8)
         }
-        .buttonStyle(ScaleButtonStyle())
     }
 
     private var fastestCard: some View {
-        Group {
-            if let server = model.fastestServer {
-                Button {
-                    Task {
-                        await model.select(server)
-                        dismiss()
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(.white.opacity(0.08))
-                                .frame(width: 38, height: 38)
-
-                            Image(systemName: "bolt.fill")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("FASTEST LOCATION")
-                                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                .tracking(0.8)
-                                .foregroundStyle(.white.opacity(0.34))
-
-                            Text("\(server.flag)  \(server.name)")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.white)
-                        }
-
-                        Spacer()
-
-                        Text(pingText(for: server))
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(pingColor(for: server))
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.25))
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: 58)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(.white.opacity(0.055))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(.white.opacity(0.075), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(ScaleButtonStyle(scale: 0.98))
+        Button {
+            guard let fastest = model.fastestServer else {
+                Task { await pings.refresh() }
+                return
             }
-        }
-    }
 
-    private func serverCard(_ server: VO1DServer) -> some View {
-        let selected = model.selectedServer?.code == server.code
-        let favorite = model.isFavorite(server)
+            preferences.autoFastest = true
+            model.select(fastest)
+        } label: {
+            ReferenceGlassCard(radius: 22, highlighted: true) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .stroke(.white.opacity(0.18), lineWidth: 1)
+                            .frame(width: 48, height: 48)
 
-        return HStack(spacing: 12) {
-            Button {
-                Task {
-                    await model.select(server)
-                    dismiss()
-                }
-            } label: {
-                HStack(spacing: 12) {
-                    Text(server.flag)
-                        .font(.system(size: 23))
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(server.name)
-                            .font(.system(size: 13, weight: .semibold))
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 16))
                             .foregroundStyle(.white)
+                    }
 
-                        HStack(spacing: 6) {
-                            Text(server.code)
-                            Text("•")
-                            Text(server.protocolName)
-                        }
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.28))
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("FASTEST LOCATION")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .tracking(1.4)
+                            .foregroundStyle(.white.opacity(0.38))
+
+                        Text(
+                            model.fastestServer.map {
+                                "\($0.flag)  \($0.name)"
+                            } ?? "Measure routes"
+                        )
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
                     }
 
                     Spacer()
 
-                    Text(pingText(for: server))
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(pingColor(for: server))
-                        .contentTransition(.numericText())
+                    Text(
+                        model.fastestServer
+                            .flatMap { pings.values[$0.code] }
+                            .map { "\($0) ms" }
+                        ?? "— ms"
+                    )
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.58))
 
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 14))
-                        .foregroundStyle(selected ? .white : .white.opacity(0.18))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.55))
                 }
-                .contentShape(Rectangle())
+                .padding(17)
             }
-            .buttonStyle(.plain)
-
-            Button {
-                withAnimation(.snappy(duration: 0.2)) {
-                    model.toggleFavorite(server)
-                }
-            } label: {
-                Image(systemName: favorite ? "star.fill" : "star")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(favorite ? 0.78 : 0.22))
-                    .frame(width: 30, height: 30)
-            }
-            .buttonStyle(ScaleButtonStyle())
         }
-        .padding(.horizontal, 12)
-        .frame(height: 62)
+        .buttonStyle(ScaleButtonStyle(scale: 0.985))
+        .disabled(model.phase.isBusy)
+        .accessibilityIdentifier("servers.fastest")
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 5) {
+            ForEach(Filter.allCases, id: \.self) { item in
+                Button {
+                    Haptics.play(.selection, enabled: preferences.haptics)
+
+                    withAnimation(
+                        reduceMotion
+                        ? nil
+                        : .snappy(duration: 0.22)
+                    ) {
+                        filter = item
+                    }
+                } label: {
+                    Text(item.rawValue)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .tracking(0.5)
+                        .foregroundStyle(
+                            filter == item
+                            ? .black
+                            : .white.opacity(0.44)
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                        .background {
+                            if filter == item {
+                                Capsule()
+                                    .fill(.white)
+                                    .shadow(
+                                        color: .white.opacity(0.18),
+                                        radius: 7
+                                    )
+                            }
+                        }
+                }
+                .buttonStyle(ScaleButtonStyle(scale: 0.96))
+                .accessibilityIdentifier("filter.\(item.rawValue)")
+            }
+        }
+        .padding(4)
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(.white.opacity(selected ? 0.075 : 0.035))
+            Color.white.opacity(0.028),
+            in: Capsule()
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(.white.opacity(selected ? 0.13 : 0.055), lineWidth: 1)
+            Capsule()
+                .strokeBorder(.white.opacity(0.08), lineWidth: 0.8)
         )
     }
+}
 
-    private func pingValue(_ server: VO1DServer) -> Int {
-        guard let wrapped = model.pingByCode[server.code],
-              let ping = wrapped else {
-            return Int.max
-        }
-        return ping
-    }
-
-    private func pingText(for server: VO1DServer) -> String {
-        let value = pingValue(server)
-        return value == Int.max ? "— ms" : "\(value) ms"
-    }
-
-    private func pingColor(for server: VO1DServer) -> Color {
-        let ping = pingValue(server)
-        if ping == Int.max { return .white.opacity(0.30) }
-        if ping < 70 { return Color(red: 0.38, green: 0.86, blue: 0.46) }
-        if ping < 110 { return Color(red: 0.92, green: 0.78, blue: 0.33) }
-        return Color(red: 0.95, green: 0.38, blue: 0.38)
+private extension View {
+    func locationReveal(
+        _ visible: Bool,
+        delay: Double,
+        reduceMotion: Bool
+    ) -> some View {
+        opacity(visible ? 1 : 0)
+            .offset(y: visible || reduceMotion ? 0 : 12)
+            .animation(
+                reduceMotion
+                ? nil
+                : .easeOut(duration: 0.42).delay(delay),
+                value: visible
+            )
     }
 }

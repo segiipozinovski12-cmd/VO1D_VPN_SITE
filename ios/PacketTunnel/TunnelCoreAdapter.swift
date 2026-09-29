@@ -2,9 +2,21 @@ import Foundation
 import NetworkExtension
 import SwiftyXrayKit
 
+struct TunnelTrafficSnapshot: Codable {
+    let received: Int64
+    let sent: Int64
+}
+
 protocol TunnelCoreAdapter: AnyObject {
-    func start(uri: String, packetFlow: NEPacketTunnelFlow) async throws
+    func start(
+        uri: String,
+        packetFlow: NEPacketTunnelFlow,
+        privacyShield: Bool,
+        secureDNS: Bool,
+        stealthMode: Bool
+    ) async throws
     func stop() async
+    func getAndClearStats() -> TunnelTrafficSnapshot
 }
 
 enum TunnelCoreError: LocalizedError {
@@ -26,7 +38,13 @@ enum TunnelCoreError: LocalizedError {
 final class XrayTunnelCore: TunnelCoreAdapter {
     private var bridge: XrayBridge?
 
-    func start(uri: String, packetFlow: NEPacketTunnelFlow) async throws {
+    func start(
+        uri: String,
+        packetFlow: NEPacketTunnelFlow,
+        privacyShield: Bool,
+        secureDNS: Bool,
+        stealthMode: Bool
+    ) async throws {
         await stop()
 
         let fm = FileManager.default
@@ -68,16 +86,33 @@ final class XrayTunnelCore: TunnelCoreAdapter {
             preset: .mobile,
             configTransform: { config in
                 var final = config
-                final["log"] = ["loglevel": "warning"]
-
-                // Use encrypted tunnel routing for DNS requests as well.
-                final["dns"] = [
-                    "servers": [
-                        "1.1.1.1",
-                        "2606:4700:4700::1111"
-                    ],
-                    "queryStrategy": "UseIP"
+                final["log"] = [
+                    "loglevel": stealthMode ? "error" : "warning"
                 ]
+
+                if privacyShield || secureDNS || stealthMode {
+                    // Strict privacy mode: every resolver is remote DoH and is
+                    // reached through Xray's protected route. No system/plain
+                    // DNS resolver is injected into the Xray configuration.
+                    final["dns"] = [
+                        "servers": [
+                            "https://1.1.1.1/dns-query",
+                            "https://9.9.9.9/dns-query",
+                            "https://8.8.8.8/dns-query"
+                        ],
+                        "queryStrategy": "UseIP",
+                        "disableCache": false
+                    ]
+                } else {
+                    final["dns"] = [
+                        "servers": [
+                            "1.1.1.1",
+                            "2606:4700:4700::1111"
+                        ],
+                        "queryStrategy": "UseIP"
+                    ]
+                }
+
                 return final
             }
         )
@@ -88,5 +123,16 @@ final class XrayTunnelCore: TunnelCoreAdapter {
     func stop() async {
         bridge?.stop()
         bridge = nil
+    }
+
+    func getAndClearStats() -> TunnelTrafficSnapshot {
+        guard let bridge else {
+            return TunnelTrafficSnapshot(received: 0, sent: 0)
+        }
+        let bytes = bridge.getAndClearStats()
+        return TunnelTrafficSnapshot(
+            received: bytes.received,
+            sent: bytes.sent
+        )
     }
 }
