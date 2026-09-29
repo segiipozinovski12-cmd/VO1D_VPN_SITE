@@ -85,11 +85,13 @@ final class XrayTunnelCore: TunnelCoreAdapter {
                 final["log"] = ["loglevel": "warning"]
 
                 if privacyShield {
-                    // Remote DoH (without +local) goes through Xray routing,
-                    // keeping DNS resolution inside the protected route.
+                    // Strict privacy mode: every resolver is remote DoH and is
+                    // reached through Xray's protected route. No system/plain
+                    // DNS resolver is injected into the Xray configuration.
                     final["dns"] = [
                         "servers": [
                             "https://1.1.1.1/dns-query",
+                            "https://9.9.9.9/dns-query",
                             "https://8.8.8.8/dns-query"
                         ],
                         "queryStrategy": "UseIP"
