@@ -27,6 +27,16 @@ struct SettingsView: View {
                     detail: "Route options apply on the next connection."
                 ) {
                     referenceToggle(
+                        "Stealth Mode",
+                        detail: "Prefer REALITY routes, lock DNS inside the tunnel and rotate nodes on failure",
+                        icon: "eye.slash",
+                        value: $preferences.stealthMode,
+                        id: "stealthMode"
+                    )
+
+                    divider
+
+                    referenceToggle(
                         "Privacy Shield",
                         detail: "Force full-tunnel + DoH + IPv6 protection with no direct fallback",
                         icon: "lock.shield",
