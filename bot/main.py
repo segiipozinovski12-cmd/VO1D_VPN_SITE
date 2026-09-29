@@ -1322,18 +1322,43 @@ def app_servers_payload(row):
             by_code[code]["probe_host"]=host;by_code[code]["probe_port"]=port
     return {"countries":countries,"total_countries":len(countries)}
 
-def app_tunnel_payload(row,country):
+def app_tunnel_payload(row,country,attempt=0,stealth=False):
     code=str(country or "").strip().upper()
     if not code:return None
     candidates=[node for node in subscription_nodes(row) if _node_country_code(node)==code]
     if not candidates:return None
-    node=candidates[0]
+
+    if stealth:
+        reality=[]
+        fallback=[]
+        for node in candidates:
+            try:
+                parsed=urllib.parse.urlsplit(node)
+                query=urllib.parse.parse_qs(parsed.query)
+                security=str((query.get("security") or [""])[0]).lower()
+                if security=="reality":
+                    reality.append(node)
+                else:
+                    fallback.append(node)
+            except Exception:
+                fallback.append(node)
+        # Prefer REALITY when available, but never strand the user if a
+        # country currently has only another encrypted transport configured.
+        candidates=reality or fallback
+
+    if not candidates:return None
+    try:index=max(0,int(attempt))%len(candidates)
+    except Exception:index=0
+    node=candidates[index]
     return {
       "country":code,
       "uri":node,
       "label":_node_display_label(node) or f"VO1D · {code}",
       "issued_at":now(),
       "expires_at":int(row["sub_until"]),
+      "route_index":index,
+      "route_count":len(candidates),
+      "stealth":bool(stealth),
     }
 
 def app_user_payload(row):
@@ -2679,7 +2704,12 @@ class Web(BaseHTTPRequestHandler):
                 return self.reply_json(403,{"ok":False,"error":"subscription_inactive"})
             query=urllib.parse.parse_qs(parsed.query)
             country=(query.get("country") or [""])[0]
-            payload=app_tunnel_payload(row,country)
+            try:
+                attempt=max(0,min(20,int((query.get("attempt") or ["0"])[0] or 0)))
+            except Exception:
+                attempt=0
+            stealth=str((query.get("stealth") or ["0"])[0]).strip().lower() in ("1","true","yes","on")
+            payload=app_tunnel_payload(row,country,attempt,stealth)
             if not payload:return self.reply_json(404,{"ok":False,"error":"country_unavailable"})
             return self.reply_json(200,{"ok":True,**payload})
 
