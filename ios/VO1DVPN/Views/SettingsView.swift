@@ -2,201 +2,321 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var preferences: Preferences
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.vo1dReduceMotion) private var reduceMotion
 
-    @AppStorage("vo1d.secureDNS") private var secureDNS = true
-    @AppStorage("vo1d.ipv6Protection") private var ipv6Protection = true
-    @AppStorage("vo1d.reduceAnimations") private var reduceAnimations = false
-    @AppStorage("vo1d.showLivePing") private var showLivePing = true
-    @AppStorage("vo1d.compactServers") private var compactServers = false
+    @State private var appeared = false
 
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            ScrollView {
-                VStack(spacing: 16) {
-                    topBar
-
-                    section(
-                        title: "CONNECTION",
-                        subtitle: "Automatic protection and routing"
-                    ) {
-                        toggleRow("Auto-connect", icon: "bolt.horizontal.fill", isOn: $model.autoConnect)
-                        divider
-                        toggleRow("Kill Switch", icon: "shield.fill", isOn: $model.killSwitch)
-                        divider
-                        toggleRow("Secure DNS", icon: "lock.shield.fill", isOn: $secureDNS)
-                        divider
-                        toggleRow("IPv6 Protection", icon: "network", isOn: $ipv6Protection)
-                    }
-
-                    section(
-                        title: "INTERFACE",
-                        subtitle: "Tune the app for your device"
-                    ) {
-                        toggleRow("Live Ping", icon: "waveform.path.ecg", isOn: $showLivePing)
-                        divider
-                        toggleRow("Reduce Animations", icon: "figure.walk.motion", isOn: $reduceAnimations)
-                        divider
-                        toggleRow("Compact Server List", icon: "rectangle.compress.vertical", isOn: $compactServers)
-                    }
-
-                    section(
-                        title: "CURRENT ROUTE",
-                        subtitle: "Read-only connection information"
-                    ) {
-                        valueRow(
-                            "Protocol",
-                            icon: "point.3.connected.trianglepath.dotted",
-                            value: protocolText
-                        )
-                        divider
-                        valueRow(
-                            "Location",
-                            icon: "mappin.and.ellipse",
-                            value: model.selectedServer?.name ?? "Automatic"
-                        )
-                        divider
-                        valueRow(
-                            "Quality",
-                            icon: "gauge.with.dots.needle.67percent",
-                            value: model.connectionQuality
-                        )
-                    }
-
-                    if model.isDemoMode {
-                        HStack(spacing: 9) {
-                            Image(systemName: "info.circle")
-                            Text("Simulator mode uses local demo data. Real VPN behavior is unchanged on a physical iPhone.")
-                        }
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.34))
-                        .padding(.horizontal, 4)
-                    }
-                }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 28)
-            }
-            .scrollIndicators(.hidden)
-        }
-        .toolbar(.hidden, for: .navigationBar)
+    private var pendingOptions: Bool {
+        model.isConnected &&
+        model.appliedOptions != preferences.connectionOptions
     }
 
-    private var topBar: some View {
-        ZStack {
-            Text("Settings")
-                .font(.system(size: 17, weight: .semibold))
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                HStack {
+                    IconButton(
+                        icon: "chevron.left",
+                        label: "Back"
+                    ) {
+                        dismiss()
+                    }
 
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
+                    Spacer()
+
+                    Eyebrow(text: "VO1D / PREFERENCES")
                 }
-                .buttonStyle(ScaleButtonStyle())
+                .vo1dReveal(
+                    appeared,
+                    reduceMotion: reduceMotion,
+                    delay: 0.00
+                )
 
-                Spacer()
+                Text("Fine-tune\nyour connection.")
+                    .font(.system(size: 34, weight: .medium))
+                    .tracking(-1)
+                    .vo1dReveal(
+                        appeared,
+                        reduceMotion: reduceMotion,
+                        delay: 0.04
+                    )
+
+                section(
+                    "CONNECTION",
+                    detail: "Route options apply on the next connection."
+                ) {
+                    toggle(
+                        "Auto Connect",
+                        detail: "Connect when the app starts",
+                        icon: "power",
+                        value: $preferences.autoConnect,
+                        id: "autoConnect"
+                    )
+
+                    DividerLine()
+
+                    toggle(
+                        "Auto Fastest Server",
+                        detail: "Use the lowest ping on Connect",
+                        icon: "bolt",
+                        value: $preferences.autoFastest,
+                        id: "autoFastest"
+                    )
+
+                    DividerLine()
+
+                    toggle(
+                        "Kill Switch",
+                        detail: "Route all networks through the VPN",
+                        icon: "shield",
+                        value: $preferences.killSwitch,
+                        id: "killSwitch"
+                    )
+
+                    DividerLine()
+
+                    toggle(
+                        "Secure DNS",
+                        detail: "Use the secure DNS route inside the tunnel",
+                        icon: "lock",
+                        value: $preferences.secureDNS,
+                        id: "secureDNS"
+                    )
+
+                    DividerLine()
+
+                    toggle(
+                        "IPv6 Protection",
+                        detail: "Include IPv6 in the tunnel route",
+                        icon: "network",
+                        value: $preferences.ipv6Protection,
+                        id: "ipv6Protection"
+                    )
+                }
+                .vo1dReveal(
+                    appeared,
+                    reduceMotion: reduceMotion,
+                    delay: 0.08
+                )
+
+                if pendingOptions {
+                    PrimaryButton(
+                        title: "Reconnect to apply changes",
+                        icon: "arrow.triangle.2.circlepath",
+                        action: model.reconnect
+                    )
+                    .accessibilityIdentifier("settings.apply")
+                    .transition(
+                        reduceMotion
+                        ? .opacity
+                        : .opacity.combined(with: .move(edge: .top))
+                    )
+                }
+
+                section(
+                    "INTERFACE",
+                    detail: "Make VO1D work your way."
+                ) {
+                    toggle(
+                        "Live Ping",
+                        detail: "Measure routes every eight seconds",
+                        icon: "waveform.path.ecg",
+                        value: $preferences.livePing,
+                        id: "livePing"
+                    )
+
+                    DividerLine()
+
+                    toggle(
+                        "Reduce Animations",
+                        detail: "Stop looping motion and transitions",
+                        icon: "circle.dotted",
+                        value: $preferences.reduceAnimations,
+                        id: "reduceMotion"
+                    )
+
+                    DividerLine()
+
+                    toggle(
+                        "Compact Server List",
+                        detail: "Show more locations at a glance",
+                        icon: "line.3.horizontal",
+                        value: $preferences.compactServers,
+                        id: "compactServers"
+                    )
+
+                    DividerLine()
+
+                    toggle(
+                        "Haptic Feedback",
+                        detail: "Tactile responses on iPhone",
+                        icon: "hand.tap",
+                        value: $preferences.haptics,
+                        id: "haptics"
+                    )
+                }
+                .vo1dReveal(
+                    appeared,
+                    reduceMotion: reduceMotion,
+                    delay: 0.13
+                )
+
+                section(
+                    "NETWORK",
+                    detail: "Current session information."
+                ) {
+                    DetailRow(
+                        title: "Protocol",
+                        value:
+                            model.activeServer?.protocolName ??
+                            model.selectedServer?.protocolName ??
+                            "—"
+                    )
+
+                    DividerLine()
+
+                    DetailRow(
+                        title: "Current Route",
+                        value: model.activeServer?.name ?? "Not connected"
+                    )
+
+                    DividerLine()
+
+                    SettingsQualityRow(
+                        code: model.activeServer?.code
+                    )
+                }
+                .vo1dReveal(
+                    appeared,
+                    reduceMotion: reduceMotion,
+                    delay: 0.18
+                )
+
+                if model.isDemoMode {
+                    Text("DEMO / Changes are saved locally. No VPN traffic is generated.")
+                        .font(.caption)
+                        .foregroundStyle(VO1DStyle.secondary)
+                        .vo1dReveal(
+                            appeared,
+                            reduceMotion: reduceMotion,
+                            delay: 0.22
+                        )
+                }
+            }
+            .padding(22)
+        }
+        .background { DeepSpaceBackdrop().ignoresSafeArea() }
+        .scrollIndicators(.hidden)
+        .toolbar(.hidden, for: .navigationBar)
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.28),
+            value: pendingOptions
+        )
+        .onAppear {
+            guard !appeared else { return }
+
+            if reduceMotion {
+                appeared = true
+            } else {
+                withAnimation(.easeOut(duration: 0.44)) {
+                    appeared = true
+                }
             }
         }
-        .frame(height: 42)
-        .padding(.top, 6)
+        .accessibilityIdentifier("settings.screen")
     }
 
     private func section<Content: View>(
-        title: String,
-        subtitle: String,
+        _ title: String,
+        detail: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(0.8)
-                    .foregroundStyle(.white.opacity(0.46))
+        VStack(alignment: .leading, spacing: 11) {
+            Eyebrow(text: title)
 
-                Text(subtitle)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.white.opacity(0.25))
-            }
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(VO1DStyle.secondary)
 
-            VStack(spacing: 0) {
-                content()
-            }
-            .padding(.horizontal, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(.white.opacity(0.038))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(.white.opacity(0.065), lineWidth: 1)
-            )
+            VStack(spacing: 0, content: content)
+                .padding(.horizontal, 16)
+                .vo1dSurface()
         }
     }
 
-    private func toggleRow(
-        _ label: String,
+    private func toggle(
+        _ title: String,
+        detail: String,
         icon: String,
-        isOn: Binding<Bool>
+        value: Binding<Bool>,
+        id: String
     ) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.52))
-                .frame(width: 19)
+        Toggle(
+            isOn: Binding(
+                get: { value.wrappedValue },
+                set: { newValue in
+                    let hapticsEnabled = preferences.haptics
+                    value.wrappedValue = newValue
+                    Haptics.play(
+                        .selection,
+                        enabled: hapticsEnabled
+                    )
+                }
+            )
+        ) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .light))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.white.opacity(0.90))
+                    .frame(width: 30, height: 30)
+                    .vo1dSystemGlass(
+                        in: RoundedRectangle(
+                            cornerRadius: 9,
+                            style: .continuous
+                        )
+                    )
+                    .overlay {
+                        RoundedRectangle(
+                            cornerRadius: 9,
+                            style: .continuous
+                        )
+                        .strokeBorder(
+                            .white.opacity(0.07),
+                            lineWidth: 1
+                        )
+                    }
 
-            Text(label)
-                .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.90))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title)
+                        .font(.subheadline.weight(.medium))
 
-            Spacer()
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(.white)
-                .scaleEffect(0.78)
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(VO1DStyle.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
-        .frame(height: 50)
+        .tint(.white.opacity(0.82))
+        .padding(.vertical, 15)
+        .accessibilityIdentifier("settings.\(id)")
     }
+}
 
-    private func valueRow(
-        _ label: String,
-        icon: String,
-        value: String
-    ) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.52))
-                .frame(width: 19)
+private struct SettingsQualityRow: View {
+    @EnvironmentObject private var pings: PingStore
+    let code: String?
 
-            Text(label)
-                .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.90))
-
-            Spacer()
-
-            Text(value)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.46))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(height: 50)
-    }
-
-    private var divider: some View {
-        Divider()
-            .overlay(.white.opacity(0.055))
-            .padding(.leading, 31)
-    }
-
-    private var protocolText: String {
-        let raw = model.selectedServer?.protocolName.uppercased() ?? "VLESS"
-        return raw.isEmpty ? "VLESS" : raw
+    var body: some View {
+        DetailRow(
+            title: "Connection Quality",
+            value:
+                code.map {
+                    VO1DStyle.quality(pings.values[$0])
+                } ?? "Not connected"
+        )
     }
 }

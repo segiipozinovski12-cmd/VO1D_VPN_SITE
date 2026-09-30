@@ -9,10 +9,14 @@ on:
       - ".github/workflows/ios-preview-simulator.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   simulator:
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -38,3 +42,50 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
+
+      - name: Run state and UI tests on iPhone Simulator
+        working-directory: ios-preview
+        run: |
+          set -euo pipefail
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x["name"].startswith("iPhone")))')
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcodebuild test \
+            -project VO1D_VPN_PREVIEW.xcodeproj \
+            -scheme VO1D_VPN_PREVIEW \
+            -destination "platform=iOS Simulator,id=$DEVICE" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/PreviewTests.xcresult \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: Export UI screenshots
+        if: always()
+        working-directory: ios-preview
+        run: |
+          mkdir -p build/screenshots
+          if [ -d build/PreviewTests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/PreviewTests.xcresult --output-path build/screenshots
+          fi
+
+      - name: Upload UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VO1D-preview-validation
+          path: |
+            ios-preview/build/screenshots
+            ios-preview/build/PreviewTests.xcresult
+          retention-days: 7
+
+      - name: Upload screenshots separately
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VO1D-preview-screenshots
+          path: |
+            ios-preview/build/screenshots/**/*.png
+            ios-preview/build/screenshots/**/*.jpg
+            ios-preview/build/screenshots/**/*.json
+            ios-preview/build/screenshots/**/*.txt
+          retention-days: 7

@@ -7,10 +7,10 @@ Native iPhone VPN client built with SwiftUI and Apple's NetworkExtension framewo
 - SwiftUI app — no WebView and no browser wrapper
 - VO1D activation key login
 - Keychain session storage
-- animated black/white CONNECT UI
+- near-monochrome animated CONNECT UI with adaptive Liquid Glass on supported iOS versions
 - live server list and TCP ping
-- automatic RU-first server selection
-- profile, nickname, auto-connect preference and kill-switch preference
+- country-neutral Fastest selection based on measured latency
+- profile, nickname, favorites, reconnect, auto-connect, secure DNS, IPv6 and kill-switch preferences
 - NETunnelProviderManager + Packet Tunnel extension
 - real Xray/VLESS packet forwarding through SwiftyXrayKit
 - VLESS/REALITY support comes from Xray-core inside the Packet Tunnel
