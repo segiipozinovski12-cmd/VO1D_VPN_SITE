@@ -65,6 +65,17 @@ public sealed class VpnEngine : IAsyncDisposable
                 while (xrayPort == proxyPort || xrayPort == _apiPort) xrayPort = FreePort();
                 _xrayConfig = Path.Combine(UserStore.Root, "xray-" + Guid.NewGuid().ToString("N") + ".json");
                 await File.WriteAllTextAsync(_xrayConfig, XrayConfig.Build(profile, xrayPort, password).ToJsonString(), ct);
+                using (var validation = Process.Start(new ProcessStartInfo(_xrayPath) {
+                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+                    WorkingDirectory = RuntimeAssets.Root, ArgumentList = { "run", "-test", "-config", _xrayConfig }
+                }) ?? throw new IOException("Не удалось проверить конфигурацию Xray."))
+                {
+                    _job.Add(validation);
+                    var stdout = validation.StandardOutput.ReadToEndAsync(ct); var stderr = validation.StandardError.ReadToEndAsync(ct);
+                    await validation.WaitForExitAsync(ct);
+                    var diagnostics = (await stdout + " " + await stderr).Trim();
+                    if (validation.ExitCode != 0) throw new IOException("Xray отверг параметры маршрута: " + diagnostics[..Math.Min(diagnostics.Length, 700)]);
+                }
                 _xray = Process.Start(new ProcessStartInfo(_xrayPath) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = RuntimeAssets.Root, ArgumentList = { "run", "-config", _xrayConfig } }) ?? throw new IOException("Xray не запустился.");
                 _job.Add(_xray);
                 transport = XrayConfig.LocalOutbound(xrayPort, password);

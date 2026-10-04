@@ -11,8 +11,10 @@ public static class LiveNetworkTests
     // The same intentionally public feeds used by bot/community_nodes.py.
     // No production subscription keys are consumed by this test.
     private static readonly string[] Feeds = [
-        "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/data/githubmirror/ru-sni-local/vless.txt",
-        "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/by-country/v2ray-base64-GB.txt"
+        "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/by-country/v2ray-base64-GB.txt",
+        "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/by-country/v2ray-base64-DE.txt",
+        "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/by-country/v2ray-base64-NL.txt",
+        "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/data/githubmirror/ru-sni-local/vless.txt"
     ];
     public static async Task RunAsync(AppViewModel model, string output)
     {
@@ -25,6 +27,7 @@ public static class LiveNetworkTests
         var candidates = new List<(string Uri, ProxyProfile Profile, long Ping)>();
         foreach (var feed in Feeds)
         {
+            var feedCount = 0;
             try
             {
                 var body = await http.GetStringAsync(feed, life.Token);
@@ -34,27 +37,26 @@ public static class LiveNetworkTests
                     try
                     {
                         var profile = ProxyProfile.Parse(line);
-                        if (profile.XrayOutbound == null || candidates.Any(x => x.Profile.Host == profile.Host)) continue;
+                        if (candidates.Any(x => x.Profile.Host == profile.Host && x.Profile.Port == profile.Port)) continue;
                         using var tcp = new TcpClient(); using var deadline = CancellationTokenSource.CreateLinkedTokenSource(life.Token); deadline.CancelAfter(TimeSpan.FromSeconds(1.5));
                         var watch = Stopwatch.StartNew(); await tcp.ConnectAsync(profile.Host, profile.Port, deadline.Token);
                         candidates.Add((line.Trim(), profile, watch.ElapsedMilliseconds));
-                        if (candidates.Count >= 12) break;
+                        if (++feedCount >= 4) break;
                     }
                     catch (Exception e) when (e is FormatException or NotSupportedException or SocketException or OperationCanceledException or JsonException) { }
                 }
             }
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException or FormatException) { }
-            if (candidates.Count >= 12) break;
         }
         var attempts = new List<object>(); var success = false; var exitIp = "";
-        foreach (var candidate in candidates.OrderBy(x => x.Ping).Take(6))
+        foreach (var candidate in candidates.OrderBy(x => x.Ping).Take(8))
         {
             try
             {
                 await model.Engine.ConnectAsync(candidate.Uri, true, life.Token);
                 success = model.Engine.State == TunnelState.Connected && model.Engine.GuardActive;
                 exitIp = model.Engine.PublicIp;
-                attempts.Add(new { endpoint = candidate.Profile.Host, candidate.Profile.Port, connected = success, transport = candidate.Profile.XrayOutbound!["streamSettings"]!["network"]!.ToString() });
+                attempts.Add(new { endpoint = candidate.Profile.Host, candidate.Profile.Port, connected = success, transport = candidate.Profile.XrayOutbound?["streamSettings"]?["network"]?.ToString() ?? candidate.Profile.Protocol });
                 if (success) break;
             }
             catch (Exception e) { attempts.Add(new { endpoint = candidate.Profile.Host, candidate.Profile.Port, connected = false, error = e.Message }); }

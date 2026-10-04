@@ -89,7 +89,7 @@ public sealed class AppViewModel : ObservableObject, IAsyncDisposable
     public AppViewModel()
     {
         _api = new(Store);
-        Engine.StateChanged += (state, detail) => OnUi(() => { State = state == TunnelState.Failed && _connectionOperation ? TunnelState.Connecting : state; StatusDetail = detail; PublicIp = Engine.PublicIp; Notify(nameof(GuardLabel)); if (state == TunnelState.Connected) _connectedAt = DateTimeOffset.Now; if (state == TunnelState.Blocked || state == TunnelState.Failed && !_connectionOperation) Error = detail; });
+        Engine.StateChanged += (state, detail) => OnUi(() => { State = state == TunnelState.Failed && _connectionOperation ? TunnelState.Connecting : state; StatusDetail = detail; PublicIp = Engine.PublicIp; Notify(nameof(GuardLabel)); if (state == TunnelState.Connected) { _connectedAt = DateTimeOffset.Now; Error = ""; } if (state == TunnelState.Blocked || state == TunnelState.Failed && !_connectionOperation) Error = detail; });
         Engine.StatsChanged += stats => OnUi(() => { Download = stats.DownloadMbps.ToString("F2"); Upload = stats.UploadMbps.ToString("F2"); Traffic = $"{(stats.Download + stats.Upload) / 1_000_000.0:F2} MB"; });
         _clock.Tick += (_, _) => Notify(nameof(Duration)); _clock.Start();
     }
