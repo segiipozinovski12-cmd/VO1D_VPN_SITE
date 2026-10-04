@@ -68,6 +68,7 @@ public sealed class VpnEngine : IAsyncDisposable
                 _xray = Process.Start(new ProcessStartInfo(_xrayPath) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = RuntimeAssets.Root, ArgumentList = { "run", "-config", _xrayConfig } }) ?? throw new IOException("Xray не запустился.");
                 _job.Add(_xray);
                 transport = XrayConfig.LocalOutbound(xrayPort, password);
+                transport["bind_interface"] = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().First(x => x.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback).Name;
             }
             var config = TunnelConfig.Build(profile, proxyPort, _apiPort, _secret, password, outbound: transport);
             _config = Path.Combine(UserStore.Root, "tunnel-" + Guid.NewGuid().ToString("N") + ".json");

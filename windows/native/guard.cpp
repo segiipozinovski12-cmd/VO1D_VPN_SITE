@@ -67,7 +67,7 @@ extern "C" __declspec(dllexport) DWORD __cdecl Vo1dGuardStart(
                 allow.displayData.name = const_cast<wchar_t*>(L"VO1D: permit bundled transport core");
                 allow.layerKey = layer; allow.subLayerKey = sub.subLayerKey;
                 allow.action.type = FWP_ACTION_PERMIT;
-                allow.weight.type = FWP_UINT8; allow.weight.uint8 = 16;
+                allow.weight.type = FWP_UINT8; allow.weight.uint8 = 15;
                 allow.numFilterConditions = 1; allow.filterCondition = &app;
                 error = FwpmFilterAdd0(engine, &allow, nullptr, nullptr);
                 if (error) break;
@@ -79,7 +79,7 @@ extern "C" __declspec(dllexport) DWORD __cdecl Vo1dGuardStart(
             filter.subLayerKey = sub.subLayerKey;
             filter.action.type = FWP_ACTION_BLOCK;
             filter.weight.type = FWP_UINT8;
-            filter.weight.uint8 = 15;
+            filter.weight.uint8 = 14;
             filter.numFilterConditions = 2;
             filter.filterCondition = conditions;
             UINT64 id = 0;
