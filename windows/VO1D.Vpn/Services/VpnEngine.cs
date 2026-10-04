@@ -68,7 +68,6 @@ public sealed class VpnEngine : IAsyncDisposable
                 _xray = Process.Start(new ProcessStartInfo(_xrayPath) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = RuntimeAssets.Root, ArgumentList = { "run", "-config", _xrayConfig } }) ?? throw new IOException("Xray не запустился.");
                 _job.Add(_xray);
                 transport = XrayConfig.LocalOutbound(xrayPort, password);
-                transport["bind_interface"] = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().First(x => x.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback).Name;
             }
             var config = TunnelConfig.Build(profile, proxyPort, _apiPort, _secret, password, outbound: transport);
             _config = Path.Combine(UserStore.Root, "tunnel-" + Guid.NewGuid().ToString("N") + ".json");
@@ -142,10 +141,10 @@ public sealed class VpnEngine : IAsyncDisposable
             {
                 if (!process.HasExited)
                 {
-                    NativeWindows.SignalStop(process);
-                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                    try { await process.WaitForExitAsync(timeout.Token); }
-                    catch (OperationCanceledException) { process.Kill(true); await process.WaitForExitAsync(); }
+                    // Attaching the GUI to a core's console to send CTRL_C
+                    // can terminate the GUI too. Stop only the owned process;
+                    // adapter routes are explicitly removed in finally.
+                    process.Kill(true); await process.WaitForExitAsync();
                 }
             }
             catch (InvalidOperationException) { }

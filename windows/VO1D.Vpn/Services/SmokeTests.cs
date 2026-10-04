@@ -85,9 +85,9 @@ public static class SmokeTests
                 await model.Engine.ConnectAsync($"vless://{uuid}@127.0.0.1:{xhttpPort}?security=none&type=xhttp&path=%2Fvo1d-xhttp&mode=auto", true, ct, new Uri($"http://198.18.0.2:{httpPort}/"), marker);
                 Assert(model.Engine.State == TunnelState.Connected, "XHTTP data plane verified through actual Xray + TUN");
                 await CheckPhysicalConnectionAsync(physicalIp, physicalIndex, true, ct);
-                await Task.Delay(600, ct); window.SaveScreenshot(Path.Combine(output, "xhttp-connected.png"));
-                await Task.Delay(600, ct); window.SaveScreenshot(Path.Combine(output, "motion-frame.png"));
-                Assert(!File.ReadAllBytes(Path.Combine(output, "xhttp-connected.png")).SequenceEqual(File.ReadAllBytes(Path.Combine(output, "motion-frame.png"))), "Connected vortex animates between real frames");
+                await Task.Delay(600, ct); window.SaveScreenshot(Path.Combine(output, "xhttp-connected.png")); window.SaveVortexScreenshot(Path.Combine(output, "vortex-a.png"));
+                await Task.Delay(600, ct); window.SaveScreenshot(Path.Combine(output, "motion-frame.png")); window.SaveVortexScreenshot(Path.Combine(output, "vortex-b.png"));
+                Assert(!File.ReadAllBytes(Path.Combine(output, "vortex-a.png")).SequenceEqual(File.ReadAllBytes(Path.Combine(output, "vortex-b.png"))), "Connected vortex animates between real frames");
                 model.Engine.AbortXrayForTest();
                 for (var i = 0; i < 20 && model.Engine.State != TunnelState.Blocked; i++) await Task.Delay(200, ct);
                 Assert(model.Engine.State == TunnelState.Blocked && model.Engine.GuardActive, "Xray crash leaves kill switch armed");

@@ -32,10 +32,6 @@ public sealed class KillGuard : IDisposable
 public static class NativeWindows
 {
     [DllImport("iphlpapi.dll")] private static extern uint GetBestInterfaceEx(IntPtr destination, out uint index);
-    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool AttachConsole(uint pid);
-    [DllImport("kernel32.dll")] private static extern bool FreeConsole();
-    [DllImport("kernel32.dll")] private static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add);
-    [DllImport("kernel32.dll")] private static extern bool GenerateConsoleCtrlEvent(uint signal, uint group);
     public static uint BestInterface(IPAddress ip)
     {
         var socket = new System.Net.IPEndPoint(ip, 443).Serialize();
@@ -48,12 +44,6 @@ public static class NativeWindows
     {
         var nic = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(x => x.Name == Core.TunnelConfig.InterfaceName && x.OperationalStatus == OperationalStatus.Up);
         return nic == null ? 0 : (uint)nic.GetIPProperties().GetIPv4Properties().Index;
-    }
-    public static bool SignalStop(Process process)
-    {
-        if (!AttachConsole((uint)process.Id)) return false;
-        try { SetConsoleCtrlHandler(IntPtr.Zero, true); return GenerateConsoleCtrlEvent(0, 0); }
-        finally { FreeConsole(); SetConsoleCtrlHandler(IntPtr.Zero, false); }
     }
     public static async Task CleanupOwnedRoutesAsync()
     {

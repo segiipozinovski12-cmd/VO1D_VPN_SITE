@@ -59,7 +59,7 @@ public sealed class ConnectionVortex : AnimatedVisual
         var size = Math.Min(ActualWidth, ActualHeight); if (size <= 0) return;
         var c = new Point(ActualWidth / 2, ActualHeight / 2); var r = size * .35;
         var active = State == TunnelState.Connected; var busy = State is TunnelState.Connecting or TunnelState.Disconnecting;
-        var intensity = active ? 1 : busy ? .84 : .52;
+        var intensity = active ? 1 : busy ? .92 : .74;
         var t = Time * (busy ? 1.7 : .30); var breathe = 1 + Math.Sin(Time * 1.6) * (active ? .018 : .008);
         dc.PushTransform(new ScaleTransform(breathe, breathe, c.X, c.Y));
         var glow = new RadialGradientBrush { Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5), RadiusX = .5, RadiusY = .5 };

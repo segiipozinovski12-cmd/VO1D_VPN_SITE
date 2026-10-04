@@ -118,6 +118,12 @@ public partial class MainWindow : Window
         try { await _model.DisposeAsync(); }
         finally { _tray.Dispose(); System.Windows.Application.Current.Shutdown(); }
     }
+    internal void SaveVortexScreenshot(string path)
+    {
+        UpdateLayout();
+        var bitmap = new RenderTargetBitmap((int)Vortex.ActualWidth, (int)Vortex.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(Vortex); var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap)); using var file = File.Create(path); png.Save(file);
+    }
     internal void SaveScreenshot(string path)
     {
         UpdateLayout(); var dpi = VisualTreeHelper.GetDpi(this);
