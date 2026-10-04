@@ -34,6 +34,10 @@ jobs:
             & windows/VO1D.Vpn/Assets/runtime/sing-box.exe check -c $_.FullName
             if ($LASTEXITCODE -ne 0) { throw "Invalid VPN config: $($_.Name)" }
           }
+          Get-ChildItem windows/test-configs/xray/*.json | ForEach-Object {
+            & windows/VO1D.Vpn/Assets/runtime/xray.exe run -test -config $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Invalid Xray config: $($_.Name)" }
+          }
       - name: Publish self-contained single Windows executable
         run: dotnet publish windows/VO1D.Vpn/VO1D.Vpn.csproj -c Release -r win-x64 --self-contained true -o windows/dist --nologo
       - name: Launch executable and verify TUN, IPv6, kill switch and disconnect
@@ -60,6 +64,16 @@ jobs:
           Copy-Item windows/VO1D.Vpn/Assets/runtime/*LICENSE.txt windows/dist/LICENSES/
           (Get-FileHash windows/dist/VO1D_VPN.exe -Algorithm SHA256).Hash.ToLower() + '  VO1D_VPN.exe' | Set-Content windows/dist/VO1D_VPN.exe.sha256
           Compress-Archive -Path windows/dist/* -DestinationPath windows/VO1D_VPN-Windows-x64.zip
+      - name: Verify live API and public Xray route through Windows TUN
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $report = Join-Path $PWD 'windows/smoke-results'
+          $exe = Join-Path $PWD 'windows/dist/VO1D_VPN.exe'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--live-network', $report) -PassThru
+          if (-not $process.WaitForExit(420000)) { Stop-Process -Id $process.Id -Force; throw 'Live public-route check timed out' }
+          if (Test-Path "$report/live-network.json") { Get-Content "$report/live-network.json" }
+          if ($process.ExitCode -ne 0) { throw "Public routes unavailable (exit $($process.ExitCode))" }
       - name: Upload checked Windows executable
         uses: actions/upload-artifact@v4
         with:

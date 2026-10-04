@@ -1,5 +1,9 @@
 # Third-party components
 
+- **Xray-core 26.3.27**, XTLS contributors, MPL-2.0. Original tag:
+  https://github.com/XTLS/Xray-core/tree/v26.3.27 . The unmodified upstream
+  binary and its `Xray-LICENSE.txt` are embedded and distributed in the ZIP.
+
 - **sing-box 1.14.2**, SagerNet / nekohasekai. Original source and exact tag:
   https://github.com/SagerNet/sing-box/tree/v1.14.2 . Distributed without
   modifications in the Windows bundle. The upstream LICENSE is embedded

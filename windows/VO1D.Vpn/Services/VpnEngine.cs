@@ -20,11 +20,14 @@ public sealed class VpnEngine : IAsyncDisposable
     private readonly SemaphoreSlim _gate = new(1);
     private bool _disposed;
     private Process? _process;
+    private Process? _xray;
+    private string? _xrayConfig;
     private CancellationTokenSource? _monitor;
     private string? _config;
     private int _apiPort;
     private string _secret = "";
     private string _core = "";
+    private string _xrayPath = "";
     public int? CorePid => _process?.Id;
 
     private void Change(TunnelState state, string message) { State = state; StateChanged?.Invoke(state, message); }
@@ -41,7 +44,7 @@ public sealed class VpnEngine : IAsyncDisposable
             if (!IPAddress.TryParse(profile.Host, out _))
             {
                 var ips = await Dns.GetHostAddressesAsync(profile.Host, ct);
-                profile.Outbound["server"] = (ips.FirstOrDefault(x => x.AddressFamily == AddressFamily.InterNetwork) ?? ips.FirstOrDefault() ?? throw new IOException("Не удалось найти VPN-сервер.")).ToString();
+                profile.SetEndpoint((ips.FirstOrDefault(x => x.AddressFamily == AddressFamily.InterNetwork) ?? ips.FirstOrDefault() ?? throw new IOException("Не удалось найти VPN-сервер.")).ToString());
             }
             if (testProbe != null)
             {
@@ -53,13 +56,28 @@ public sealed class VpnEngine : IAsyncDisposable
             while (_apiPort == proxyPort) _apiPort = FreePort();
             _secret = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
             var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
-            var config = TunnelConfig.Build(profile, proxyPort, _apiPort, _secret, password);
+            System.Text.Json.Nodes.JsonObject? transport = null;
+            if (profile.XrayOutbound != null)
+            {
+                Change(TunnelState.Connecting, "Запускаем Xray · защищённый транспорт…");
+                _xrayPath = Path.Combine(RuntimeAssets.Root, "xray.exe");
+                var xrayPort = FreePort();
+                while (xrayPort == proxyPort || xrayPort == _apiPort) xrayPort = FreePort();
+                _xrayConfig = Path.Combine(UserStore.Root, "xray-" + Guid.NewGuid().ToString("N") + ".json");
+                await File.WriteAllTextAsync(_xrayConfig, XrayConfig.Build(profile, xrayPort, password).ToJsonString(), ct);
+                _xray = Process.Start(new ProcessStartInfo(_xrayPath) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = RuntimeAssets.Root, ArgumentList = { "run", "-config", _xrayConfig } }) ?? throw new IOException("Xray не запустился.");
+                _job.Add(_xray);
+                transport = XrayConfig.LocalOutbound(xrayPort, password);
+                transport["bind_interface"] = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().First(x => x.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback).Name;
+            }
+            var config = TunnelConfig.Build(profile, proxyPort, _apiPort, _secret, password, outbound: transport);
             _config = Path.Combine(UserStore.Root, "tunnel-" + Guid.NewGuid().ToString("N") + ".json");
             await File.WriteAllTextAsync(_config, config.ToJsonString(), ct);
             var start = new ProcessStartInfo(_core) { UseShellExecute = false, CreateNoWindow = false, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = RuntimeAssets.Root };
             start.ArgumentList.Add("run"); start.ArgumentList.Add("-c"); start.ArgumentList.Add(_config);
             _process = Process.Start(start) ?? throw new IOException("VPN-ядро не запустилось.");
             _job.Add(_process);
+            Change(TunnelState.Connecting, "Проверяем передачу данных через VPN…");
             var probe = testProbe ?? new Uri("https://1.1.1.1/cdn-cgi/trace");
             var marker = testMarker ?? "ip=";
             using var proxyClient = new HttpClient(new HttpClientHandler { UseProxy = true, Proxy = new WebProxy($"http://127.0.0.1:{proxyPort}") { Credentials = new NetworkCredential("vo1d", password) } }) { Timeout = TimeSpan.FromSeconds(5) };
@@ -70,6 +88,7 @@ public sealed class VpnEngine : IAsyncDisposable
             {
                 ct.ThrowIfCancellationRequested();
                 if (_process.HasExited) throw new IOException($"VPN-ядро завершилось (код {_process.ExitCode}). Маршрут несовместим или адаптер недоступен.");
+                if (_xray is { HasExited: true }) throw new IOException($"Xray завершился (код {_xray.ExitCode}). Попробуйте другой маршрут.");
                 try
                 {
                     trace = await proxyClient.GetStringAsync(probe, ct);
@@ -83,7 +102,8 @@ public sealed class VpnEngine : IAsyncDisposable
             var index = NativeWindows.TunIndex();
             var probeIp = IPAddress.TryParse(probe.Host, out var parsed) ? parsed : IPAddress.Parse("1.1.1.1");
             if (index == 0 || NativeWindows.BestInterface(probeIp) != index) throw new IOException("Windows не направил трафик в VPN-адаптер.");
-            if (killSwitch) _guard.Enable(_core, index);
+            if (killSwitch) _guard.Enable(_core, index, _xray == null ? "" : _xrayPath);
+            Change(TunnelState.Connecting, "Проверяем системный маршрут и защиту…");
             // A second request without a proxy verifies the computer's actual
             // default route, after the kill-switch filters have been applied.
             using var direct = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(8) };
@@ -132,6 +152,8 @@ public sealed class VpnEngine : IAsyncDisposable
             finally { process.Dispose(); await NativeWindows.CleanupOwnedRoutesAsync(); }
         }
         if (_config != null) { try { File.Delete(_config); } catch (IOException) { } _config = null; }
+        if (_xray != null) { try { if (!_xray.HasExited) { _xray.Kill(true); await _xray.WaitForExitAsync(); } } catch (InvalidOperationException) { } finally { _xray.Dispose(); _xray = null; } }
+        if (_xrayConfig != null) { try { File.Delete(_xrayConfig); } catch (IOException) { } _xrayConfig = null; }
     }
     private async Task MonitorAsync(Process process, CancellationToken ct, Uri probe, string marker)
     {
@@ -146,7 +168,7 @@ public sealed class VpnEngine : IAsyncDisposable
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(1000, ct);
-                if (process.HasExited)
+                if (process.HasExited || _xray is { HasExited: true })
                 {
                     Change(_guard.Active ? TunnelState.Blocked : TunnelState.Failed, _guard.Active ? "VPN оборвался. Kill Switch блокирует выход в сеть. Переподключитесь или отключите защиту." : "VPN оборвался. Подключитесь снова.");
                     return;
@@ -180,5 +202,6 @@ public sealed class VpnEngine : IAsyncDisposable
     private static string ExtractIp(string trace) => trace.Split('\n').FirstOrDefault(x => x.StartsWith("ip="))?[3..].Trim() ?? throw new IOException("Не удалось проверить внешний IP.");
     public static int FreePort() { var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); return port; }
     public void AbortCoreForTest() { if (_process is { HasExited: false }) _process.Kill(true); }
+    public void AbortXrayForTest() { if (_xray is { HasExited: false }) _xray.Kill(true); }
     public async ValueTask DisposeAsync() { if (_disposed) return; _disposed = true; await DisconnectAsync(); _guard.Dispose(); _job.Dispose(); _gate.Dispose(); }
 }

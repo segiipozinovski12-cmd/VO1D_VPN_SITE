@@ -4,6 +4,7 @@ using VO1D.Vpn.Core;
 
 var output = args.Length > 0 ? args[0] : Path.Combine(Path.GetTempPath(), "vo1d-config-tests");
 Directory.CreateDirectory(output);
+Directory.CreateDirectory(Path.Combine(output, "xray"));
 int checks = 0;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); checks++; }
 void Reject(Action action, string name) { try { action(); } catch (Exception e) when (e is FormatException or NotSupportedException) { checks++; return; } throw new Exception("Did not reject: " + name); }
@@ -20,6 +21,7 @@ var fixtures = new Dictionary<string,string> {
     ["vless-reality"] = $"vless://{uuid}@192.0.2.1:443?security=reality&sni=example.com&pbk={pubkey}&sid=abcd&flow=xtls-rprx-vision&type=tcp#Test",
     ["vless-ws"] = $"vless://{uuid}@example.com:443?security=tls&sni=example.com&type=ws&host=example.com&path=%2Fvpn%3Fed%3D2048",
     ["vless-grpc"] = $"vless://{uuid}@example.com:443?security=tls&type=grpc&serviceName=service",
+    ["vless-xhttp-reality"] = $"vless://{uuid}@192.0.2.1:443?security=reality&sni=example.com&pbk={pubkey}&sid=abcd&type=xhttp&path=%2Fxhttp-proxy&mode=auto&extra=%7B%22noSSEHeader%22%3Atrue%2C%22scMaxEachPostBytes%22%3A1000000%7D#RU",
     ["trojan"] = "trojan://secret%3Acolon@example.com:443?security=tls&sni=example.com#Trojan",
     ["hy2"] = "hysteria2://test@example.com:443?sni=example.com&obfs=salamander&obfs-password=test",
     ["ss"] = "ss://" + B64("aes-256-gcm:secret:colon") + "@192.0.2.2:8388#SS",
@@ -29,9 +31,10 @@ foreach (var (name, uri) in fixtures)
 {
     var p = ProxyProfile.Parse(uri);
     Check(p.Port > 0 && p.Host.Length > 0, name + " endpoint");
-    var config = TunnelConfig.Build(p, 29880, 29881, "test-secret", "test-password");
+    var config = TunnelConfig.Build(p, 29880, 29881, "test-secret", "test-password", outbound: p.XrayOutbound == null ? null : XrayConfig.LocalOutbound(29882, "xray-test"));
     Check(config["route"]!["final"]!.ToString() == "proxy", name + " no direct fallback");
     File.WriteAllText(Path.Combine(output, name + ".json"), config.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    if (p.XrayOutbound != null) File.WriteAllText(Path.Combine(output, "xray", name + ".json"), XrayConfig.Build(p, 29882, "xray-test").ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
 }
 var ws = ProxyProfile.Parse(fixtures["vless-ws"]);
 Check(ws.Outbound["transport"]!["path"]!.ToString() == "/vpn", "WS path / early data split");
@@ -41,7 +44,16 @@ Check(ProxyProfile.Parse(fixtures["ss"]).Outbound["password"]!.ToString() == "se
 Reject(() => ProxyProfile.Parse($"vless://{uuid}@example.com:443?security=none"), "unencrypted VLESS");
 Reject(() => ProxyProfile.Parse($"vless://{uuid}@example.com:443?security=tls&allowInsecure=1"), "insecure TLS");
 Reject(() => ProxyProfile.Parse($"vless://{uuid}@example.com:443?security=reality"), "missing REALITY key");
-Reject(() => ProxyProfile.Parse($"vless://{uuid}@example.com:443?security=tls&type=xhttp"), "unsupported xhttp without false success");
+var ru = ProxyProfile.Parse(fixtures["vless-xhttp-reality"]);
+Check(ru.XrayOutbound!["streamSettings"]!["network"]!.ToString() == "xhttp", "pinned RU uses actual Xray XHTTP");
+Check(ru.XrayOutbound["streamSettings"]!["xhttpSettings"]!["extra"]!["noSSEHeader"]!.GetValue<bool>(), "pinned RU extra retained");
+Check(ru.XrayOutbound["streamSettings"]!["xhttpSettings"]!["path"]!.ToString() == "/xhttp-proxy", "pinned RU path retained");
+ru.SetEndpoint("192.0.2.20");
+Check(ru.XrayOutbound["settings"]!["vnext"]![0]!["address"]!.ToString() == "192.0.2.20", "Xray endpoint resolved before TUN");
+Check(TunnelConfig.Build(ru, 29880, 29881, "secret", "pass", outbound: XrayConfig.LocalOutbound(29882,"pass"))["inbounds"]![0]!["route_exclude_address"]![0]!.ToString() == "192.0.2.20/32", "Xray endpoint excluded from capture loop");
+Reject(() => ProxyProfile.Parse($"vless://{uuid}@example.com:443?security=tls&type=xhttp&extra=broken"), "invalid XHTTP extra");
+Reject(() => ProxyProfile.Parse($"vless://{uuid}@example.com:443?security=tls&type=xhttp&mode=unknown"), "invalid XHTTP mode");
+Check(new Preferences().ApiUrl == "https://sincere-commitment-production-8e4e.up.railway.app", "same live backend as reference iOS");
 Reject(() => ProxyProfile.Parse("vless://bad@example.com:443?security=tls"), "invalid UUID");
 Reject(() => ProxyProfile.Parse("https://example.com"), "unsupported scheme");
 var tun = TunnelConfig.Build(ProxyProfile.Parse(fixtures["vless-reality"]), 29880, 29881, "secret", "password");

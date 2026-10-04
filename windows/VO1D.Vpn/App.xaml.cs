@@ -22,13 +22,19 @@ public partial class App : System.Windows.Application
             if (e.Args.Length >= 2 && e.Args[0] == "--smoke-test") System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
             Model = new AppViewModel();
             var window = new MainWindow(Model); MainWindow = window; window.Show();
+            if (e.Args.Length >= 2 && e.Args[0] == "--live-network")
+            {
+                try { await window.RevealAsync(); await LiveNetworkTests.RunAsync(Model, e.Args[1]); await Model.DisposeAsync(); Shutdown(0); }
+                catch (Exception error) { Directory.CreateDirectory(e.Args[1]); await File.WriteAllTextAsync(Path.Combine(e.Args[1], "live-failure.txt"), error.ToString()); await Model.DisposeAsync(); Shutdown(2); }
+                return;
+            }
             if (e.Args.Length >= 2 && e.Args[0] == "--smoke-test")
             {
                 await SmokeTests.RunAsync(Model, window, e.Args[1]);
                 await Model.DisposeAsync(); Shutdown(0); return;
             }
             // Never hold the initial screen on backend network requests.
-            window.Reveal();
+            await window.RevealAsync();
             await Model.BootstrapAsync();
         }
         catch (Exception error)
@@ -41,6 +47,15 @@ public partial class App : System.Windows.Application
             }
             MessageBox.Show(error.Message, "Не удалось открыть VO1D", MessageBoxButton.OK, MessageBoxImage.Error); Shutdown(1);
         }
+    }
+    private void ButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => AnimateButton(sender, .965, 100);
+    private void ButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => AnimateButton(sender, 1, 260);
+    private void AnimateButton(object sender, double scale, int duration)
+    {
+        if (Model?.ReduceAnimations == true || sender is not System.Windows.Controls.Button button) return;
+        if (button.RenderTransform is not System.Windows.Media.ScaleTransform transform) { transform = new System.Windows.Media.ScaleTransform(); button.RenderTransform = transform; }
+        var animation = new System.Windows.Media.Animation.DoubleAnimation(scale, TimeSpan.FromMilliseconds(duration)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+        transform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, animation); transform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, animation);
     }
     private async void SelectServer(object sender, RoutedEventArgs e) { if (sender is System.Windows.Controls.Button { Tag: VpnServer server } && Model != null) await Model.SelectAsync(server); }
     private void FavoriteServer(object sender, RoutedEventArgs e) { if (sender is System.Windows.Controls.Button { Tag: VpnServer server }) Model?.Favorite(server); }

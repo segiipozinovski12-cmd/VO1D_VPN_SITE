@@ -16,7 +16,7 @@ public static class SmokeTests
     // credentials. Screenshots containing the test route are labelled TEST.
     public static async Task RunAsync(AppViewModel model, MainWindow window, string output)
     {
-        Directory.CreateDirectory(output); window.Reveal(); await Task.Delay(700);
+        Directory.CreateDirectory(output); window.SaveScreenshot(Path.Combine(output, "boot.png")); await window.RevealAsync(); await Task.Delay(700);
         window.SaveScreenshot(Path.Combine(output, "login.png"));
         var core = RuntimeAssets.Ensure();
         var serverPort = VpnEngine.FreePort(); var httpPort = VpnEngine.FreePort();
@@ -65,7 +65,39 @@ public static class SmokeTests
             await CheckPhysicalConnectionAsync(physicalIp, physicalIndex, false, ct);
             Assert(NativeWindows.BestInterface(IPAddress.Parse("1.1.1.1")) != NativeWindows.TunIndex() || NativeWindows.TunIndex() == 0, "Physical route restored");
             Assert(!Directory.EnumerateFiles(UserStore.Root, "tunnel-*.json").Any(), "Tunnel credentials removed after disconnect");
-            await File.WriteAllTextAsync(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { success = true, executable_started = true, local_vless_data_plane = true, ipv4_tun = true, ipv6_tun = true, wfp_bypass_blocked = true, core_crash_blocks_traffic = true, disconnect_restores_network = true, production_endpoint_tested = false }, new JsonSerializerOptions { WriteIndented = true }), ct);
+            var xhttpPort = VpnEngine.FreePort();
+            var xhttpServer = new JsonObject {
+                ["log"] = new JsonObject { ["loglevel"] = "none" },
+                ["inbounds"] = new JsonArray(new JsonObject {
+                    ["listen"] = "127.0.0.1", ["port"] = xhttpPort, ["protocol"] = "vless",
+                    ["settings"] = new JsonObject { ["clients"] = new JsonArray(new JsonObject { ["id"] = uuid }), ["decryption"] = "none" },
+                    ["streamSettings"] = new JsonObject { ["network"] = "xhttp", ["security"] = "none", ["xhttpSettings"] = new JsonObject { ["path"] = "/vo1d-xhttp", ["mode"] = "auto" } }
+                }),
+                ["outbounds"] = new JsonArray(new JsonObject { ["protocol"] = "freedom", ["settings"] = new JsonObject { ["redirect"] = $"127.0.0.1:{httpPort}" } })
+            };
+            var xhttpPath = Path.Combine(output, "test-xhttp.json"); await File.WriteAllTextAsync(xhttpPath, xhttpServer.ToJsonString(), ct);
+            using var xhttpCore = Process.Start(new ProcessStartInfo(Path.Combine(RuntimeAssets.Root, "xray.exe")) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = RuntimeAssets.Root, ArgumentList = { "run", "-config", xhttpPath } }) ?? throw new IOException("XHTTP server did not launch");
+            serverJob.Add(xhttpCore);
+            try
+            {
+                await Task.Delay(700, ct);
+                model.Page = "home";
+                await model.Engine.ConnectAsync($"vless://{uuid}@127.0.0.1:{xhttpPort}?security=none&type=xhttp&path=%2Fvo1d-xhttp&mode=auto", true, ct, new Uri($"http://198.18.0.2:{httpPort}/"), marker);
+                Assert(model.Engine.State == TunnelState.Connected, "XHTTP data plane verified through actual Xray + TUN");
+                await CheckPhysicalConnectionAsync(physicalIp, physicalIndex, true, ct);
+                await Task.Delay(600, ct); window.SaveScreenshot(Path.Combine(output, "xhttp-connected.png"));
+                await Task.Delay(600, ct); window.SaveScreenshot(Path.Combine(output, "motion-frame.png"));
+                Assert(!File.ReadAllBytes(Path.Combine(output, "xhttp-connected.png")).SequenceEqual(File.ReadAllBytes(Path.Combine(output, "motion-frame.png"))), "Connected vortex animates between real frames");
+                model.Engine.AbortXrayForTest();
+                for (var i = 0; i < 20 && model.Engine.State != TunnelState.Blocked; i++) await Task.Delay(200, ct);
+                Assert(model.Engine.State == TunnelState.Blocked && model.Engine.GuardActive, "Xray crash leaves kill switch armed");
+                await CheckPhysicalConnectionAsync(physicalIp, physicalIndex, true, ct);
+                await model.Engine.DisconnectAsync();
+                await CheckPhysicalConnectionAsync(physicalIp, physicalIndex, false, ct);
+                Assert(!Directory.EnumerateFiles(UserStore.Root, "xray-*.json").Any(), "Xray credentials removed after disconnect");
+            }
+            finally { if (!xhttpCore.HasExited) xhttpCore.Kill(true); await model.Engine.DisconnectAsync(); File.Delete(xhttpPath); }
+            await File.WriteAllTextAsync(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { success = true, executable_started = true, local_vless_data_plane = true, xray_xhttp_data_plane = true, ipv4_tun = true, ipv6_tun = true, wfp_bypass_blocked = true, core_crash_blocks_traffic = true, xray_crash_blocks_traffic = true, disconnect_restores_network = true, animations_rendered = true, production_endpoint_tested = false }, new JsonSerializerOptions { WriteIndented = true }), ct);
         }
         finally
         {

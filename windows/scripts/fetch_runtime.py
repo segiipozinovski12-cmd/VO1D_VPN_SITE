@@ -10,6 +10,9 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "VO1D.Vpn" / "Assets" / "runtime"
 PACKAGES = [
+    ("https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-windows-64.zip",
+     "d004c39288ce9ada487c6f398c7c545f7d749e44bdfdd59dbc9f865afba4e1ad",
+     {"xray.exe": "xray.exe", "LICENSE": "Xray-LICENSE.txt"}),
     ("https://github.com/SagerNet/sing-box/releases/download/v1.14.2/sing-box-1.14.2-windows-amd64.zip",
      "c2d8bfff918755808781dfdeeb8581b6c91eb3a243d9a7b55483cfc0c0684d32",
      {"sing-box-1.14.2-windows-amd64/sing-box.exe": "sing-box.exe",
@@ -36,7 +39,7 @@ def main():
                 (TARGET / name).write_bytes(content)
                 hashes[name] = hashlib.sha256(content).hexdigest()
     (TARGET / "upstream-hashes.json").write_text(json.dumps(hashes, indent=2), encoding="utf-8")
-    print("Verified sing-box 1.14.2 and Wintun 0.14.1 (Windows x64)")
+    print("Verified Xray 26.3.27, sing-box 1.14.2 and Wintun 0.14.1 (Windows x64)")
 
 if __name__ == "__main__":
     main()

@@ -9,12 +9,12 @@ public sealed class KillGuard : IDisposable
 {
     private IntPtr _engine;
     private static IntPtr _library;
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Unicode)] private delegate uint StartDelegate([MarshalAs(UnmanagedType.LPWStr)] string core, uint index, out IntPtr handle);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Unicode)] private delegate uint StartDelegate([MarshalAs(UnmanagedType.LPWStr)] string core, [MarshalAs(UnmanagedType.LPWStr)] string xray, uint index, out IntPtr handle);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void StopDelegate(IntPtr handle);
     private static StartDelegate? _start;
     private static StopDelegate? _stop;
     public bool Active => _engine != IntPtr.Zero;
-    public void Enable(string core, uint index)
+    public void Enable(string core, uint index, string xray = "")
     {
         if (_library == IntPtr.Zero)
         {
@@ -23,7 +23,7 @@ public sealed class KillGuard : IDisposable
             _stop = Marshal.GetDelegateForFunctionPointer<StopDelegate>(NativeLibrary.GetExport(_library, "Vo1dGuardStop"));
         }
         Dispose();
-        var error = _start!(core, index, out _engine);
+        var error = _start!(core, xray, index, out _engine);
         if (error != 0) throw new System.ComponentModel.Win32Exception((int)error, "Windows не удалось включить Kill Switch.");
     }
     public void Dispose() { if (_engine != IntPtr.Zero) { _stop!(_engine); _engine = IntPtr.Zero; } }

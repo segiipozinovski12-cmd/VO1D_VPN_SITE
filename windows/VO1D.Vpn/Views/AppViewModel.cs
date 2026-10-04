@@ -21,6 +21,7 @@ public sealed class AppViewModel : ObservableObject, IAsyncDisposable
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
     public ObservableCollection<VpnServer> Servers { get; } = [];
     public ObservableCollection<VpnServer> FilteredServers { get; } = [];
+    public IEnumerable<VpnServer> PreviewServers => Servers.OrderByDescending(x => x.Selected).ThenBy(x => x.Ping ?? int.MaxValue).Take(2);
     public Account? Account { get; private set; }
     private string _page = "home";
     public string Page { get => _page; set { Set(ref _page, value); Notify(nameof(HomeVisible)); Notify(nameof(ServersVisible)); Notify(nameof(ProfileVisible)); Notify(nameof(SettingsVisible)); } }
@@ -33,7 +34,8 @@ public sealed class AppViewModel : ObservableObject, IAsyncDisposable
     public Visibility LoginVisible => HasAccess ? Visibility.Collapsed : Visibility.Visible;
     public Visibility AppVisible => HasAccess ? Visibility.Visible : Visibility.Collapsed;
     private bool _busy;
-    public bool Busy { get => _busy; private set { Set(ref _busy, value); Notify(nameof(CanActivate)); } }
+    public bool Busy { get => _busy; private set { Set(ref _busy, value); Notify(nameof(CanActivate)); Notify(nameof(ActivationLabel)); } }
+    public string ActivationLabel => Busy ? "Проверяем ключ…" : "Активировать доступ";
     public bool CanActivate => !Busy;
     private string _error = "";
     public string Error { get => _error; set { Set(ref _error, value); Notify(nameof(ErrorVisible)); } }
@@ -62,7 +64,7 @@ public sealed class AppViewModel : ObservableObject, IAsyncDisposable
     public TunnelState State { get => _state; private set { Set(ref _state, value); Notify(nameof(IsConnected)); Notify(nameof(IsConnecting)); Notify(nameof(StatusTitle)); Notify(nameof(PowerGlyph)); Notify(nameof(StatusLabel)); Notify(nameof(Protection)); } }
     public bool IsConnected => State == TunnelState.Connected;
     public bool IsConnecting => _connectionOperation || State is TunnelState.Connecting or TunnelState.Disconnecting;
-    public string StatusTitle => State switch { TunnelState.Connected => "Вы в VO1D", TunnelState.Connecting => "Подключение…", TunnelState.Disconnecting => "Отключение…", TunnelState.Blocked => "Трафик заблокирован", TunnelState.Failed => "Подключение не удалось", _ => "Войти в анонимность" };
+    public string StatusTitle => State switch { TunnelState.Connected => "Вы в VO1D", TunnelState.Connecting => "Подключение…", TunnelState.Disconnecting => "Отключение…", TunnelState.Blocked => "Трафик заблокирован", TunnelState.Failed => "Подключение не удалось", _ => "Нажмите, чтобы подключиться" };
     public string PowerGlyph => IsConnected ? "✓" : "⏻";
     public string StatusLabel => State switch { TunnelState.Connected => "CONNECTED", TunnelState.Connecting => "CONNECTING", TunnelState.Disconnecting => "DISCONNECTING", TunnelState.Blocked => "KILL SWITCH ACTIVE", TunnelState.Failed => "CONNECTION ERROR", _ => "NOT CONNECTED" };
     public string Protection => IsConnected ? "IPv4 + IPv6 · DNS через VPN" : State == TunnelState.Blocked ? "Выход в сеть остановлен" : "Защита включится после подключения";
@@ -92,7 +94,7 @@ public sealed class AppViewModel : ObservableObject, IAsyncDisposable
         _clock.Tick += (_, _) => Notify(nameof(Duration)); _clock.Start();
     }
     private static void OnUi(Action action) { if (Application.Current.Dispatcher.CheckAccess()) action(); else Application.Current.Dispatcher.BeginInvoke(action); }
-    private void NotifyRoute() { Notify(nameof(Location)); Notify(nameof(LocationCode)); Notify(nameof(Protocol)); Notify(nameof(Ping)); }
+    private void NotifyRoute() { Notify(nameof(Location)); Notify(nameof(LocationCode)); Notify(nameof(Protocol)); Notify(nameof(Ping)); Notify(nameof(PreviewServers)); }
     public async Task BootstrapAsync()
     {
         LoadImported();
@@ -154,6 +156,7 @@ public sealed class AppViewModel : ObservableObject, IAsyncDisposable
     {
         FilteredServers.Clear();
         foreach (var server in Servers.Where(x => (!FavoritesOnly || x.Favorite) && (x.Name.Contains(Search, StringComparison.OrdinalIgnoreCase) || x.Code.Contains(Search, StringComparison.OrdinalIgnoreCase))).OrderBy(x => x.Ping ?? int.MaxValue).ThenBy(x => x.Name)) FilteredServers.Add(server);
+        Notify(nameof(PreviewServers));
     }
     public void Favorite(VpnServer server) { server.Favorite = !server.Favorite; Store.Settings.Favorites = Servers.Where(x => x.Favorite).Select(x => x.Id).ToList(); Store.SaveSettings(); FilterServers(); }
     public async Task SelectAsync(VpnServer server)

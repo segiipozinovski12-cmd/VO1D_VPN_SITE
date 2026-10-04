@@ -44,7 +44,8 @@ public sealed class Preferences
 {
     public string DeviceId { get; set; } = Guid.NewGuid().ToString();
     public string Nickname { get; set; } = "VO1D USER";
-    public string ApiUrl { get; set; } = "";
+    public const string DefaultApiUrl = "https://sincere-commitment-production-8e4e.up.railway.app";
+    public string ApiUrl { get; set; } = DefaultApiUrl;
     public string SelectedId { get; set; } = "";
     public bool AutoConnect { get; set; }
     public bool KillSwitch { get; set; } = true;

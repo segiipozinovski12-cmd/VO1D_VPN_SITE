@@ -6,6 +6,7 @@ namespace VO1D.Vpn.Core;
 public sealed class ProxyProfile
 {
     public JsonObject Outbound { get; private set; } = new();
+    public JsonObject? XrayOutbound { get; private set; }
     public string Host => Outbound["server"]!.GetValue<string>();
     public int Port => Outbound["server_port"]!.GetValue<int>();
     public string Name { get; private set; } = "Импортированный сервер";
@@ -54,7 +55,9 @@ public sealed class ProxyProfile
         }
         if (o["type"]?.ToString() == "vless" && o["tls"] == null && !allowPlaintextForLocalTest)
             throw new NotSupportedException("Для VLESS нужен TLS или REALITY. Выберите защищённый маршрут.");
-        return Create(o, Uri.UnescapeDataString(uri.Fragment.TrimStart('#')));
+        var profile = Create(o, Uri.UnescapeDataString(uri.Fragment.TrimStart('#')));
+        if (uri.Scheme == "vless") profile.XrayOutbound = XrayConfig.VlessOutbound(profile, q);
+        return profile;
     }
 
     private static ProxyProfile ParseVmess(string text)
@@ -141,9 +144,16 @@ public sealed class ProxyProfile
                 if (Get(q, "host").Length > 0) t["host"] = new JsonArray(Get(q, "host").Split(',').Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
                 break;
             case "httpupgrade": t = new() { ["type"] = "httpupgrade", ["host"] = Get(q, "host"), ["path"] = Get(q, "path", "/") }; break;
+            case "xhttp": return; // Routed through the bundled Xray core, not a sing-box VLESS outbound.
             default: throw new NotSupportedException($"Транспорт {type} пока не поддерживается. Приложение попробует другой маршрут.");
         }
         outbound["transport"] = t;
+    }
+
+    public void SetEndpoint(string address)
+    {
+        Outbound["server"] = address;
+        if (XrayOutbound != null) XrayOutbound["settings"]!["vnext"]![0]!["address"] = address;
     }
 
     public static Dictionary<string, string> Query(string text)

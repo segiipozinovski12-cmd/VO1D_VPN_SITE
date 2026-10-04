@@ -27,6 +27,7 @@ node_modules/
 windows/**/bin/
 windows/**/obj/
 windows/VO1D.Vpn/Assets/runtime/
+*_wpftmp.csproj
 windows/dist/
 windows/test-configs/
 windows/smoke-results/

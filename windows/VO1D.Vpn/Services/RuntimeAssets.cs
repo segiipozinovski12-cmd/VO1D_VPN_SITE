@@ -5,7 +5,7 @@ namespace VO1D.Vpn.Services;
 
 public static class RuntimeAssets
 {
-    public const string Version = "1.14.2";
+    public const string Version = "2-xray26.3.27-sing1.14.2";
     public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "VO1D_VPN", "runtime", Version);
     public static string Ensure()
     {
@@ -16,7 +16,7 @@ public static class RuntimeAssets
             if (dir.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new IOException("Каталог VPN содержит небезопасную ссылку.");
         var assembly = Assembly.GetExecutingAssembly();
         var names = assembly.GetManifestResourceNames().Where(x => x.Contains(".Assets.runtime.")).ToArray();
-        if (!names.Any(x => x.EndsWith("sing-box.exe")) || !names.Any(x => x.EndsWith("wintun.dll")) || !names.Any(x => x.EndsWith("vo1d-guard.dll")))
+        if (!names.Any(x => x.EndsWith("xray.exe")) || !names.Any(x => x.EndsWith("sing-box.exe")) || !names.Any(x => x.EndsWith("wintun.dll")) || !names.Any(x => x.EndsWith("vo1d-guard.dll")))
             throw new IOException("В сборке отсутствует VPN-ядро. Скачайте полный VO1D_VPN.exe.");
         foreach (var name in names)
         {

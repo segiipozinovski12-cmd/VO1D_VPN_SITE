@@ -18,7 +18,7 @@ static const GUID authConnect6 = {0x4a72393b,0x319f,0x44bc,{0x84,0xc3,0xba,0x54,
 // change the computer's persistent firewall policy. Non-core processes may
 // use the TUN and loopback, but cannot bypass the tunnel on a physical NIC.
 extern "C" __declspec(dllexport) DWORD __cdecl Vo1dGuardStart(
-    const wchar_t* corePath, ULONG tunIndex, HANDLE* result)
+    const wchar_t* corePath, const wchar_t* xrayPath, ULONG tunIndex, HANDLE* result)
 {
     *result = nullptr;
     NET_LUID luid{};
@@ -33,29 +33,46 @@ extern "C" __declspec(dllexport) DWORD __cdecl Vo1dGuardStart(
     FWP_BYTE_BLOB* appId = nullptr;
     error = FwpmGetAppIdFromFileName0(corePath, &appId);
     if (error) { FwpmEngineClose0(engine); return error; }
-    error = FwpmTransactionBegin0(engine, 0);
+    FWP_BYTE_BLOB* xrayId = nullptr;
+    if (xrayPath && *xrayPath) error = FwpmGetAppIdFromFileName0(xrayPath, &xrayId);
     if (error) { FwpmFreeMemory0((void**)&appId); FwpmEngineClose0(engine); return error; }
+    error = FwpmTransactionBegin0(engine, 0);
+    if (error) { FwpmFreeMemory0((void**)&appId); if (xrayId) FwpmFreeMemory0((void**)&xrayId); FwpmEngineClose0(engine); return error; }
     FWPM_SUBLAYER0 sub{};
     sub.subLayerKey = {0xbba23f40,0x8402,0x46a5,{0x91,0x45,0x6c,0x91,0x87,0xbc,0x35,0x10}};
     sub.displayData.name = const_cast<wchar_t*>(L"VO1D ephemeral kill switch");
     sub.weight = 0xF000;
     error = FwpmSubLayerAdd0(engine, &sub, nullptr);
     if (!error) {
-        FWPM_FILTER_CONDITION0 conditions[3]{};
-        conditions[0].fieldKey = aleAppId;
+        FWPM_FILTER_CONDITION0 conditions[2]{};
+        conditions[0].fieldKey = localInterface;
         conditions[0].matchType = FWP_MATCH_NOT_EQUAL;
-        conditions[0].conditionValue.type = FWP_BYTE_BLOB_TYPE;
-        conditions[0].conditionValue.byteBlob = appId;
-        conditions[1].fieldKey = localInterface;
-        conditions[1].matchType = FWP_MATCH_NOT_EQUAL;
-        conditions[1].conditionValue.type = FWP_UINT64;
-        conditions[1].conditionValue.uint64 = &luid.Value;
-        conditions[2].fieldKey = conditionFlags;
-        conditions[2].matchType = FWP_MATCH_FLAGS_NONE_SET;
-        conditions[2].conditionValue.type = FWP_UINT32;
-        conditions[2].conditionValue.uint32 = FWP_CONDITION_FLAG_IS_LOOPBACK;
+        conditions[0].conditionValue.type = FWP_UINT64;
+        conditions[0].conditionValue.uint64 = &luid.Value;
+        conditions[1].fieldKey = conditionFlags;
+        conditions[1].matchType = FWP_MATCH_FLAGS_NONE_SET;
+        conditions[1].conditionValue.type = FWP_UINT32;
+        conditions[1].conditionValue.uint32 = FWP_CONDITION_FLAG_IS_LOOPBACK;
         const GUID layers[] = {authConnect4, authConnect6};
         for (const auto& layer : layers) {
+            // Higher weight permits in this sublayer exempt only the two
+            // protected bundled cores. Other Windows firewall rules still apply.
+            FWP_BYTE_BLOB* permitted[] = {appId, xrayId};
+            for (auto* id : permitted) {
+                if (!id) continue;
+                FWPM_FILTER_CONDITION0 app{};
+                app.fieldKey = aleAppId; app.matchType = FWP_MATCH_EQUAL;
+                app.conditionValue.type = FWP_BYTE_BLOB_TYPE; app.conditionValue.byteBlob = id;
+                FWPM_FILTER0 allow{};
+                allow.displayData.name = const_cast<wchar_t*>(L"VO1D: permit bundled transport core");
+                allow.layerKey = layer; allow.subLayerKey = sub.subLayerKey;
+                allow.action.type = FWP_ACTION_PERMIT;
+                allow.weight.type = FWP_UINT8; allow.weight.uint8 = 16;
+                allow.numFilterConditions = 1; allow.filterCondition = &app;
+                error = FwpmFilterAdd0(engine, &allow, nullptr, nullptr);
+                if (error) break;
+            }
+            if (error) break;
             FWPM_FILTER0 filter{};
             filter.displayData.name = const_cast<wchar_t*>(L"VO1D: prevent physical-interface bypass");
             filter.layerKey = layer;
@@ -63,7 +80,7 @@ extern "C" __declspec(dllexport) DWORD __cdecl Vo1dGuardStart(
             filter.action.type = FWP_ACTION_BLOCK;
             filter.weight.type = FWP_UINT8;
             filter.weight.uint8 = 15;
-            filter.numFilterConditions = 3;
+            filter.numFilterConditions = 2;
             filter.filterCondition = conditions;
             UINT64 id = 0;
             error = FwpmFilterAdd0(engine, &filter, nullptr, &id);
@@ -71,6 +88,7 @@ extern "C" __declspec(dllexport) DWORD __cdecl Vo1dGuardStart(
         }
     }
     FwpmFreeMemory0((void**)&appId);
+    if (xrayId) FwpmFreeMemory0((void**)&xrayId);
     if (!error) error = FwpmTransactionCommit0(engine);
     else FwpmTransactionAbort0(engine);
     if (error) { FwpmEngineClose0(engine); return error; }

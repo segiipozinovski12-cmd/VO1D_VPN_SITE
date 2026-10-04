@@ -32,45 +32,67 @@ public partial class MainWindow : Window
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) Hide(); };
         UpdateNavigation();
     }
-    public void Reveal()
+    public async Task RevealAsync()
     {
-        if (_model.ReduceAnimations) { StartupOverlay.Visibility = Visibility.Collapsed; return; }
-        var animation = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(450));
-        animation.Completed += (_, _) => StartupOverlay.Visibility = Visibility.Collapsed;
-        StartupOverlay.BeginAnimation(OpacityProperty, animation);
+        var started = Stopwatch.StartNew();
+        BootStatus.Text = "Загружаем локальный профиль…"; BootProgress.Value = 18;
+        if (!_model.ReduceAnimations) await Task.Delay(180);
+        BootStatus.Text = "Проверяем Xray и сетевой модуль…"; BootProgress.Value = 42;
+        await Task.Run(VO1D.Vpn.Services.RuntimeAssets.Ensure);
+        BootStatus.Text = "VPN-ядра готовы. Открываем интерфейс…";
+        BootProgress.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, new DoubleAnimation(42, 100, TimeSpan.FromMilliseconds(_model.ReduceAnimations ? 1 : 700)));
+        if (!_model.ReduceAnimations && started.ElapsedMilliseconds < 1400) await Task.Delay((int)(1400 - started.ElapsedMilliseconds));
+        if (_model.ReduceAnimations) StartupOverlay.Visibility = Visibility.Collapsed;
+        else
+        {
+            var animation = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(450));
+            animation.Completed += (_, _) => StartupOverlay.Visibility = Visibility.Collapsed;
+            StartupOverlay.BeginAnimation(OpacityProperty, animation);
+            AnimatePage();
+        }
+        UpdateAnimation();
     }
     private void Restore() { Show(); WindowState = WindowState.Normal; Activate(); }
     private void ModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(AppViewModel.State) or nameof(AppViewModel.ReduceAnimations)) UpdateAnimation();
+        if (e.PropertyName is nameof(AppViewModel.State) or nameof(AppViewModel.ReduceAnimations) or nameof(AppViewModel.Busy)) UpdateAnimation();
         if (e.PropertyName == nameof(AppViewModel.Page)) { UpdateNavigation(); AnimatePage(); }
+        if (e.PropertyName == nameof(AppViewModel.HasAccess)) AnimatePage();
+        if (e.PropertyName == nameof(AppViewModel.Error) && !_model.ReduceAnimations)
+            ErrorToast.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
     }
     private void UpdateNavigation()
     {
-        foreach (var button in new[] { HomeNav, ServersNav, ProfileNav, SettingsNav }) { var selected = button.Tag?.ToString() == _model.Page; button.Background = new SolidColorBrush(selected ? Color.FromRgb(31, 31, 38) : Colors.Transparent); button.Foreground = new SolidColorBrush(selected ? Colors.White : Color.FromRgb(133, 133, 146)); }
+        foreach (var button in new[] { HomeNav, ServersNav, ProfileNav, SettingsNav })
+        {
+            var selected = button.Tag?.ToString() == _model.Page;
+            button.Background = new SolidColorBrush(selected ? Color.FromRgb(29, 29, 29) : Colors.Transparent);
+            button.BorderBrush = new SolidColorBrush(selected ? Color.FromRgb(93, 93, 93) : Colors.Transparent);
+            button.Foreground = new SolidColorBrush(selected ? Colors.White : Color.FromRgb(121, 121, 121));
+        }
     }
-    private void AnimatePage() { if (!_model.ReduceAnimations) { var animation = new DoubleAnimation(.65, 1, TimeSpan.FromMilliseconds(220)); BeginAnimation(OpacityProperty, animation); } }
+    private void AnimatePage()
+    {
+        if (_model.ReduceAnimations) return;
+        var page = _model.HasAccess ? (FrameworkElement)PageSurface : LoginSurface;
+        page.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(380)));
+        var move = new TranslateTransform(); page.RenderTransform = move;
+        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(15, 0, TimeSpan.FromMilliseconds(420)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+    }
     private void UpdateAnimation()
     {
         var connected = _model.IsConnected;
-        PowerSymbol.Visibility = connected ? Visibility.Collapsed : Visibility.Visible;
-        CheckSymbol.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
-        ConnectionRing.Stroke = new SolidColorBrush(connected ? Color.FromRgb(241, 241, 249) : Color.FromRgb(63, 63, 73));
-        ConnectionRing.StrokeThickness = connected ? 3 : 1.5;
-        Halo.Opacity = connected ? .5 : .05;
-        Spinner.Visibility = _model.IsConnecting ? Visibility.Visible : Visibility.Collapsed;
-        var rotate = (RotateTransform)Spinner.RenderTransform;
+        StatusDot.Fill = new SolidColorBrush(connected ? Colors.White : Color.FromRgb(106, 106, 106));
+        StatusDot.BeginAnimation(OpacityProperty, null);
+        if (_model.IsConnecting && !_model.ReduceAnimations)
+            StatusDot.BeginAnimation(OpacityProperty, new DoubleAnimation(.2, 1, TimeSpan.FromMilliseconds(650)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+        LoginArrow.Visibility = _model.Busy ? Visibility.Collapsed : Visibility.Visible;
+        var rotate = (RotateTransform)LoginSpinner.RenderTransform;
         rotate.BeginAnimation(RotateTransform.AngleProperty, null);
-        PulseRing.BeginAnimation(OpacityProperty, null);
-        var scale = (ScaleTransform)PulseRing.RenderTransform; scale.BeginAnimation(ScaleTransform.ScaleXProperty, null); scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-        PulseRing.Opacity = 0;
-        if (_model.IsConnecting && !_model.ReduceAnimations) rotate.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.35)) { RepeatBehavior = RepeatBehavior.Forever });
-        if (connected && !_model.ReduceAnimations)
-        {
-            PulseRing.BeginAnimation(OpacityProperty, new DoubleAnimation(.4, 0, TimeSpan.FromSeconds(2.3)) { RepeatBehavior = RepeatBehavior.Forever });
-            var pulse = new DoubleAnimation(.87, 1.12, TimeSpan.FromSeconds(2.3)) { RepeatBehavior = RepeatBehavior.Forever };
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse); scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
-        }
+        if (_model.Busy && !_model.ReduceAnimations)
+            rotate.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromMilliseconds(950)) { RepeatBehavior = RepeatBehavior.Forever });
+        if (!_model.ReduceAnimations)
+            ConnectionTitle.BeginAnimation(OpacityProperty, new DoubleAnimation(.3, 1, TimeSpan.FromMilliseconds(300)));
         _tray.Text = "VO1D VPN · " + (connected ? "Подключён" : _model.State == TunnelState.Blocked ? "Трафик заблокирован" : "Отключён");
     }
     private void Navigate(object sender, RoutedEventArgs e) { if (sender is Button button && button.Tag is string page) _model.Page = page; }

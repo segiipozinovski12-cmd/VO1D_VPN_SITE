@@ -13,6 +13,7 @@ public sealed class UserStore
     {
         Directory.CreateDirectory(Root);
         Settings = Read<Preferences>("settings.json") ?? new();
+        if (string.IsNullOrWhiteSpace(Settings.ApiUrl)) { Settings.ApiUrl = Preferences.DefaultApiUrl; SaveSettings(); }
         try { Secrets = File.Exists(Path.Combine(Root, "session.bin")) ? JsonSerializer.Deserialize<Secrets>(Unprotect(File.ReadAllBytes(Path.Combine(Root, "session.bin")))) ?? new() : new(); }
         catch { Secrets = new(); }
     }

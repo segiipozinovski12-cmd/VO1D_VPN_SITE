@@ -5,7 +5,7 @@ namespace VO1D.Vpn.Core;
 public static class TunnelConfig
 {
     public const string InterfaceName = "VO1D";
-    public static JsonObject Build(ProxyProfile profile, int proxyPort, int apiPort, string secret, string proxyPassword, bool tun = true)
+    public static JsonObject Build(ProxyProfile profile, int proxyPort, int apiPort, string secret, string proxyPassword, bool tun = true, JsonObject? outbound = null)
     {
         var inbounds = new JsonArray();
         if (tun) inbounds.Add(new JsonObject {
@@ -14,6 +14,8 @@ public static class TunnelConfig
             ["mtu"] = 1400, ["auto_route"] = true, ["strict_route"] = true, ["stack"] = "mixed"
         });
         inbounds.Add(new JsonObject { ["type"] = "mixed", ["tag"] = "probe-in", ["listen"] = "127.0.0.1", ["listen_port"] = proxyPort, ["users"] = new JsonArray(new JsonObject { ["username"] = "vo1d", ["password"] = proxyPassword }) });
+        if (tun && profile.XrayOutbound != null && System.Net.IPAddress.TryParse(profile.Host, out var endpoint) && !System.Net.IPAddress.IsLoopback(endpoint))
+            inbounds[0]!["route_exclude_address"] = new JsonArray(endpoint + (endpoint.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? "/32" : "/128"));
         return new JsonObject {
             ["log"] = new JsonObject { ["disabled"] = true },
             ["dns"] = new JsonObject {
@@ -21,7 +23,7 @@ public static class TunnelConfig
                 ["final"] = "dns-protected", ["strategy"] = "prefer_ipv4"
             },
             ["inbounds"] = inbounds,
-            ["outbounds"] = new JsonArray(profile.Outbound.DeepClone()),
+            ["outbounds"] = new JsonArray((outbound ?? profile.Outbound).DeepClone()),
             ["route"] = new JsonObject {
                 ["auto_detect_interface"] = true,
                 ["rules"] = new JsonArray(new JsonObject { ["action"] = "sniff" }, new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" }),
