@@ -23,3 +23,14 @@ node_modules/
 .DS_Store
 .vscode/
 .idea/
+# Windows build artifacts and credentials
+windows/**/bin/
+windows/**/obj/
+windows/VO1D.Vpn/Assets/runtime/
+windows/dist/
+windows/test-configs/
+windows/smoke-results/
+windows/*.zip
+windows/native/*.obj
+windows/native/*.lib
+windows/native/*.exp

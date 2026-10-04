@@ -1,0 +1,80 @@
+name: Windows VPN
+on:
+  push:
+    branches: [main, codex/windows-vpn]
+    paths: ["windows/**", ".github/workflows/windows-vpn.yml"]
+  pull_request:
+    paths: ["windows/**", ".github/workflows/windows-vpn.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-x64:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Fetch and verify pinned VPN runtimes
+        run: python windows/scripts/fetch_runtime.py
+      - name: Compile native ephemeral kill switch
+        working-directory: windows/native
+        run: cl /nologo /O2 /MT /LD /EHsc /W4 guard.cpp /link /OUT:../VO1D.Vpn/Assets/runtime/vo1d-guard.dll
+      - name: Check activation and supported protocol configurations
+        run: dotnet run --project windows/VO1D.Vpn.Tests -c Release -- windows/test-configs
+      - name: Validate generated configurations with the actual VPN core
+        shell: pwsh
+        run: |
+          Get-ChildItem windows/test-configs/*.json | ForEach-Object {
+            & windows/VO1D.Vpn/Assets/runtime/sing-box.exe check -c $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Invalid VPN config: $($_.Name)" }
+          }
+      - name: Publish self-contained single Windows executable
+        run: dotnet publish windows/VO1D.Vpn/VO1D.Vpn.csproj -c Release -r win-x64 --self-contained true -o windows/dist --nologo
+      - name: Launch executable and verify TUN, IPv6, kill switch and disconnect
+        shell: pwsh
+        run: |
+          $report = Join-Path $PWD 'windows/smoke-results'
+          New-Item -ItemType Directory -Force $report | Out-Null
+          $exe = Join-Path $PWD 'windows/dist/VO1D_VPN.exe'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test', $report) -PassThru
+          if (-not $process.WaitForExit(180000)) { Stop-Process -Id $process.Id -Force; throw 'Windows VPN smoke test timed out' }
+          if ($process.ExitCode -ne 0) {
+            if (Test-Path "$report/failure.txt") { Get-Content "$report/failure.txt" }
+            throw "Windows VPN test failed (exit $($process.ExitCode))"
+          }
+          $results = Get-Content "$report/results.json" -Raw | ConvertFrom-Json
+          if (-not $results.success) { throw 'Windows VPN test did not pass' }
+          Get-Content "$report/results.json"
+      - name: Package executable and notices
+        shell: pwsh
+        run: |
+          Copy-Item windows/README.md windows/dist/README.md
+          Copy-Item windows/THIRD_PARTY_NOTICES.md windows/dist/THIRD_PARTY_NOTICES.md
+          New-Item -ItemType Directory -Force windows/dist/LICENSES | Out-Null
+          Copy-Item windows/VO1D.Vpn/Assets/runtime/*LICENSE.txt windows/dist/LICENSES/
+          (Get-FileHash windows/dist/VO1D_VPN.exe -Algorithm SHA256).Hash.ToLower() + '  VO1D_VPN.exe' | Set-Content windows/dist/VO1D_VPN.exe.sha256
+          Compress-Archive -Path windows/dist/* -DestinationPath windows/VO1D_VPN-Windows-x64.zip
+      - name: Upload checked Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: VO1D_VPN-Windows-x64
+          path: |
+            windows/dist/VO1D_VPN.exe
+            windows/dist/VO1D_VPN.exe.sha256
+            windows/VO1D_VPN-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload validation reports and real window captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VO1D_VPN-Windows-validation
+          path: windows/smoke-results/
+          if-no-files-found: ignore
+          retention-days: 30
