@@ -78,6 +78,7 @@ public sealed class VpnEngine : IAsyncDisposable
                 }
                 _xray = Process.Start(new ProcessStartInfo(_xrayPath) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = RuntimeAssets.Root, ArgumentList = { "run", "-config", _xrayConfig } }) ?? throw new IOException("Xray не запустился.");
                 _job.Add(_xray);
+                await WaitForLocalPortAsync(_xray, xrayPort, "Xray", ct);
                 transport = XrayConfig.LocalOutbound(xrayPort, password);
                 transport["bind_interface"] = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().First(x => x.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback).Name;
             }
@@ -88,6 +89,7 @@ public sealed class VpnEngine : IAsyncDisposable
             start.ArgumentList.Add("run"); start.ArgumentList.Add("-c"); start.ArgumentList.Add(_config);
             _process = Process.Start(start) ?? throw new IOException("VPN-ядро не запустилось.");
             _job.Add(_process);
+            await WaitForLocalPortAsync(_process, proxyPort, "VPN-ядро", ct);
             Change(TunnelState.Connecting, "Проверяем передачу данных через VPN…");
             var probe = testProbe ?? new Uri("https://1.1.1.1/cdn-cgi/trace");
             var marker = testMarker ?? "ip=";
@@ -95,7 +97,7 @@ public sealed class VpnEngine : IAsyncDisposable
             Exception? last = null;
             string trace = "";
             var readiness = Stopwatch.StartNew();
-            for (var attempt = 0; attempt < 12 && readiness.Elapsed < TimeSpan.FromSeconds(20); attempt++)
+            while (readiness.Elapsed < TimeSpan.FromSeconds(20))
             {
                 ct.ThrowIfCancellationRequested();
                 if (_process.HasExited) throw new IOException($"VPN-ядро завершилось (код {_process.ExitCode}). Маршрут несовместим или адаптер недоступен.");
@@ -211,6 +213,26 @@ public sealed class VpnEngine : IAsyncDisposable
         catch (InvalidOperationException) { }
     }
     private static string ExtractIp(string trace) => trace.Split('\n').FirstOrDefault(x => x.StartsWith("ip="))?[3..].Trim() ?? throw new IOException("Не удалось проверить внешний IP.");
+    private static async Task WaitForLocalPortAsync(Process process, int port, string name, CancellationToken ct)
+    {
+        // A newly extracted core can take longer to start on a cold Windows
+        // machine. Wait for its actual listener before creating the TUN or
+        // probing data; a refused socket must not consume all health retries.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            while (true)
+            {
+                timeout.Token.ThrowIfCancellationRequested();
+                if (process.HasExited) throw new IOException($"{name} завершился (код {process.ExitCode}). Попробуйте другой маршрут.");
+                using var tcp = new TcpClient();
+                try { await tcp.ConnectAsync(IPAddress.Loopback, port, timeout.Token); return; }
+                catch (SocketException) { await Task.Delay(100, timeout.Token); }
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new IOException($"{name} не успел запуститься. Повторите подключение."); }
+    }
     public static int FreePort() { var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); return port; }
     public void AbortCoreForTest() { if (_process is { HasExited: false }) _process.Kill(true); }
     public void AbortXrayForTest() { if (_xray is { HasExited: false }) _xray.Kill(true); }
